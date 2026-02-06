@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\jonny\\Documents\\Projects\\skillstack\\app\\api\\auth"
+    ]
+  }
+}
