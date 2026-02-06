@@ -1,0 +1,436 @@
+import * as React from "react";
+import { Autocomplete as BaseAutocomplete } from "@base-ui/react/autocomplete";
+import { cn } from "@/lib/utils";
+import {
+  ScrollArea,
+  type ScrollAreaProps,
+} from "@/components/ui/cubby-ui/scroll-area/scroll-area";
+
+const AutocompleteRoot = BaseAutocomplete.Root;
+
+function AutocompleteInput({
+  className,
+  ...props
+}: BaseAutocomplete.Input.Props) {
+  return (
+    <BaseAutocomplete.Input
+      data-slot="autocomplete-input"
+      className={cn(
+        "placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground bg-input dark:bg-input/30 flex h-10 w-full min-w-0 rounded-lg border bg-clip-padding px-3 text-base font-normal shadow-xs disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-60 sm:h-9 md:text-sm",
+        "file:text-foreground file:inline-flex file:h-7 file:rounded-md file:border-0 file:bg-transparent file:text-sm file:font-medium",
+        "focus-visible:outline-ring/50 outline-0 outline-offset-0 outline-transparent transition-[outline-width,outline-offset,outline-color] duration-100 ease-out outline-solid focus-visible:outline-2 focus-visible:outline-offset-2",
+        "aria-invalid:outline-destructive/50 aria-invalid:outline-2 aria-invalid:outline-offset-2 aria-invalid:outline-solid",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+function AutocompleteInputWrapper({
+  className,
+  ...props
+}: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="autocomplete-input-wrapper"
+      className={cn(
+        "relative",
+        // Auto-adjust input padding based on buttons present (right-3 = 0.75rem, button = 1rem)
+        "has-data-[slot=autocomplete-clear]:**:data-[slot=autocomplete-input]:pr-7",
+        "has-data-[slot=autocomplete-trigger]:**:data-[slot=autocomplete-input]:pr-7",
+        // Both buttons present (0.75rem + 1rem + 0.5rem gap + 1rem button = 3.25rem)
+        "has-data-[slot=autocomplete-clear]:has-data-[slot=autocomplete-trigger]:**:data-[slot=autocomplete-input]:pr-13",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+function AutocompleteTrigger({
+  className,
+  children,
+  ...props
+}: BaseAutocomplete.Trigger.Props) {
+  return (
+    <BaseAutocomplete.Trigger
+      data-slot="autocomplete-trigger"
+      className={cn(
+        "border-border/70 bg-card hover:bg-accent/5 inline-flex h-9 items-center justify-center rounded-lg border px-3 py-2 text-sm font-medium shadow-[0_1px_2px_0_oklch(0.18_0_0/0.04)] transition-colors disabled:pointer-events-none disabled:opacity-60",
+        "focus-visible:outline-ring/50 outline-0 outline-offset-0 outline-transparent transition-[outline-width,outline-offset,outline-color] duration-100 ease-out outline-solid focus-visible:outline-2 focus-visible:outline-offset-2",
+        className,
+      )}
+      {...props}
+    >
+      {children}
+    </BaseAutocomplete.Trigger>
+  );
+}
+
+function AutocompleteIcon({
+  className,
+  ...props
+}: React.ComponentProps<typeof BaseAutocomplete.Icon>) {
+  return (
+    <BaseAutocomplete.Icon
+      data-slot="autocomplete-icon"
+      className={cn("ml-2 h-4 w-4 shrink-0 opacity-50", className)}
+      {...props}
+    />
+  );
+}
+
+function AutocompleteClear({
+  className,
+  ...props
+}: BaseAutocomplete.Clear.Props) {
+  return (
+    <BaseAutocomplete.Clear
+      data-slot="autocomplete-clear"
+      className={cn(
+        "inline-flex h-4 w-4 cursor-pointer items-center justify-center rounded-sm opacity-70 transition-[opacity,scale,transform,translate] hover:opacity-100 disabled:pointer-events-none",
+        "focus-visible:border-ring focus-visible:ring-ring/30 duration-100 outline-none focus-visible:ring-3",
+        "data-ending-style:translate-x-1 data-ending-style:opacity-0 data-starting-style:translate-x-1 data-starting-style:opacity-0",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+function AutocompleteValue({ ...props }: BaseAutocomplete.Value.Props) {
+  return <BaseAutocomplete.Value data-slot="autocomplete-value" {...props} />;
+}
+
+function AutocompletePortal({ ...props }: BaseAutocomplete.Portal.Props) {
+  return <BaseAutocomplete.Portal data-slot="autocomplete-portal" {...props} />;
+}
+
+function AutocompleteBackdrop({
+  className,
+  ...props
+}: BaseAutocomplete.Backdrop.Props) {
+  return (
+    <BaseAutocomplete.Backdrop
+      data-slot="autocomplete-backdrop"
+      className={cn(
+        "fixed inset-0 z-30 bg-black/50 data-ending-style:opacity-0 data-starting-style:opacity-0",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+function AutocompletePositioner({
+  className,
+  ...props
+}: BaseAutocomplete.Positioner.Props) {
+  return (
+    <BaseAutocomplete.Positioner
+      data-slot="autocomplete-positioner"
+      sideOffset={4}
+      className={cn("", className)}
+      {...props}
+    />
+  );
+}
+
+function AutocompletePopup({
+  className,
+  ...props
+}: BaseAutocomplete.Popup.Props) {
+  return (
+    <BaseAutocomplete.Popup
+      data-slot="autocomplete-popup"
+      className={cn(
+        "bg-popover text-popover-foreground ring-border ease-out-cubic flex max-h-(--available-height) w-(--anchor-width) max-w-(--available-width) origin-(--transform-origin) flex-col overflow-clip overscroll-contain rounded-xl shadow-[0_8px_20px_0_oklch(0.18_0_0/0.10)] ring-1 transition-[transform,scale,opacity] duration-100 data-ending-style:scale-95 data-ending-style:opacity-0 data-starting-style:scale-95 data-starting-style:opacity-0",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+function AutocompleteArrow({
+  className,
+  ...props
+}: BaseAutocomplete.Arrow.Props) {
+  return (
+    <BaseAutocomplete.Arrow
+      data-slot="autocomplete-arrow"
+      className={cn(
+        "data-[side=bottom]:top-[-8px] data-[side=left]:right-[-13px] data-[side=left]:rotate-90 data-[side=right]:left-[-13px] data-[side=right]:-rotate-90 data-[side=top]:bottom-[-8px] data-[side=top]:rotate-180",
+        className,
+      )}
+      {...props}
+    >
+      <svg width="20" height="10" viewBox="0 0 20 10" fill="none">
+        <path
+          d="M9.66437 2.60207L4.80758 6.97318C4.07308 7.63423 3.11989 8 2.13172 8H0V9H20V8H18.5349C17.5468 8 16.5936 7.63423 15.8591 6.97318L11.0023 2.60207C10.622 2.2598 10.0447 2.25979 9.66437 2.60207Z"
+          className="fill-popover"
+        />
+        <path
+          d="M10.3333 3.34539L5.47654 7.71648C4.55842 8.54279 3.36693 9 2.13172 9H0V8H2.13172C3.11989 8 4.07308 7.63423 4.80758 6.97318L9.66437 2.60207C10.0447 2.25979 10.622 2.2598 11.0023 2.60207L15.8591 6.97318C16.5936 7.63423 17.5468 8 18.5349 8H20V9H18.5349C17.2998 9 16.1083 8.54278 15.1901 7.71648L10.3333 3.34539Z"
+          className="fill-border/70"
+        />
+      </svg>
+    </BaseAutocomplete.Arrow>
+  );
+}
+
+function AutocompleteStatus({
+  className,
+  ...props
+}: BaseAutocomplete.Status.Props) {
+  return (
+    <BaseAutocomplete.Status
+      data-slot="autocomplete-status"
+      className={cn(
+        "text-muted-foreground px-3 py-2.5 text-sm leading-5 empty:m-0 empty:p-0",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+function AutocompleteEmpty({
+  className,
+  ...props
+}: BaseAutocomplete.Empty.Props) {
+  return (
+    <BaseAutocomplete.Empty
+      data-slot="autocomplete-empty"
+      className={cn(
+        "text-muted-foreground px-3 py-2.5 text-sm empty:m-0 empty:p-0",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+function AutocompleteList({
+  className,
+  nativeScroll = false,
+  fadeEdges = true,
+  scrollbarGutter = false,
+  persistScrollbar,
+  hideScrollbar,
+  ...props
+}: BaseAutocomplete.List.Props &
+  Pick<
+    ScrollAreaProps,
+    | "nativeScroll"
+    | "fadeEdges"
+    | "scrollbarGutter"
+    | "persistScrollbar"
+    | "hideScrollbar"
+  >) {
+  return (
+    <ScrollArea
+      nativeScroll={nativeScroll}
+      fadeEdges={fadeEdges}
+      scrollbarGutter={scrollbarGutter}
+      persistScrollbar={persistScrollbar}
+      hideScrollbar={hideScrollbar}
+      className={cn("max-h-80", className)}
+    >
+      <BaseAutocomplete.List
+        data-slot="autocomplete-list"
+        className="rounded-xl"
+        {...props}
+      />
+    </ScrollArea>
+  );
+}
+
+function AutocompleteVirtualizedList({
+  className,
+  children,
+  scrollRef,
+  totalSize,
+  emptyMessage = "No results found.",
+  fadeEdges = "y",
+  nativeScroll = false,
+  ...props
+}: Omit<React.ComponentProps<"div">, "ref"> &
+  Pick<ScrollAreaProps, "fadeEdges" | "nativeScroll"> & {
+    scrollRef: (element: HTMLDivElement | null) => void;
+    totalSize: number;
+    emptyMessage?: React.ReactNode;
+  }) {
+  return (
+    <>
+      <BaseAutocomplete.Empty
+        data-slot="autocomplete-empty"
+        className="text-muted-foreground px-3 py-2.5 text-sm empty:m-0 empty:p-0"
+      >
+        {emptyMessage}
+      </BaseAutocomplete.Empty>
+      <BaseAutocomplete.List
+        data-slot="autocomplete-list"
+        className="w-full flex-1 overflow-hidden rounded-xl p-0 outline-hidden empty:m-0 empty:p-0"
+      >
+        <ScrollArea
+          viewportRef={scrollRef}
+          viewportClassName={cn("scroll-py-2", className)}
+          fadeEdges={fadeEdges}
+          nativeScroll={nativeScroll}
+          className="h-auto max-h-80 w-full"
+          {...props}
+        >
+          {/* Virtual placeholder for total height */}
+          <div
+            role="presentation"
+            className="relative w-full"
+            style={{ height: totalSize }}
+          >
+            {children}
+          </div>
+        </ScrollArea>
+      </BaseAutocomplete.List>
+    </>
+  );
+}
+
+function AutocompleteCollection({
+  ...props
+}: BaseAutocomplete.Collection.Props) {
+  return (
+    <BaseAutocomplete.Collection
+      data-slot="autocomplete-collection"
+      {...props}
+    />
+  );
+}
+
+function AutocompleteRow({ className, ...props }: BaseAutocomplete.Row.Props) {
+  return (
+    <BaseAutocomplete.Row
+      data-slot="autocomplete-row"
+      className={cn("flex", className)}
+      {...props}
+    />
+  );
+}
+
+function AutocompleteItem({
+  className,
+  ref,
+  ...props
+}: BaseAutocomplete.Item.Props & {
+  ref?: React.Ref<HTMLDivElement>;
+}) {
+  return (
+    <BaseAutocomplete.Item
+      ref={ref}
+      data-slot="autocomplete-item"
+      className={cn(
+        "data-highlighted:bg-accent/50 data-highlighted:text-accent-foreground relative flex cursor-default items-center rounded-md px-2.5 py-2 text-sm outline-none select-none data-disabled:pointer-events-none data-disabled:opacity-60",
+        // Spacing from list edges
+        "mx-1 first:mt-1 last:mb-1",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+function AutocompleteGroup({
+  className,
+  ...props
+}: BaseAutocomplete.Group.Props) {
+  return (
+    <BaseAutocomplete.Group
+      data-slot="autocomplete-group"
+      className={cn("text-foreground block", className)}
+      {...props}
+    />
+  );
+}
+
+function AutocompleteGroupLabel({
+  className,
+  ...props
+}: BaseAutocomplete.GroupLabel.Props) {
+  return (
+    <BaseAutocomplete.GroupLabel
+      data-slot="autocomplete-group-label"
+      className={cn(
+        "text-muted-foreground bg-popover px-3.5 py-1.5 pt-2.5 text-xs font-semibold",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+function AutocompleteSeparator({
+  className,
+  ...props
+}: BaseAutocomplete.Separator.Props) {
+  return (
+    <BaseAutocomplete.Separator
+      data-slot="autocomplete-separator"
+      className={cn("bg-border mx-1 my-1 h-px min-h-px", className)}
+      {...props}
+    />
+  );
+}
+
+export const Autocomplete = {
+  Root: AutocompleteRoot,
+  Input: AutocompleteInput,
+  InputWrapper: AutocompleteInputWrapper,
+  Trigger: AutocompleteTrigger,
+  Icon: AutocompleteIcon,
+  Clear: AutocompleteClear,
+  Value: AutocompleteValue,
+  Portal: AutocompletePortal,
+  Backdrop: AutocompleteBackdrop,
+  Positioner: AutocompletePositioner,
+  Popup: AutocompletePopup,
+  Arrow: AutocompleteArrow,
+  Status: AutocompleteStatus,
+  Empty: AutocompleteEmpty,
+  List: AutocompleteList,
+  VirtualizedList: AutocompleteVirtualizedList,
+  Collection: AutocompleteCollection,
+  Row: AutocompleteRow,
+  Item: AutocompleteItem,
+  Group: AutocompleteGroup,
+  GroupLabel: AutocompleteGroupLabel,
+  Separator: AutocompleteSeparator,
+  useFilter: BaseAutocomplete.useFilter,
+};
+
+const useAutocompleteFilter = BaseAutocomplete.useFilter;
+
+export {
+  AutocompleteRoot,
+  AutocompleteInput,
+  AutocompleteInputWrapper,
+  AutocompleteTrigger,
+  AutocompleteIcon,
+  AutocompleteClear,
+  AutocompleteValue,
+  AutocompletePortal,
+  AutocompleteBackdrop,
+  AutocompletePositioner,
+  AutocompletePopup,
+  AutocompleteArrow,
+  AutocompleteStatus,
+  AutocompleteEmpty,
+  AutocompleteList,
+  AutocompleteVirtualizedList,
+  AutocompleteCollection,
+  AutocompleteRow,
+  AutocompleteItem,
+  AutocompleteGroup,
+  AutocompleteGroupLabel,
+  AutocompleteSeparator,
+  useAutocompleteFilter,
+};

@@ -1,0 +1,52 @@
+/* Scroll-Driven Animations (Chrome 115+, Safari 26+, Firefox flag-only) */
+
+/**
+ * Consumers can animate based on snap progress:
+ * .mini-player { opacity: calc(1 - var(--drawer-snap-progress, 0)); }
+ */
+@property --drawer-snap-progress {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+
+@keyframes drawer-snap-progress {
+  from {
+    --drawer-snap-progress: 0;
+  }
+  to {
+    --drawer-snap-progress: 1;
+  }
+}
+
+@keyframes drawer-backdrop-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Overrides scroll-driven animation on exit (transitions can't interpolate from animation values) */
+@keyframes drawer-backdrop-exit {
+  to {
+    opacity: 0;
+  }
+}
+
+/* Horizontal drawers: prevent page scroll interference */
+html:has([data-slot="drawer-viewport"][data-direction="left"]),
+html:has([data-slot="drawer-viewport"][data-direction="right"]) {
+  overscroll-behavior: none;
+  scrollbar-width: none;
+}
+
+html:has(
+    [data-slot="drawer-viewport"][data-direction="left"]
+  )::-webkit-scrollbar,
+html:has(
+    [data-slot="drawer-viewport"][data-direction="right"]
+  )::-webkit-scrollbar {
+  display: none !important;
+}
