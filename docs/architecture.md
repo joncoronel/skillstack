@@ -4,12 +4,12 @@ Patterns for building a full-stack app with Next.js 16 (App Router), Convex as t
 
 ## Stack
 
-| Layer | Tech | Role |
-|---|---|---|
-| Frontend | Next.js 16 (App Router), React 19 | SSR, streaming, static shells |
-| Backend + DB | Convex | Real-time queries, mutations, actions, storage |
-| Auth | Better Auth + `@convex-dev/better-auth` | Auth with Convex as the database |
-| Config | `cacheComponents: true` in `next.config.ts` | Enables Next.js cache component behavior |
+| Layer        | Tech                                        | Role                                           |
+| ------------ | ------------------------------------------- | ---------------------------------------------- |
+| Frontend     | Next.js 16 (App Router), React 19           | SSR, streaming, static shells                  |
+| Backend + DB | Convex                                      | Real-time queries, mutations, actions, storage |
+| Auth         | Better Auth + `@convex-dev/better-auth`     | Auth with Convex as the database               |
+| Config       | `cacheComponents: true` in `next.config.ts` | Enables Next.js cache component behavior       |
 
 ### Key dependencies
 
@@ -67,13 +67,13 @@ Use `authClient.signIn.email()`, `authClient.signUp.email()`, etc. in client com
 import { convexBetterAuthNextJs } from "@convex-dev/better-auth/nextjs";
 
 export const {
-  handler,            // Next.js API route handler
-  preloadAuthQuery,   // Preload Convex query with auth token (for RSCs)
-  isAuthenticated,    // Check auth status server-side
-  getToken,           // Get JWT for client hydration
-  fetchAuthQuery,     // Fetch Convex query server-side
-  fetchAuthMutation,  // Run Convex mutation server-side
-  fetchAuthAction,    // Run Convex action server-side
+  handler, // Next.js API route handler
+  preloadAuthQuery, // Preload Convex query with auth token (for RSCs)
+  isAuthenticated, // Check auth status server-side
+  getToken, // Get JWT for client hydration
+  fetchAuthQuery, // Fetch Convex query server-side
+  fetchAuthMutation, // Run Convex mutation server-side
+  fetchAuthAction, // Run Convex action server-side
 } = convexBetterAuthNextJs({
   convexUrl: process.env.NEXT_PUBLIC_CONVEX_URL!,
   convexSiteUrl: process.env.NEXT_PUBLIC_CONVEX_SITE_URL!,
@@ -85,6 +85,18 @@ export const {
       error instanceof Error && error.message === "Unauthenticated",
   },
 });
+```
+
+**`convex/convex.config.ts`** -- Register the Better Auth component
+
+```ts
+import { defineApp } from "convex/server";
+import betterAuth from "@convex-dev/better-auth/convex.config";
+
+const app = defineApp();
+app.use(betterAuth);
+
+export default app;
 ```
 
 **`convex/auth.config.ts`** -- Register Better Auth as a Convex auth provider
@@ -116,7 +128,7 @@ export const authComponent = createClient<DataModel>(components.betterAuth);
 export const createAuth = (ctx: GenericCtx<DataModel>) => {
   return betterAuth({
     baseURL: siteUrl,
-    database: authComponent.adapter(ctx),    // Convex as the DB
+    database: authComponent.adapter(ctx), // Convex as the DB
     emailAndPassword: { enabled: true, requireEmailVerification: false },
     plugins: [convex({ authConfig })],
   });
@@ -156,12 +168,12 @@ export const { GET, POST } = handler;
 
 ### Auth protection patterns
 
-| Where | How | Behavior |
-|---|---|---|
-| Server components | `isAuthenticated()` + `redirect()` | Redirect to sign-in page |
-| Convex queries | `authComponent.getAuthUser(ctx)` with try/catch | Return `null` / empty array |
-| Convex mutations | `authComponent.getAuthUser(ctx)` + throw | Block execution |
-| Layout components | Async RSC that checks auth before rendering | Redirect in layout |
+| Where             | How                                             | Behavior                    |
+| ----------------- | ----------------------------------------------- | --------------------------- |
+| Server components | `isAuthenticated()` + `redirect()`              | Redirect to sign-in page    |
+| Convex queries    | `authComponent.getAuthUser(ctx)` with try/catch | Return `null` / empty array |
+| Convex mutations  | `authComponent.getAuthUser(ctx)` + throw        | Block execution             |
+| Layout components | Async RSC that checks auth before rendering     | Redirect in layout          |
 
 ---
 
@@ -179,9 +191,7 @@ import { Suspense } from "react";
 async function ConvexProviderWithToken({ children }) {
   const token = await getToken();
   return (
-    <ConvexClientProvider initialToken={token}>
-      {children}
-    </ConvexClientProvider>
+    <ConvexClientProvider initialToken={token}>{children}</ConvexClientProvider>
   );
 }
 
@@ -190,9 +200,7 @@ export default function RootLayout({ children }) {
     <html lang="en" suppressHydrationWarning>
       <body>
         <Suspense fallback={null}>
-          <ConvexProviderWithToken>
-            {children}
-          </ConvexProviderWithToken>
+          <ConvexProviderWithToken>{children}</ConvexProviderWithToken>
         </Suspense>
       </body>
     </html>
@@ -242,11 +250,13 @@ The core flow: **async server component preloads data → passes `Preloaded<T>` 
 ```
 Server Component (RSC)                     Client Component
 ──────────────────────                     ────────────────
-isAuthenticated()                          usePreloadedAuthQuery(preloaded)
+isAuthenticated()                          usePreloadedQuery(preloaded)
 preloadAuthQuery(api.yourResource.list)    └─ returns live, reactive data
   └─ returns Preloaded<T>
 passes as prop ──────────────────────────►
 ```
+
+> **Note:** Use `usePreloadedQuery` from `convex/react` (not `usePreloadedAuthQuery` from `@convex-dev/better-auth`). The server-side `preloadAuthQuery` already fetches data with auth. On the client, `initialToken` provides the auth token immediately, so `usePreloadedQuery` hydrates synchronously and transitions to a live subscription without any gap. `usePreloadedAuthQuery` has a known bug where its internal subscription management causes `undefined` returns during client-side re-navigation.
 
 **Server component (page):**
 
@@ -266,8 +276,10 @@ async function ItemsList() {
 export default function ItemsPage() {
   return (
     <div>
-      <h1>Your Items</h1>                      {/* static -- renders immediately */}
-      <Suspense fallback={<ItemsSkeleton />}>   {/* dynamic -- streams when ready */}
+      <h1>Your Items</h1> {/* static -- renders immediately */}
+      <Suspense fallback={<ItemsSkeleton />}>
+        {" "}
+        {/* dynamic -- streams when ready */}
         <ItemsList />
       </Suspense>
     </div>
@@ -280,21 +292,14 @@ export default function ItemsPage() {
 ```tsx
 "use client";
 
-import { useRef } from "react";
-import { Preloaded } from "convex/react";
-import { usePreloadedAuthQuery } from "@convex-dev/better-auth/nextjs/client";
+import { Preloaded, usePreloadedQuery } from "convex/react";
 
-export function ItemsClient({ preloadedItems }: { preloadedItems: Preloaded<typeof api.items.list> }) {
-  const rawItems = usePreloadedAuthQuery(preloadedItems);
-
-  // Stale-while-revalidate (see pattern #5 below)
-  const itemsRef = useRef(rawItems);
-  if (rawItems !== undefined) {
-    itemsRef.current = rawItems;
-  }
-  const items = itemsRef.current;
-
-  if (!items) return null; // Suspense fallback handles initial loading
+export function ItemsClient({
+  preloadedItems,
+}: {
+  preloadedItems: Preloaded<typeof api.items.list>;
+}) {
+  const items = usePreloadedQuery(preloadedItems);
 
   return items.map((item) => <ItemCard key={item._id} item={item} />);
 }
@@ -314,7 +319,12 @@ async function DetailContent({ id }) {
     preloadAuthQuery(api.users.checkQuota),
   ]);
 
-  return <DetailClient preloadedItem={preloadedItem} preloadedQuota={preloadedQuota} />;
+  return (
+    <DetailClient
+      preloadedItem={preloadedItem}
+      preloadedQuota={preloadedQuota}
+    />
+  );
 }
 ```
 
@@ -392,7 +402,7 @@ export default function DashboardLayout({ children }) {
       {/* Static shell -- renders at build time / instantly */}
       <HeaderShell>
         <Suspense fallback={<HeaderSkeleton />}>
-          <AuthenticatedHeader />  {/* async RSC, streams in */}
+          <AuthenticatedHeader /> {/* async RSC, streams in */}
         </Suspense>
       </HeaderShell>
 
@@ -436,7 +446,7 @@ export async function AuthenticatedHeader() {
   if (!hasAuth) redirect("/signin");
 
   const [preloadedUser, preloadedSettings] = await Promise.all([
-    getCachedUser(),       // deduplicated with page-level fetches
+    getCachedUser(), // deduplicated with page-level fetches
     getCachedSettings(),
   ]);
 
@@ -451,43 +461,29 @@ export async function AuthenticatedHeader() {
 
 ---
 
-## 5. Stale-While-Revalidate on the Client
+## 5. Why `usePreloadedQuery` Instead of `usePreloadedAuthQuery`
 
-Convex queries are live -- they resubscribe after hydration. During revalidation, `usePreloadedAuthQuery()` briefly returns `undefined`. Without handling this, the UI flashes to empty.
+`@convex-dev/better-auth` provides `usePreloadedAuthQuery` as a drop-in replacement for `usePreloadedQuery` that is supposed to "ensure server-rendered data is rendered until authentication is ready." However, it has a bug that causes the opposite behavior.
 
-The fix: hold previous data in a `useRef` until new data arrives.
+### The bug
 
-```tsx
-"use client";
+`usePreloadedAuthQuery` internally tracks a `preloadExpired` flag. Once the live `useQuery` subscription returns data, this flag is set to `true` permanently. On client-side re-navigation (e.g. navigating away from a page and back), the subscription tears down and re-establishes. During this gap:
 
-import { useRef } from "react";
-import { usePreloadedAuthQuery } from "@convex-dev/better-auth/nextjs/client";
+1. `preloadExpired` is already `true` (from the previous visit)
+2. The live `useQuery` result is `undefined` (subscription re-establishing)
+3. The hook returns `undefined` instead of falling back to the preloaded data
+4. UI flashes empty for several render cycles
 
-export function MyClient({ preloadedData }) {
-  // 1. Hydrate server data, then subscribe for live updates
-  const rawData = usePreloadedAuthQuery(preloadedData);
+This was verified with debug logging — `useConvexAuth()` returns `{ isLoading: false, isAuthenticated: true }` the entire time. The auth token is correctly passed. The issue is purely in the hook's subscription management.
 
-  // 2. Keep previous data while revalidating
-  const dataRef = useRef(rawData);
-  if (rawData !== undefined) {
-    dataRef.current = rawData;  // only update when real data arrives
-  }
-  const data = dataRef.current;
+### The fix
 
-  // 3. On initial load, return null -- Suspense skeleton handles it
-  if (!data) return null;
+Use standard `usePreloadedQuery` from `convex/react`. This works because:
 
-  return <div>{/* render with `data` */}</div>;
-}
-```
-
-**Why this works:**
-- `usePreloadedAuthQuery()` returns `undefined` briefly during revalidation
-- Without the ref, the UI would flash to empty or show the skeleton again
-- The ref holds the previous data until new data arrives
-- On initial load (before any data exists), `data` is `null` so we return `null` -- the parent `<Suspense>` fallback handles it
-
-Apply this pattern to **every client component** that receives preloaded data.
+- **Server-side auth is already enforced** — `isAuthenticated()` + `redirect()` in RSCs
+- **`initialToken` provides the token immediately** — `ConvexBetterAuthProvider` receives it from the root layout
+- **`usePreloadedQuery` hydrates synchronously** — no `undefined` gap, seamless transition to live subscription
+- **Reactive updates still work** — Convex's WebSocket subscription activates after hydration
 
 ---
 
@@ -516,9 +512,8 @@ What happens when a user visits an authenticated page:
 
 4. Client hydration
    └─ ConvexBetterAuthProvider initializes with server token (no re-fetch)
-   └─ usePreloadedAuthQuery() hydrates from server data
-   └─ Convex subscribes for real-time updates
-   └─ useRef holds data during any revalidation cycles
+   └─ usePreloadedQuery() hydrates from server data synchronously
+   └─ Convex subscribes for real-time updates via WebSocket
 ```
 
 ---
@@ -534,6 +529,7 @@ lib/
   cached-queries.ts       # React cache() wrappers for deduplication
 
 convex/
+  convex.config.ts        # Registers the Better Auth component
   auth.config.ts          # Registers Better Auth as Convex auth provider
   auth.ts                 # Auth component, createAuth, getCurrentUser query
   http.ts                 # Registers auth HTTP routes

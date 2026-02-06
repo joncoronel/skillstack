@@ -1,48 +1,27 @@
-"use client";
-
-import { useQuery } from "convex/react";
+import { Suspense } from "react";
+import { isAuthenticated, preloadAuthQuery } from "@/lib/auth-server";
+import { redirect } from "next/navigation";
 import { api } from "@/convex/_generated/api";
-import { authClient } from "@/lib/auth-client";
-import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/cubby-ui/button";
+import { HomeContent } from "./home-content";
+
+async function AuthenticatedHome() {
+  const hasAuth = await isAuthenticated();
+  if (!hasAuth) redirect("/sign-in");
+
+  const preloadedUser = await preloadAuthQuery(api.auth.getCurrentUser);
+  return <HomeContent preloadedUser={preloadedUser} />;
+}
 
 export default function Home() {
-  const user = useQuery(api.auth.getCurrentUser);
-  const router = useRouter();
-
-  async function handleSignOut() {
-    await authClient.signOut();
-    router.push("/sign-in");
-    router.refresh();
-  }
-
-  if (user === undefined) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <p className="text-muted-foreground">Loading...</p>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4">
-        <p className="text-muted-foreground">Not signed in</p>
-        <Button variant="primary" onClick={() => router.push("/sign-in")}>
-          Sign in
-        </Button>
-      </div>
-    );
-  }
-
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-4">
-      <p className="text-lg">
-        Signed in as <span className="font-semibold">{user.name ?? user.email}</span>
-      </p>
-      <Button variant="outline" onClick={handleSignOut}>
-        Sign out
-      </Button>
-    </div>
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center">
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      }
+    >
+      <AuthenticatedHome />
+    </Suspense>
   );
 }
