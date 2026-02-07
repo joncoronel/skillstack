@@ -4,7 +4,8 @@
       "Bash(ls:*)",
       "mcp__context7__resolve-library-id",
       "Bash(pnpm remove:*)",
-      "Bash(pnpm add:*)"
+      "Bash(pnpm add:*)",
+      "Bash(npx tsc:*)"
     ],
     "additionalDirectories": [
       "c:\\Users\\jonny\\Documents\\Projects\\skillstack\\app\\api\\auth"
