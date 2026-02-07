@@ -160,7 +160,10 @@ export const upsertSkillsBatch = internalMutation({
 
       const technologies = tagSkill(skill.source, skill.skillId, skill.name);
 
+      let skillDocId;
+
       if (existing) {
+        skillDocId = existing._id;
         await ctx.db.patch(existing._id, {
           installs: skill.installs,
           leaderboard,
@@ -168,7 +171,7 @@ export const upsertSkillsBatch = internalMutation({
           lastSynced: now,
         });
       } else {
-        await ctx.db.insert("skills", {
+        skillDocId = await ctx.db.insert("skills", {
           source: skill.source,
           skillId: skill.skillId,
           name: skill.name,
@@ -176,6 +179,22 @@ export const upsertSkillsBatch = internalMutation({
           technologies,
           leaderboard,
           lastSynced: now,
+        });
+      }
+
+      // Sync junction table: delete old entries, insert current ones
+      const existingEntries = await ctx.db
+        .query("skillTechnologies")
+        .withIndex("by_skillId", (q) => q.eq("skillId", skillDocId))
+        .collect();
+      for (const entry of existingEntries) {
+        await ctx.db.delete(entry._id);
+      }
+      for (const tech of technologies) {
+        await ctx.db.insert("skillTechnologies", {
+          skillId: skillDocId,
+          technology: tech,
+          installs: skill.installs,
         });
       }
     }
@@ -293,17 +312,30 @@ export const listByTechnologies = query({
   handler: async (ctx, { technologies }) => {
     if (technologies.length === 0) return [];
 
-    // Use take() instead of collect() to stay within Convex's 32k read limit.
-    // A junction table would be ideal for large-scale filtering on array fields,
-    // but take(20000) gives us a good sample for now.
-    const skills = await ctx.db.query("skills").take(20000);
+    // Query junction table per technology — indexed, reads only matching docs
+    const seen = new Set<string>();
+    const results = [];
 
-    return skills
-      .filter((skill) =>
-        skill.technologies.some((t) => technologies.includes(t)),
-      )
-      .sort((a, b) => b.installs - a.installs)
-      .slice(0, 200);
+    for (const tech of technologies) {
+      const entries = await ctx.db
+        .query("skillTechnologies")
+        .withIndex("by_technology", (q) => q.eq("technology", tech))
+        .order("desc")
+        .take(50);
+
+      for (const entry of entries) {
+        const id = entry.skillId.toString();
+        if (seen.has(id)) continue;
+        seen.add(id);
+
+        const skill = await ctx.db.get(entry.skillId);
+        if (skill) {
+          results.push(skill);
+        }
+      }
+    }
+
+    return results.sort((a, b) => b.installs - a.installs);
   },
 });
 
