@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "mcp__context7__resolve-library-id",
+      "Bash(pnpm remove:*)",
+      "Bash(pnpm add:*)"
     ],
     "additionalDirectories": [
       "c:\\Users\\jonny\\Documents\\Projects\\skillstack\\app\\api\\auth"

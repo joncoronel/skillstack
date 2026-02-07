@@ -1,14 +1,17 @@
 import { Suspense } from "react";
-import { isAuthenticated, preloadAuthQuery } from "@/lib/auth-server";
+import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
+import { preloadQuery } from "convex/nextjs";
 import { api } from "@/convex/_generated/api";
 import { HomeContent } from "./home-content";
+import { getAuthToken } from "@/lib/auth";
 
 async function AuthenticatedHome() {
-  const hasAuth = await isAuthenticated();
-  if (!hasAuth) redirect("/sign-in");
+  const { userId } = await auth();
+  if (!userId) redirect("/sign-in");
 
-  const preloadedUser = await preloadAuthQuery(api.auth.getCurrentUser);
+  const token = await getAuthToken();
+  const preloadedUser = await preloadQuery(api.users.current, {}, { token });
   return <HomeContent preloadedUser={preloadedUser} />;
 }
 

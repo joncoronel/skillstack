@@ -1,4 +1,4 @@
-import { isAuthenticated } from "@/lib/auth-server";
+import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 
 export default async function AuthLayout({
@@ -6,8 +6,8 @@ export default async function AuthLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const hasAuth = await isAuthenticated();
-  if (hasAuth) redirect("/");
+  const { userId } = await auth();
+  if (userId) redirect("/");
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">

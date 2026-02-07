@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { getToken } from "@/lib/auth-server";
+import { ClerkProvider } from "@clerk/nextjs";
 import { ConvexClientProvider } from "./ConvexClientProvider";
-import { Suspense } from "react";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -20,19 +19,6 @@ export const metadata: Metadata = {
   description: "SkillStack",
 };
 
-async function ConvexProviderWithToken({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const token = await getToken();
-  return (
-    <ConvexClientProvider initialToken={token}>
-      {children}
-    </ConvexClientProvider>
-  );
-}
-
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -43,9 +29,9 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <Suspense fallback={null}>
-          <ConvexProviderWithToken>{children}</ConvexProviderWithToken>
-        </Suspense>
+        <ClerkProvider afterSignOutUrl="/sign-in">
+          <ConvexClientProvider>{children}</ConvexClientProvider>
+        </ClerkProvider>
       </body>
     </html>
   );

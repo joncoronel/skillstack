@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import { SignUpForm } from "./sign-up-form";
+import { SignUp } from "@clerk/nextjs";
 
 export const metadata: Metadata = {
   title: "Sign Up",
 };
 
 export default function SignUpPage() {
-  return <SignUpForm />;
+  return <SignUp routing="path" path="/sign-up" signInUrl="/sign-in" />;
 }
