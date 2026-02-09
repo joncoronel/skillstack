@@ -137,3 +137,44 @@ export const listByUser = query({
       .collect();
   },
 });
+
+export const listPublic = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, { limit = 30 }) => {
+    const bundles = await ctx.db
+      .query("bundles")
+      .withIndex("by_public_createdAt", (q) => q.eq("isPublic", true))
+      .order("desc")
+      .take(limit);
+
+    return Promise.all(
+      bundles.map(async (bundle) => {
+        const creator = await ctx.db.get(bundle.userId);
+
+        const techSet = new Set<string>();
+        for (const s of bundle.skills) {
+          const skill = await ctx.db
+            .query("skills")
+            .withIndex("by_source_skillId", (q) =>
+              q.eq("source", s.source).eq("skillId", s.skillId),
+            )
+            .unique();
+          if (skill) {
+            skill.technologies.forEach((t) => techSet.add(t));
+          }
+        }
+
+        return {
+          _id: bundle._id,
+          name: bundle.name,
+          slug: bundle.slug,
+          skillCount: bundle.skills.length,
+          createdAt: bundle.createdAt,
+          creatorName: creator?.name ?? "Anonymous",
+          creatorImage: creator?.image,
+          technologies: Array.from(techSet),
+        };
+      }),
+    );
+  },
+});

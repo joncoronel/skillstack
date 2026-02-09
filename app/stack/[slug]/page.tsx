@@ -42,6 +42,7 @@ export default function BundlePage() {
           <Button
             variant="primary"
             className="mt-6"
+            nativeButton={false}
             render={<Link href="/" />}
           >
             Back to home

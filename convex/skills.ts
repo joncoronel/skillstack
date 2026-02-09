@@ -132,6 +132,12 @@ export const syncSkills = internalAction({
     }
 
     console.log(`Synced ${totalSynced} skills (min ${MIN_INSTALLS} installs)`);
+
+    // Schedule description fetching for skills that don't have one yet
+    await ctx.scheduler.runAfter(
+      10_000,
+      internal.skills.fetchMissingDescriptions,
+    );
   },
 });
 
@@ -272,6 +278,42 @@ function extractFrontmatterDescription(content: string): string | null {
 
   return null;
 }
+
+export const listSkillsWithoutDescription = internalQuery({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, { limit = 15 }) => {
+    const skills = await ctx.db.query("skills").order("desc").take(500);
+    return skills
+      .filter((s) => !s.description)
+      .slice(0, limit)
+      .map((s) => s._id);
+  },
+});
+
+export const fetchMissingDescriptions = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    const skillIds = await ctx.runQuery(
+      internal.skills.listSkillsWithoutDescription,
+      { limit: 15 },
+    );
+
+    if (skillIds.length === 0) {
+      console.log("All skills have descriptions");
+      return;
+    }
+
+    console.log(`Scheduling description fetch for ${skillIds.length} skills`);
+
+    for (let i = 0; i < skillIds.length; i++) {
+      await ctx.scheduler.runAfter(
+        i * 1500,
+        internal.skills.fetchSkillDescription,
+        { skillId: skillIds[i] },
+      );
+    }
+  },
+});
 
 export const updateDescription = internalMutation({
   args: {

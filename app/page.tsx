@@ -13,13 +13,39 @@ export default async function Home() {
       {/* Header */}
       <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur-sm">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
-          <span className="text-lg font-bold tracking-tight">SkillStack</span>
+          <div className="flex items-center gap-6">
+            <span className="text-lg font-bold tracking-tight">SkillStack</span>
+            <nav className="flex items-center gap-1">
+              <Button
+                nativeButton={false}
+                variant="ghost"
+                size="sm"
+                render={<Link href="/explore" />}
+              >
+                Explore
+              </Button>
+              {userId && (
+                <Button
+                  nativeButton={false}
+                  variant="ghost"
+                  size="sm"
+                  render={<Link href="/dashboard" />}
+                >
+                  Dashboard
+                </Button>
+              )}
+            </nav>
+          </div>
           <div className="flex items-center gap-3">
             <ThemeSwitcher />
             {userId ? (
               <UserButton />
             ) : (
-              <Button variant="primary" size="sm" render={<Link href="/sign-in" />}>
+              <Button
+                variant="primary"
+                size="sm"
+                render={<Link href="/sign-in" />}
+              >
                 Sign in
               </Button>
             )}
