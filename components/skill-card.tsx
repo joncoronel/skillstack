@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import {
   Card,
   CardHeader,
@@ -10,6 +11,7 @@ import {
 } from "@/components/ui/cubby-ui/card";
 import { Badge } from "@/components/ui/cubby-ui/badge";
 import { Checkbox } from "@/components/ui/cubby-ui/checkbox";
+import { Label } from "@/components/ui/cubby-ui/label";
 import { TECHNOLOGIES } from "@/lib/technologies";
 import { useBundleSelection } from "@/lib/bundle-selection-context";
 import { cn } from "@/lib/utils";
@@ -40,36 +42,31 @@ export function SkillCard({
   selectable = false,
 }: SkillCardProps) {
   const techMap = new Map(TECHNOLOGIES.map((t) => [t.id, t.name]));
+  const id = useId();
+  const checkboxId = `skill-${id}`;
 
   // Always call hook (rules of hooks) — returns null outside provider
   const selection = useBundleSelection();
-  const selected = selectable && selection ? selection.isSelected(source, skillId) : false;
+  const selected =
+    selectable && selection ? selection.isSelected(source, skillId) : false;
 
-  function handleClick() {
-    if (!selectable || !selection) return;
-    selection.toggleSkill({ source, skillId, name });
-  }
-
-  return (
-    <Card
-      className={cn(
-        "gap-3 py-4 transition-colors",
-        selectable && "cursor-pointer",
-        selected && "border-primary/40 bg-primary/5",
-      )}
-      onClick={handleClick}
-    >
+  const cardInner = (
+    <>
       <CardHeader className="gap-1">
-        <div className="flex items-start gap-2">
+        <div className="flex items-center gap-2">
           {selectable && (
             <Checkbox
+              id={checkboxId}
               checked={selected}
-              onCheckedChange={() => handleClick()}
-              onClick={(e) => e.stopPropagation()}
-              className="mt-0.5 shrink-0"
+              onCheckedChange={() => {
+                if (selection) selection.toggleSkill({ source, skillId, name });
+              }}
+              className="shrink-0"
             />
           )}
-          <CardTitle className="text-sm leading-snug">{name}</CardTitle>
+          <CardTitle className="text-sm leading-snug [text-box:trim-both_cap_alphabetic]">
+            {name}
+          </CardTitle>
         </div>
         <CardAction>
           <span className="text-xs tabular-nums text-muted-foreground">
@@ -93,16 +90,32 @@ export function SkillCard({
               </Badge>
             ))}
             {technologies.length > 4 && (
-              <Badge
-                variant="outline"
-                className="text-[10px] px-1.5 py-0.5"
-              >
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0.5">
                 +{technologies.length - 4}
               </Badge>
             )}
           </div>
         </CardContent>
       )}
-    </Card>
+    </>
   );
+
+  if (selectable) {
+    return (
+      <Label
+        htmlFor={checkboxId}
+        data-variant="default"
+        className={cn(
+          "text-card-foreground flex flex-col bg-card gap-3 rounded-2xl border dark:border-border/50 py-4",
+          "cursor-pointer transition-colors",
+          "has-data-checked:border-primary/40 has-data-checked:bg-primary/5",
+          "hover:bg-muted/50"
+        )}
+      >
+        {cardInner}
+      </Label>
+    );
+  }
+
+  return <Card className="gap-3 py-4">{cardInner}</Card>;
 }
