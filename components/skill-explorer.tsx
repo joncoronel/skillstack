@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { BundleSelectionProvider } from "@/lib/bundle-selection-context";
 import { TechnologySelector } from "@/components/technology-selector";
 import { SkillResults } from "@/components/skill-results";
+import { BundleBar } from "@/components/bundle-bar";
 
 export function SkillExplorer() {
   const [selected, setSelected] = useState<string[]>([]);
@@ -14,7 +16,7 @@ export function SkillExplorer() {
   }
 
   return (
-    <>
+    <BundleSelectionProvider>
       <section>
         <h2 className="mb-4 text-lg font-semibold">
           What&apos;s in your stack?
@@ -25,6 +27,8 @@ export function SkillExplorer() {
       <section className="mt-10">
         <SkillResults selectedTechnologies={selected} />
       </section>
-    </>
+
+      <BundleBar />
+    </BundleSelectionProvider>
   );
 }

@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as bundles from "../bundles.js";
 import type * as crons from "../crons.js";
 import type * as http from "../http.js";
 import type * as skills from "../skills.js";
@@ -20,6 +21,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  bundles: typeof bundles;
   crons: typeof crons;
   http: typeof http;
   skills: typeof skills;

@@ -88,6 +88,7 @@ export function SkillResults({ selectedTechnologies }: SkillResultsProps) {
                   description={skill.description}
                   installs={skill.installs}
                   technologies={skill.technologies}
+                  selectable
                 />
               ))}
             </div>

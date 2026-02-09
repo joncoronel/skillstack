@@ -9,7 +9,10 @@ import {
   CardAction,
 } from "@/components/ui/cubby-ui/card";
 import { Badge } from "@/components/ui/cubby-ui/badge";
+import { Checkbox } from "@/components/ui/cubby-ui/checkbox";
 import { TECHNOLOGIES } from "@/lib/technologies";
+import { useBundleSelection } from "@/lib/bundle-selection-context";
+import { cn } from "@/lib/utils";
 
 interface SkillCardProps {
   name: string;
@@ -18,6 +21,7 @@ interface SkillCardProps {
   description?: string;
   installs: number;
   technologies: string[];
+  selectable?: boolean;
 }
 
 function formatInstalls(n: number): string {
@@ -29,16 +33,44 @@ function formatInstalls(n: number): string {
 export function SkillCard({
   name,
   source,
+  skillId,
   description,
   installs,
   technologies,
+  selectable = false,
 }: SkillCardProps) {
   const techMap = new Map(TECHNOLOGIES.map((t) => [t.id, t.name]));
 
+  // Always call hook (rules of hooks) — returns null outside provider
+  const selection = useBundleSelection();
+  const selected = selectable && selection ? selection.isSelected(source, skillId) : false;
+
+  function handleClick() {
+    if (!selectable || !selection) return;
+    selection.toggleSkill({ source, skillId, name });
+  }
+
   return (
-    <Card className="gap-3 py-4">
+    <Card
+      className={cn(
+        "gap-3 py-4 transition-colors",
+        selectable && "cursor-pointer",
+        selected && "border-primary/40 bg-primary/5",
+      )}
+      onClick={handleClick}
+    >
       <CardHeader className="gap-1">
-        <CardTitle className="text-sm leading-snug">{name}</CardTitle>
+        <div className="flex items-start gap-2">
+          {selectable && (
+            <Checkbox
+              checked={selected}
+              onCheckedChange={() => handleClick()}
+              onClick={(e) => e.stopPropagation()}
+              className="mt-0.5 shrink-0"
+            />
+          )}
+          <CardTitle className="text-sm leading-snug">{name}</CardTitle>
+        </div>
         <CardAction>
           <span className="text-xs tabular-nums text-muted-foreground">
             {formatInstalls(installs)} installs
