@@ -13,7 +13,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ClerkProvider afterSignOutUrl="/sign-in">
       <ConvexClientProvider>
-        {" "}
         <ThemeProvider
           attribute="data-theme"
           defaultTheme="system"

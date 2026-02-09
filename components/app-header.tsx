@@ -1,13 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useAuth, UserButton } from "@clerk/nextjs";
+import { ClerkLoaded, ClerkLoading, useAuth, UserButton } from "@clerk/nextjs";
 import { Button } from "@/components/ui/cubby-ui/button";
+import { Skeleton } from "@/components/ui/cubby-ui/skeleton";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 
 export function AppHeader() {
-  const { isSignedIn } = useAuth();
-
   return (
     <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur-sm">
       <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
@@ -24,34 +23,51 @@ export function AppHeader() {
             >
               Explore
             </Button>
-            {isSignedIn && (
-              <Button
-                nativeButton={false}
-                variant="ghost"
-                size="sm"
-                render={<Link href="/dashboard" />}
-              >
-                Dashboard
-              </Button>
-            )}
+            <ClerkLoaded>
+              <AuthNav />
+            </ClerkLoaded>
           </nav>
         </div>
         <div className="flex items-center gap-3">
           <ThemeSwitcher />
-          {isSignedIn ? (
-            <UserButton />
-          ) : (
-            <Button
-              nativeButton={false}
-              variant="primary"
-              size="sm"
-              render={<Link href="/sign-in" />}
-            >
-              Sign in
-            </Button>
-          )}
+          <ClerkLoading>
+            <Skeleton className="h-8 w-16 rounded-md" />
+          </ClerkLoading>
+          <ClerkLoaded>
+            <AuthButton />
+          </ClerkLoaded>
         </div>
       </div>
     </header>
+  );
+}
+
+function AuthNav() {
+  const { isSignedIn } = useAuth();
+  if (!isSignedIn) return null;
+  return (
+    <Button
+      nativeButton={false}
+      variant="ghost"
+      size="sm"
+      render={<Link href="/dashboard" />}
+    >
+      Dashboard
+    </Button>
+  );
+}
+
+function AuthButton() {
+  const { isSignedIn } = useAuth();
+  if (isSignedIn) return <UserButton />;
+  return (
+    <Button
+      nativeButton={false}
+      variant="primary"
+      size="sm"
+      render={<Link href="/sign-in" />}
+    >
+      Sign in
+    </Button>
   );
 }

@@ -8,7 +8,16 @@ const isPublicRoute = createRouteMatcher([
   "/explore",
 ]);
 
+const isAuthRoute = createRouteMatcher(["/sign-in(.*)", "/sign-up(.*)"]);
+
 export default clerkMiddleware(async (auth, request) => {
+  const { userId } = await auth();
+
+  // Redirect signed-in users away from auth pages
+  if (isAuthRoute(request) && userId) {
+    return Response.redirect(new URL("/", request.url));
+  }
+
   if (!isPublicRoute(request)) {
     await auth.protect();
   }
