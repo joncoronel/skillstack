@@ -37,7 +37,7 @@ const buttonVariants = cva(
       variant: "primary",
       size: "default",
     },
-  },
+  }
 );
 
 export type ButtonProps = BaseButton.Props &
@@ -61,7 +61,9 @@ function Button({
   const buttonContent = (
     <>
       {leftSection}
-      <span className="px-1">{children}</span>
+      <span className="px-1 grid place-items-center *:[grid-area:1/1]">
+        {children}
+      </span>
       {rightSection}
     </>
   );
@@ -74,7 +76,7 @@ function Button({
       className={cn(
         buttonVariants({ variant, size }),
 
-        className,
+        className
       )}
       disabled={disabled || loading}
       focusableWhenDisabled={loading}
