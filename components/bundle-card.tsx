@@ -20,6 +20,7 @@ interface BundleCardProps {
   creatorName: string;
   creatorImage?: string;
   technologies: string[];
+  isPublic?: boolean;
   actions?: React.ReactNode;
 }
 
@@ -32,6 +33,7 @@ export function BundleCard({
   createdAt,
   creatorName,
   technologies,
+  isPublic = true,
   actions,
 }: BundleCardProps) {
   const content = (
@@ -39,9 +41,16 @@ export function BundleCard({
       <CardHeader className="gap-1">
         <CardTitle className="text-sm leading-snug">{name}</CardTitle>
         <CardAction>
-          <span className="text-xs tabular-nums text-muted-foreground">
-            {skillCount} skill{skillCount !== 1 ? "s" : ""}
-          </span>
+          <div className="flex items-center gap-1.5">
+            {!isPublic && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0.5">
+                Private
+              </Badge>
+            )}
+            <span className="text-xs tabular-nums text-muted-foreground">
+              {skillCount} skill{skillCount !== 1 ? "s" : ""}
+            </span>
+          </div>
         </CardAction>
         <CardDescription className="text-xs">
           by {creatorName} &middot; {timeAgo(createdAt)}

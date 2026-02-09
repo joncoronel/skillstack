@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePreloadedQuery, type Preloaded } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { SkillCard } from "@/components/skill-card";
+import { SkillDetailSheet } from "@/components/skill-detail-sheet";
 import { InstallCommands } from "@/components/install-commands";
 import { Button } from "@/components/ui/cubby-ui/button";
 
@@ -11,8 +13,18 @@ interface BundleViewProps {
   preloadedBundle: Preloaded<typeof api.bundles.getBySlug>;
 }
 
+interface SkillInfo {
+  source: string;
+  skillId: string;
+  name: string;
+  description?: string;
+  installs: number;
+  technologies: string[];
+}
+
 export function BundleView({ preloadedBundle }: BundleViewProps) {
   const bundle = usePreloadedQuery(preloadedBundle);
+  const [activeSkill, setActiveSkill] = useState<SkillInfo | null>(null);
 
   if (bundle === null) {
     return (
@@ -61,10 +73,19 @@ export function BundleView({ preloadedBundle }: BundleViewProps) {
               description={skill.description}
               installs={skill.installs}
               technologies={skill.technologies}
+              onViewDetail={() => setActiveSkill(skill)}
             />
           ))}
         </div>
       </section>
+
+      <SkillDetailSheet
+        open={activeSkill !== null}
+        onOpenChange={(open) => {
+          if (!open) setActiveSkill(null);
+        }}
+        skill={activeSkill}
+      />
     </main>
   );
 }

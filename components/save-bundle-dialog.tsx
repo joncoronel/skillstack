@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/cubby-ui/dialog";
 import { Input } from "@/components/ui/cubby-ui/input";
 import { Button } from "@/components/ui/cubby-ui/button";
+import { Switch } from "@/components/ui/cubby-ui/switch";
 import { useBundleSelection } from "@/lib/bundle-selection-context";
 
 interface SaveBundleDialogProps {
@@ -26,6 +27,7 @@ export function SaveBundleDialog({ open, onOpenChange }: SaveBundleDialogProps) 
   const createBundle = useMutation(api.bundles.createBundle);
   const router = useRouter();
   const [name, setName] = useState("");
+  const [isPublic, setIsPublic] = useState(true);
   const [saving, setSaving] = useState(false);
 
   if (!selection) return null;
@@ -42,7 +44,7 @@ export function SaveBundleDialog({ open, onOpenChange }: SaveBundleDialogProps) 
           source,
           skillId,
         })),
-        isPublic: true,
+        isPublic,
       });
 
       clearAll();
@@ -79,9 +81,24 @@ export function SaveBundleDialog({ open, onOpenChange }: SaveBundleDialogProps) 
                 }}
               />
             </div>
+            <div className="flex items-center justify-between">
+              <label
+                htmlFor="bundle-public"
+                className="text-sm font-medium"
+              >
+                Public bundle
+              </label>
+              <Switch
+                id="bundle-public"
+                checked={isPublic}
+                onCheckedChange={setIsPublic}
+              />
+            </div>
             <p className="text-sm text-muted-foreground">
-              {count} skill{count !== 1 ? "s" : ""} will be saved. Anyone with
-              the link can view your bundle.
+              {count} skill{count !== 1 ? "s" : ""} will be saved.{" "}
+              {isPublic
+                ? "Anyone with the link can view your bundle."
+                : "Only you can see this bundle."}
             </p>
           </div>
         </DialogBody>

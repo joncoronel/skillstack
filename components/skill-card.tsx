@@ -24,6 +24,7 @@ interface SkillCardProps {
   installs: number;
   technologies: string[];
   selectable?: boolean;
+  onViewDetail?: () => void;
 }
 
 function formatInstalls(n: number): string {
@@ -40,6 +41,7 @@ export function SkillCard({
   installs,
   technologies,
   selectable = false,
+  onViewDetail,
 }: SkillCardProps) {
   const techMap = new Map(TECHNOLOGIES.map((t) => [t.id, t.name]));
   const id = useId();
@@ -65,7 +67,21 @@ export function SkillCard({
             />
           )}
           <CardTitle className="text-sm leading-snug [text-box:trim-both_cap_alphabetic]">
-            {name}
+            {onViewDetail ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onViewDetail();
+                }}
+                className="hover:underline text-left"
+              >
+                {name}
+              </button>
+            ) : (
+              name
+            )}
           </CardTitle>
         </div>
         <CardAction>

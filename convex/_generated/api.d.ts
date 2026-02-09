@@ -10,6 +10,7 @@
 
 import type * as bundles from "../bundles.js";
 import type * as crons from "../crons.js";
+import type * as github from "../github.js";
 import type * as http from "../http.js";
 import type * as skills from "../skills.js";
 import type * as users from "../users.js";
@@ -23,6 +24,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   bundles: typeof bundles;
   crons: typeof crons;
+  github: typeof github;
   http: typeof http;
   skills: typeof skills;
   users: typeof users;

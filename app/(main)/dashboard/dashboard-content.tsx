@@ -63,6 +63,7 @@ export function DashboardContent({ preloadedBundles }: DashboardContentProps) {
             createdAt={bundle.createdAt}
             creatorName="You"
             technologies={[]}
+            isPublic={bundle.isPublic}
             actions={
               <div className="flex gap-2">
                 <Button

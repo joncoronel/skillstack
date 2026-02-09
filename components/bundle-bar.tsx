@@ -60,6 +60,21 @@ export function BundleBar() {
                 {copied ? "Copied!" : "Copy install"}
               </Button>
 
+              {count >= 2 && count <= 3 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const params = selectedSkills
+                      .map((s) => `${s.source}:${s.skillId}`)
+                      .join(",");
+                    router.push(`/compare?skills=${encodeURIComponent(params)}`);
+                  }}
+                >
+                  Compare
+                </Button>
+              )}
+
               <Button variant="primary" size="sm" onClick={handleSave}>
                 {isSignedIn ? "Save bundle" : "Sign in to save"}
               </Button>

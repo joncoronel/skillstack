@@ -5,6 +5,7 @@ import {
   query,
 } from "./_generated/server";
 import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 
 // ---------------------------------------------------------------------------
@@ -71,7 +72,7 @@ function tagSkill(source: string, skillId: string, name: string): string[] {
 // ---------------------------------------------------------------------------
 
 const BATCH_SIZE = 100;
-const MIN_INSTALLS = 10;
+const MIN_INSTALLS = 50;
 
 export const syncSkills = internalAction({
   args: {},
@@ -136,8 +137,11 @@ export const syncSkills = internalAction({
     // Schedule description fetching for skills that don't have one yet
     await ctx.scheduler.runAfter(
       10_000,
-      internal.skills.fetchMissingDescriptions,
+      internal.skills.fetchMissingDescriptions
     );
+
+    // Schedule content backfill for skills that have a URL but no content
+    await ctx.scheduler.runAfter(30_000, internal.skills.fetchMissingContent);
   },
 });
 
@@ -149,7 +153,7 @@ export const upsertSkillsBatch = internalMutation({
         skillId: v.string(),
         name: v.string(),
         installs: v.number(),
-      }),
+      })
     ),
     leaderboard: v.string(),
   },
@@ -160,7 +164,7 @@ export const upsertSkillsBatch = internalMutation({
       const existing = await ctx.db
         .query("skills")
         .withIndex("by_source_skillId", (q) =>
-          q.eq("source", skill.source).eq("skillId", skill.skillId),
+          q.eq("source", skill.source).eq("skillId", skill.skillId)
         )
         .unique();
 
@@ -232,13 +236,15 @@ export const fetchSkillDescription = internalAction({
         const res = await fetch(url);
         if (!res.ok) continue;
 
-        const content = await res.text();
-        const description = extractFrontmatterDescription(content);
+        const raw = await res.text();
+        const description = extractFrontmatterDescription(raw);
+        const body = extractBodyContent(raw);
 
-        if (description) {
+        if (description || body) {
           await ctx.runMutation(internal.skills.updateDescription, {
             skillId,
-            description,
+            description: description ?? undefined,
+            content: body ?? undefined,
             skillMdUrl: url,
           });
           return;
@@ -258,14 +264,12 @@ function extractFrontmatterDescription(content: string): string | null {
   const frontmatter = match[1];
 
   // Look for description field in YAML
-  const descMatch = frontmatter.match(
-    /^description:\s*["']?(.+?)["']?\s*$/m,
-  );
+  const descMatch = frontmatter.match(/^description:\s*["']?(.+?)["']?\s*$/m);
   if (descMatch) return descMatch[1].trim();
 
   // Fallback: try multi-line description
   const multiLineMatch = frontmatter.match(
-    /^description:\s*[|>]-?\s*\n([\s\S]*?)(?=\n\w|\n---|\n$)/m,
+    /^description:\s*[|>]-?\s*\n([\s\S]*?)(?=\n\w|\n---|\n$)/m
   );
   if (multiLineMatch) {
     return multiLineMatch[1]
@@ -277,6 +281,18 @@ function extractFrontmatterDescription(content: string): string | null {
   }
 
   return null;
+}
+
+function extractBodyContent(raw: string): string | null {
+  // Strip YAML frontmatter (between --- markers), return remaining markdown body
+  const match = raw.match(/^---\s*\n[\s\S]*?\n---\s*\n?([\s\S]*)/);
+  if (match) {
+    const body = match[1].trim();
+    return body || null;
+  }
+  // No frontmatter — treat the whole content as the body
+  const trimmed = raw.trim();
+  return trimmed || null;
 }
 
 export const listSkillsWithoutDescription = internalQuery({
@@ -295,7 +311,7 @@ export const fetchMissingDescriptions = internalAction({
   handler: async (ctx) => {
     const skillIds = await ctx.runQuery(
       internal.skills.listSkillsWithoutDescription,
-      { limit: 15 },
+      { limit: 15 }
     );
 
     if (skillIds.length === 0) {
@@ -309,7 +325,7 @@ export const fetchMissingDescriptions = internalAction({
       await ctx.scheduler.runAfter(
         i * 1500,
         internal.skills.fetchSkillDescription,
-        { skillId: skillIds[i] },
+        { skillId: skillIds[i] }
       );
     }
   },
@@ -318,11 +334,16 @@ export const fetchMissingDescriptions = internalAction({
 export const updateDescription = internalMutation({
   args: {
     skillId: v.id("skills"),
-    description: v.string(),
+    description: v.optional(v.string()),
+    content: v.optional(v.string()),
     skillMdUrl: v.string(),
   },
-  handler: async (ctx, { skillId, description, skillMdUrl }) => {
-    await ctx.db.patch(skillId, { description, skillMdUrl });
+  handler: async (ctx, { skillId, description, content, skillMdUrl }) => {
+    await ctx.db.patch(skillId, {
+      ...(description !== undefined && { description }),
+      ...(content !== undefined && { content }),
+      skillMdUrl,
+    });
   },
 });
 
@@ -343,41 +364,71 @@ export const getBySourceAndSkillId = query({
     return await ctx.db
       .query("skills")
       .withIndex("by_source_skillId", (q) =>
-        q.eq("source", source).eq("skillId", skillId),
+        q.eq("source", source).eq("skillId", skillId)
       )
       .unique();
   },
 });
 
 export const listByTechnologies = query({
-  args: { technologies: v.array(v.string()) },
-  handler: async (ctx, { technologies }) => {
-    if (technologies.length === 0) return [];
+  args: {
+    technologies: v.array(v.string()),
+    techLimits: v.optional(v.record(v.string(), v.number())),
+  },
+  handler: async (ctx, { technologies, techLimits = {} }) => {
+    const DEFAULT_LIMIT = 20;
+    if (technologies.length === 0) return { groups: [] };
 
-    // Query junction table per technology — indexed, reads only matching docs
-    const seen = new Set<string>();
-    const results = [];
+    type SkillDoc = NonNullable<
+      Awaited<ReturnType<typeof ctx.db.get<"skills">>>
+    >;
+    const cache = new Map<string, SkillDoc>();
+    const seen = new Set<string>(); // global dedup across technologies
+    const groups: Array<{
+      technology: string;
+      skills: SkillDoc[];
+      hasMore: boolean;
+    }> = [];
 
     for (const tech of technologies) {
+      const limit = techLimits[tech] ?? DEFAULT_LIMIT;
+      // Over-fetch to compensate for cross-tech dedup (typically 10-30% overlap)
+      const fetchCount = limit * 2 + 1;
       const entries = await ctx.db
         .query("skillTechnologies")
         .withIndex("by_technology", (q) => q.eq("technology", tech))
         .order("desc")
-        .take(50);
+        .take(fetchCount);
+
+      const skills: SkillDoc[] = [];
 
       for (const entry of entries) {
+        if (skills.length >= limit) break;
         const id = entry.skillId.toString();
         if (seen.has(id)) continue;
-        seen.add(id);
 
-        const skill = await ctx.db.get(entry.skillId);
-        if (skill) {
-          results.push(skill);
+        let skill = cache.get(id);
+        if (!skill) {
+          const doc = await ctx.db.get(entry.skillId);
+          if (!doc) continue;
+          skill = doc;
+          cache.set(id, skill);
         }
+        seen.add(id);
+        skills.push(skill);
       }
+
+      // More exist if we filled our limit AND the junction table may have more entries
+      const hasMore = skills.length >= limit && entries.length === fetchCount;
+
+      groups.push({
+        technology: tech,
+        skills: skills.sort((a, b) => b.installs - a.installs),
+        hasMore,
+      });
     }
 
-    return results.sort((a, b) => b.installs - a.installs);
+    return { groups };
   },
 });
 
@@ -391,11 +442,186 @@ export const list = query({
       ? await ctx.db
           .query("skills")
           .withIndex("by_leaderboard", (idx) =>
-            idx.eq("leaderboard", leaderboard),
+            idx.eq("leaderboard", leaderboard)
           )
           .take(limit)
       : await ctx.db.query("skills").take(limit);
 
     return skills.sort((a, b) => b.installs - a.installs);
+  },
+});
+
+// ---------------------------------------------------------------------------
+// One-time cleanup: remove skills below MIN_INSTALLS threshold
+// Run from Convex dashboard: internal.skills.cleanupLowInstallSkills
+// ---------------------------------------------------------------------------
+
+export const cleanupLowInstallSkills = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    let totalDeleted = 0;
+    let cursor: string | null = null;
+    let isDone = false;
+
+    while (!isDone) {
+      const result: {
+        ids: Id<"skills">[];
+        nextCursor: string;
+        isDone: boolean;
+      } = await ctx.runQuery(internal.skills.listLowInstallSkillsPage, {
+        cursor,
+      });
+
+      if (result.ids.length > 0) {
+        for (let i = 0; i < result.ids.length; i += 30) {
+          const slice = result.ids.slice(i, i + 30);
+          await ctx.runMutation(internal.skills.cleanupLowInstallBatch, {
+            skillIds: slice,
+          });
+        }
+        totalDeleted += result.ids.length;
+        console.log(`Deleted ${result.ids.length} (total: ${totalDeleted})`);
+      }
+
+      cursor = result.nextCursor;
+      isDone = result.isDone;
+    }
+
+    console.log(
+      `Cleaned up ${totalDeleted} skills below ${MIN_INSTALLS} installs`
+    );
+  },
+});
+
+export const listLowInstallSkillsPage = internalQuery({
+  args: { cursor: v.union(v.string(), v.null()) },
+  handler: async (
+    ctx,
+    { cursor }
+  ): Promise<{
+    ids: Array<import("./_generated/dataModel").Id<"skills">>;
+    nextCursor: string;
+    isDone: boolean;
+  }> => {
+    const paginationOpts = cursor
+      ? { numItems: 500, cursor }
+      : { numItems: 500, cursor: null };
+    const result = await ctx.db.query("skills").paginate(paginationOpts);
+    const ids = result.page
+      .filter((s) => s.installs < MIN_INSTALLS)
+      .map((s) => s._id);
+    return {
+      ids,
+      nextCursor: result.continueCursor,
+      isDone: result.isDone,
+    };
+  },
+});
+
+export const cleanupLowInstallBatch = internalMutation({
+  args: { skillIds: v.array(v.id("skills")) },
+  handler: async (ctx, { skillIds }) => {
+    for (const skillId of skillIds) {
+      const entries = await ctx.db
+        .query("skillTechnologies")
+        .withIndex("by_skillId", (q) => q.eq("skillId", skillId))
+        .collect();
+      for (const entry of entries) {
+        await ctx.db.delete(entry._id);
+      }
+      await ctx.db.delete(skillId);
+    }
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Content backfill
+// ---------------------------------------------------------------------------
+
+export const listSkillsWithoutContent = internalQuery({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, { limit = 15 }) => {
+    const skills = await ctx.db.query("skills").order("desc").take(500);
+    return skills
+      .filter((s) => s.skillMdUrl && !s.content)
+      .slice(0, limit)
+      .map((s) => s._id);
+  },
+});
+
+export const fetchMissingContent = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    const skillIds = await ctx.runQuery(
+      internal.skills.listSkillsWithoutContent,
+      { limit: 15 }
+    );
+
+    if (skillIds.length === 0) {
+      console.log("All skills with URLs have content");
+      return;
+    }
+
+    console.log(`Scheduling content fetch for ${skillIds.length} skills`);
+
+    for (let i = 0; i < skillIds.length; i++) {
+      await ctx.scheduler.runAfter(
+        i * 1500,
+        internal.skills.fetchSkillContent,
+        { skillId: skillIds[i] }
+      );
+    }
+  },
+});
+
+export const fetchSkillContent = internalAction({
+  args: { skillId: v.id("skills") },
+  handler: async (ctx, { skillId }) => {
+    const skill = await ctx.runQuery(internal.skills.getById, { skillId });
+    if (!skill || !skill.skillMdUrl || skill.content) return;
+
+    try {
+      const res = await fetch(skill.skillMdUrl);
+      if (!res.ok) return;
+
+      const raw = await res.text();
+      const body = extractBodyContent(raw);
+
+      if (body) {
+        await ctx.runMutation(internal.skills.updateContent, {
+          skillId,
+          content: body,
+        });
+      }
+    } catch {
+      // Silently skip failed fetches
+    }
+  },
+});
+
+export const updateContent = internalMutation({
+  args: {
+    skillId: v.id("skills"),
+    content: v.string(),
+  },
+  handler: async (ctx, { skillId, content }) => {
+    await ctx.db.patch(skillId, { content });
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Public content query
+// ---------------------------------------------------------------------------
+
+export const getContent = query({
+  args: { source: v.string(), skillId: v.string() },
+  handler: async (ctx, { source, skillId }) => {
+    const skill = await ctx.db
+      .query("skills")
+      .withIndex("by_source_skillId", (q) =>
+        q.eq("source", source).eq("skillId", skillId)
+      )
+      .unique();
+    return skill?.content ?? null;
   },
 });

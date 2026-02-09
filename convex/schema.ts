@@ -14,6 +14,7 @@ export default defineSchema({
     skillId: v.string(),
     name: v.string(),
     description: v.optional(v.string()),
+    content: v.optional(v.string()),
     installs: v.number(),
     technologies: v.array(v.string()),
     leaderboard: v.string(),
