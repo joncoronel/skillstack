@@ -112,6 +112,11 @@ export function SkillDetailSheet({
                 </div>
               ) : content ? (
                 <div className="prose prose-sm dark:prose-invert max-w-none">
+                  {shownSkill.description && (
+                    <p className="lead text-muted-foreground">
+                      {shownSkill.description}
+                    </p>
+                  )}
                   <Markdown>{content}</Markdown>
                 </div>
               ) : shownSkill.description ? (

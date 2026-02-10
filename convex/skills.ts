@@ -5,7 +5,6 @@ import {
   query,
 } from "./_generated/server";
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 
 // ---------------------------------------------------------------------------
@@ -134,14 +133,8 @@ export const syncSkills = internalAction({
 
     console.log(`Synced ${totalSynced} skills (min ${MIN_INSTALLS} installs)`);
 
-    // Schedule description fetching for skills that don't have one yet
-    await ctx.scheduler.runAfter(
-      10_000,
-      internal.skills.fetchMissingDescriptions
-    );
-
-    // Schedule content backfill for skills that have a URL but no content
-    await ctx.scheduler.runAfter(30_000, internal.skills.fetchMissingContent);
+    // Schedule two-phase content backfill (URL discovery → content fetch)
+    await ctx.scheduler.runAfter(10_000, internal.skills.backfillDiscoverUrls, {});
   },
 });
 
@@ -212,49 +205,8 @@ export const upsertSkillsBatch = internalMutation({
 });
 
 // ---------------------------------------------------------------------------
-// Description fetching
+// Content helpers
 // ---------------------------------------------------------------------------
-
-const SKILL_MD_PATHS = [
-  "skills/{skillId}/SKILL.md",
-  "{skillId}/SKILL.md",
-  ".claude/skills/{skillId}/SKILL.md",
-  ".cursor/skills/{skillId}/SKILL.md",
-];
-
-export const fetchSkillDescription = internalAction({
-  args: { skillId: v.id("skills") },
-  handler: async (ctx, { skillId }) => {
-    const skill = await ctx.runQuery(internal.skills.getById, { skillId });
-    if (!skill) return;
-
-    for (const pathTemplate of SKILL_MD_PATHS) {
-      const path = pathTemplate.replace("{skillId}", skill.skillId);
-      const url = `https://raw.githubusercontent.com/${skill.source}/main/${path}`;
-
-      try {
-        const res = await fetch(url);
-        if (!res.ok) continue;
-
-        const raw = await res.text();
-        const description = extractFrontmatterDescription(raw);
-        const body = extractBodyContent(raw);
-
-        if (description || body) {
-          await ctx.runMutation(internal.skills.updateDescription, {
-            skillId,
-            description: description ?? undefined,
-            content: body ?? undefined,
-            skillMdUrl: url,
-          });
-          return;
-        }
-      } catch {
-        continue;
-      }
-    }
-  },
-});
 
 function extractFrontmatterDescription(content: string): string | null {
   // YAML frontmatter is between --- markers
@@ -264,7 +216,7 @@ function extractFrontmatterDescription(content: string): string | null {
   const frontmatter = match[1];
 
   // Look for description field in YAML
-  const descMatch = frontmatter.match(/^description:\s*["']?(.+?)["']?\s*$/m);
+  const descMatch = frontmatter.match(/^description:\s*["']?([^|>].*?)["']?\s*$/m);
   if (descMatch) return descMatch[1].trim();
 
   // Fallback: try multi-line description
@@ -295,38 +247,387 @@ function extractBodyContent(raw: string): string | null {
   return trimmed || null;
 }
 
-export const listSkillsWithoutDescription = internalQuery({
-  args: { limit: v.optional(v.number()) },
-  handler: async (ctx, { limit = 15 }) => {
-    const skills = await ctx.db.query("skills").order("desc").take(500);
-    return skills
-      .filter((s) => !s.description)
-      .slice(0, limit)
-      .map((s) => s._id);
+// ---------------------------------------------------------------------------
+// Phase 1 — URL Discovery (GitHub Tree API)
+// ---------------------------------------------------------------------------
+
+export const listSourcesNeedingDiscovery = internalQuery({
+  args: { cursor: v.optional(v.string()) },
+  handler: async (ctx, { cursor }) => {
+    const paginationOpts = cursor
+      ? { numItems: 500, cursor }
+      : { numItems: 500, cursor: null };
+    const result = await ctx.db.query("skills").paginate(paginationOpts);
+
+    // Group skills that need URL discovery by source repo
+    const bySource = new Map<
+      string,
+      Array<{ docId: string; skillId: string }>
+    >();
+    for (const s of result.page) {
+      if (s.skillMdUrl !== undefined && s.skillMdUrl !== "") continue;
+      const list = bySource.get(s.source) ?? [];
+      list.push({ docId: s._id, skillId: s.skillId });
+      bySource.set(s.source, list);
+    }
+
+    const sources = Array.from(bySource.entries()).map(
+      ([source, skills]) => ({ source, skills })
+    );
+
+    return {
+      sources,
+      nextCursor: result.continueCursor,
+      isDone: result.isDone,
+    };
   },
 });
 
-export const fetchMissingDescriptions = internalAction({
-  args: {},
-  handler: async (ctx) => {
-    const skillIds = await ctx.runQuery(
-      internal.skills.listSkillsWithoutDescription,
-      { limit: 15 }
-    );
+export const discoverSkillMdUrls = internalAction({
+  args: {
+    source: v.string(),
+    skills: v.array(
+      v.object({ docId: v.string(), skillId: v.string() })
+    ),
+  },
+  handler: async (ctx, { source, skills }) => {
+    const token = process.env.GITHUB_TOKEN;
+    const headers: Record<string, string> = {
+      Accept: "application/vnd.github.v3+json",
+      "User-Agent": "SkillStack-Backfill",
+    };
+    if (token) headers.Authorization = `Bearer ${token}`;
 
-    if (skillIds.length === 0) {
-      console.log("All skills have descriptions");
+    // Resolve the default branch via the repo API, fall back to main/master
+    type TreeResponse = { tree: Array<{ path: string; type: string }>; truncated: boolean };
+    let treeData: TreeResponse | null = null;
+    let resolvedBranch = "main";
+
+    const branches: string[] = [];
+    try {
+      const repoRes = await fetch(`https://api.github.com/repos/${source}`, { headers });
+      if (repoRes.ok) {
+        const repoData = await repoRes.json() as { default_branch: string };
+        branches.push(repoData.default_branch);
+      }
+    } catch {
+      // Fall through to hardcoded branches
+    }
+    // Add main/master as fallbacks if not already the default
+    if (!branches.includes("main")) branches.push("main");
+    if (!branches.includes("master")) branches.push("master");
+
+    for (const branch of branches) {
+      const url = `https://api.github.com/repos/${source}/git/trees/${branch}?recursive=1`;
+      try {
+        const res = await fetch(url, { headers });
+        if (res.ok) {
+          treeData = await res.json() as TreeResponse;
+          resolvedBranch = branch;
+          break;
+        }
+        if (res.status === 404) continue;
+        // 409 = tree too large for recursive listing — fall back below
+        if (res.status === 409) {
+          resolvedBranch = branch;
+          console.log(`Tree API 409 (too large) for ${source}/${branch} — falling back to direct path guessing`);
+          break;
+        }
+        // Rate limited or other error — stop
+        console.error(`Tree API ${res.status} for ${source}/${branch}`);
+        return;
+      } catch (e) {
+        console.error(`Tree API fetch error for ${source}/${branch}:`, e);
+        continue;
+      }
+    }
+
+    // Fallback: if tree fetch failed or repo too large, try direct path guessing per skill
+    if (!treeData) {
+      console.log(`Could not fetch tree for ${source} — trying direct path guessing`);
+      const matchedSkillIds = new Set<string>();
+      for (const s of skills) {
+        // Try common SKILL.md path patterns
+        const paths = [
+          `skills/${s.skillId}/SKILL.md`,
+          `.claude/skills/${s.skillId}/SKILL.md`,
+          `SKILL.md`,
+        ];
+        for (const path of paths) {
+          const rawUrl = `https://raw.githubusercontent.com/${source}/${resolvedBranch}/${path}`;
+          try {
+            const res = await fetch(rawUrl, { method: "HEAD" });
+            if (res.ok) {
+              await ctx.runMutation(internal.skills.updateSkillMdUrl, {
+                docId: s.docId as ReturnType<typeof v.id<"skills">>["type"],
+                skillMdUrl: rawUrl,
+              });
+              matchedSkillIds.add(s.skillId);
+              break;
+            }
+          } catch {
+            continue;
+          }
+        }
+      }
+      // Mark remaining as not found
+      const unmatched = skills.filter((s) => !matchedSkillIds.has(s.skillId));
+      for (const s of unmatched) {
+        await ctx.runMutation(internal.skills.updateSkillMdUrl, {
+          docId: s.docId as ReturnType<typeof v.id<"skills">>["type"],
+          skillMdUrl: "",
+        });
+      }
+      console.log(
+        `${source} (fallback): ${matchedSkillIds.size} matched, ${unmatched.length} not found`
+      );
       return;
     }
 
-    console.log(`Scheduling description fetch for ${skillIds.length} skills`);
+    // Collect all SKILL.md paths and build a directory-name lookup
+    const allSkillMdPaths: string[] = [];
+    const skillMdByDir = new Map<string, string>();
+    for (const entry of treeData.tree) {
+      if (entry.type !== "blob") continue;
+      const lowerPath = entry.path.toLowerCase();
+      if (lowerPath !== "skill.md" && !lowerPath.endsWith("/skill.md")) continue;
 
-    for (let i = 0; i < skillIds.length; i++) {
+      allSkillMdPaths.push(entry.path);
+      const parts = entry.path.split("/");
+      if (parts.length >= 2) {
+        const parentDir = parts[parts.length - 2];
+        skillMdByDir.set(parentDir, entry.path);
+      }
+    }
+
+    // Pass 1: match by directory name === skillId
+    const matchedSkillIds = new Set<string>();
+    const matchedPaths = new Set<string>();
+
+    for (const s of skills) {
+      const path = skillMdByDir.get(s.skillId);
+      if (path) {
+        const rawUrl = `https://raw.githubusercontent.com/${source}/${resolvedBranch}/${path}`;
+        await ctx.runMutation(internal.skills.updateSkillMdUrl, {
+          docId: s.docId as ReturnType<typeof v.id<"skills">>["type"],
+          skillMdUrl: rawUrl,
+        });
+        matchedSkillIds.add(s.skillId);
+        matchedPaths.add(path);
+      }
+    }
+
+    // Pass 2: for unmatched skills, fetch unmatched SKILL.md files and check
+    // the frontmatter `name` field (directory name often differs from skillId,
+    // or SKILL.md may be at the repo root)
+    const unmatchedSkills = skills.filter((s) => !matchedSkillIds.has(s.skillId));
+    const unmatchedMdPaths = allSkillMdPaths
+      .filter((path) => !matchedPaths.has(path))
+      .map((path) => [path, path] as const);
+
+    if (unmatchedSkills.length > 0 && unmatchedMdPaths.length > 0) {
+      // Build a quick lookup by skillId for remaining skills
+      const remaining = new Map(unmatchedSkills.map((s) => [s.skillId, s]));
+
+      for (const [, mdPath] of unmatchedMdPaths) {
+        if (remaining.size === 0) break;
+
+        const rawUrl = `https://raw.githubusercontent.com/${source}/${resolvedBranch}/${mdPath}`;
+        try {
+          const res = await fetch(rawUrl);
+          if (!res.ok) continue;
+          const text = await res.text();
+          // Extract name from frontmatter: "name: some-skill-id"
+          const nameMatch = text.match(/^name:\s*(.+)$/m);
+          if (!nameMatch) continue;
+          const name = nameMatch[1].trim();
+
+          // Try exact match, then kebab-case, then prefix match
+          // (skills.sh sometimes truncates names at commas to create skillIds)
+          const kebabName = name.toLowerCase().replace(/\s+/g, "-");
+          let skill = remaining.get(name) ?? remaining.get(kebabName);
+          if (!skill) {
+            for (const [skillId, s] of remaining) {
+              if (kebabName.startsWith(skillId)) {
+                skill = s;
+                break;
+              }
+            }
+          }
+          if (skill) {
+            await ctx.runMutation(internal.skills.updateSkillMdUrl, {
+              docId: skill.docId as ReturnType<typeof v.id<"skills">>["type"],
+              skillMdUrl: rawUrl,
+            });
+            matchedSkillIds.add(skill.skillId);
+            remaining.delete(skill.skillId);
+          }
+        } catch {
+          continue;
+        }
+      }
+    }
+
+    // Mark remaining unmatched skills as not found
+    const finalUnmatched = skills.filter((s) => !matchedSkillIds.has(s.skillId));
+    for (const s of finalUnmatched) {
+      await ctx.runMutation(internal.skills.updateSkillMdUrl, {
+        docId: s.docId as ReturnType<typeof v.id<"skills">>["type"],
+        skillMdUrl: "",
+      });
+    }
+
+    console.log(
+      `${source}: ${matchedSkillIds.size} matched, ${finalUnmatched.length} not found` +
+        (treeData.truncated ? " (tree truncated)" : "")
+    );
+  },
+});
+
+export const updateSkillMdUrl = internalMutation({
+  args: {
+    docId: v.id("skills"),
+    skillMdUrl: v.string(),
+  },
+  handler: async (ctx, { docId, skillMdUrl }) => {
+    await ctx.db.patch(docId, { skillMdUrl });
+  },
+});
+
+export const backfillDiscoverUrls = internalAction({
+  args: { cursor: v.optional(v.string()) },
+  handler: async (ctx, { cursor }) => {
+    const REPOS_PER_BATCH = 25;
+    const hasToken = !!process.env.GITHUB_TOKEN;
+    const stagger = hasToken ? 500 : 30_000;
+
+    const result = await ctx.runQuery(
+      internal.skills.listSourcesNeedingDiscovery,
+      { cursor: cursor ?? undefined }
+    );
+
+    const batch = result.sources.slice(0, REPOS_PER_BATCH);
+    if (batch.length > 0) {
+      console.log(`Scheduling Tree API discovery for ${batch.length} repos`);
+      for (let i = 0; i < batch.length; i++) {
+        await ctx.scheduler.runAfter(
+          i * stagger,
+          internal.skills.discoverSkillMdUrls,
+          { source: batch[i].source, skills: batch[i].skills }
+        );
+      }
+    }
+
+    // More sources on this page that we didn't process
+    const remaining = result.sources.length - batch.length;
+
+    if (remaining > 0 || !result.isDone) {
+      // If we have remaining on this page, re-query same cursor
+      // Otherwise advance to next page
+      const nextCursor =
+        remaining > 0 ? (cursor ?? undefined) : result.nextCursor;
+      const delay = batch.length * stagger + 5_000;
       await ctx.scheduler.runAfter(
-        i * 1500,
-        internal.skills.fetchSkillDescription,
-        { skillId: skillIds[i] }
+        delay,
+        internal.skills.backfillDiscoverUrls,
+        { cursor: nextCursor }
       );
+    } else {
+      console.log("URL discovery complete — starting content fetch");
+      await ctx.scheduler.runAfter(
+        batch.length * stagger + 10_000,
+        internal.skills.backfillFetchContent,
+        {}
+      );
+    }
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Phase 2 — Content Fetching (raw.githubusercontent.com)
+// ---------------------------------------------------------------------------
+
+export const listSkillsNeedingContentFetch = internalQuery({
+  args: { cursor: v.optional(v.string()) },
+  handler: async (ctx, { cursor }) => {
+    const paginationOpts = cursor
+      ? { numItems: 200, cursor }
+      : { numItems: 200, cursor: null };
+    const result = await ctx.db.query("skills").paginate(paginationOpts);
+
+    const ids = result.page
+      .filter((s) => s.skillMdUrl && s.skillMdUrl !== "" && !s.content)
+      .map((s) => s._id);
+
+    return {
+      ids,
+      nextCursor: result.continueCursor,
+      isDone: result.isDone,
+    };
+  },
+});
+
+export const fetchSkillContent = internalAction({
+  args: { skillId: v.id("skills") },
+  handler: async (ctx, { skillId }) => {
+    const skill = await ctx.runQuery(internal.skills.getById, { skillId });
+    if (!skill || !skill.skillMdUrl) return;
+
+    try {
+      const res = await fetch(skill.skillMdUrl);
+      if (!res.ok) {
+        console.error(`Failed to fetch content for ${skill.skillId}: ${res.status}`);
+        return;
+      }
+
+      const raw = await res.text();
+      const description = extractFrontmatterDescription(raw);
+      const body = extractBodyContent(raw);
+
+      if (description || body) {
+        await ctx.runMutation(internal.skills.updateDescription, {
+          skillId,
+          description: description ?? undefined,
+          content: body ?? undefined,
+          skillMdUrl: skill.skillMdUrl,
+        });
+      }
+    } catch (e) {
+      console.error(`Error fetching content for ${skill.skillId}:`, e);
+    }
+  },
+});
+
+export const backfillFetchContent = internalAction({
+  args: { cursor: v.optional(v.string()) },
+  handler: async (ctx, { cursor }) => {
+    const STAGGER_MS = 500;
+
+    const result = await ctx.runQuery(
+      internal.skills.listSkillsNeedingContentFetch,
+      { cursor: cursor ?? undefined }
+    );
+
+    if (result.ids.length > 0) {
+      console.log(`Scheduling content fetch for ${result.ids.length} skills`);
+      for (let i = 0; i < result.ids.length; i++) {
+        await ctx.scheduler.runAfter(
+          i * STAGGER_MS,
+          internal.skills.fetchSkillContent,
+          { skillId: result.ids[i] }
+        );
+      }
+    }
+
+    if (!result.isDone) {
+      const delay = result.ids.length * STAGGER_MS + 5_000;
+      await ctx.scheduler.runAfter(
+        delay,
+        internal.skills.backfillFetchContent,
+        { cursor: result.nextCursor }
+      );
+    } else {
+      console.log("Content backfill complete");
     }
   },
 });
@@ -448,164 +749,6 @@ export const list = query({
       : await ctx.db.query("skills").take(limit);
 
     return skills.sort((a, b) => b.installs - a.installs);
-  },
-});
-
-// ---------------------------------------------------------------------------
-// One-time cleanup: remove skills below MIN_INSTALLS threshold
-// Run from Convex dashboard: internal.skills.cleanupLowInstallSkills
-// ---------------------------------------------------------------------------
-
-export const cleanupLowInstallSkills = internalAction({
-  args: {},
-  handler: async (ctx) => {
-    let totalDeleted = 0;
-    let cursor: string | null = null;
-    let isDone = false;
-
-    while (!isDone) {
-      const result: {
-        ids: Id<"skills">[];
-        nextCursor: string;
-        isDone: boolean;
-      } = await ctx.runQuery(internal.skills.listLowInstallSkillsPage, {
-        cursor,
-      });
-
-      if (result.ids.length > 0) {
-        for (let i = 0; i < result.ids.length; i += 30) {
-          const slice = result.ids.slice(i, i + 30);
-          await ctx.runMutation(internal.skills.cleanupLowInstallBatch, {
-            skillIds: slice,
-          });
-        }
-        totalDeleted += result.ids.length;
-        console.log(`Deleted ${result.ids.length} (total: ${totalDeleted})`);
-      }
-
-      cursor = result.nextCursor;
-      isDone = result.isDone;
-    }
-
-    console.log(
-      `Cleaned up ${totalDeleted} skills below ${MIN_INSTALLS} installs`
-    );
-  },
-});
-
-export const listLowInstallSkillsPage = internalQuery({
-  args: { cursor: v.union(v.string(), v.null()) },
-  handler: async (
-    ctx,
-    { cursor }
-  ): Promise<{
-    ids: Array<import("./_generated/dataModel").Id<"skills">>;
-    nextCursor: string;
-    isDone: boolean;
-  }> => {
-    const paginationOpts = cursor
-      ? { numItems: 500, cursor }
-      : { numItems: 500, cursor: null };
-    const result = await ctx.db.query("skills").paginate(paginationOpts);
-    const ids = result.page
-      .filter((s) => s.installs < MIN_INSTALLS)
-      .map((s) => s._id);
-    return {
-      ids,
-      nextCursor: result.continueCursor,
-      isDone: result.isDone,
-    };
-  },
-});
-
-export const cleanupLowInstallBatch = internalMutation({
-  args: { skillIds: v.array(v.id("skills")) },
-  handler: async (ctx, { skillIds }) => {
-    for (const skillId of skillIds) {
-      const entries = await ctx.db
-        .query("skillTechnologies")
-        .withIndex("by_skillId", (q) => q.eq("skillId", skillId))
-        .collect();
-      for (const entry of entries) {
-        await ctx.db.delete(entry._id);
-      }
-      await ctx.db.delete(skillId);
-    }
-  },
-});
-
-// ---------------------------------------------------------------------------
-// Content backfill
-// ---------------------------------------------------------------------------
-
-export const listSkillsWithoutContent = internalQuery({
-  args: { limit: v.optional(v.number()) },
-  handler: async (ctx, { limit = 15 }) => {
-    const skills = await ctx.db.query("skills").order("desc").take(500);
-    return skills
-      .filter((s) => s.skillMdUrl && !s.content)
-      .slice(0, limit)
-      .map((s) => s._id);
-  },
-});
-
-export const fetchMissingContent = internalAction({
-  args: {},
-  handler: async (ctx) => {
-    const skillIds = await ctx.runQuery(
-      internal.skills.listSkillsWithoutContent,
-      { limit: 15 }
-    );
-
-    if (skillIds.length === 0) {
-      console.log("All skills with URLs have content");
-      return;
-    }
-
-    console.log(`Scheduling content fetch for ${skillIds.length} skills`);
-
-    for (let i = 0; i < skillIds.length; i++) {
-      await ctx.scheduler.runAfter(
-        i * 1500,
-        internal.skills.fetchSkillContent,
-        { skillId: skillIds[i] }
-      );
-    }
-  },
-});
-
-export const fetchSkillContent = internalAction({
-  args: { skillId: v.id("skills") },
-  handler: async (ctx, { skillId }) => {
-    const skill = await ctx.runQuery(internal.skills.getById, { skillId });
-    if (!skill || !skill.skillMdUrl || skill.content) return;
-
-    try {
-      const res = await fetch(skill.skillMdUrl);
-      if (!res.ok) return;
-
-      const raw = await res.text();
-      const body = extractBodyContent(raw);
-
-      if (body) {
-        await ctx.runMutation(internal.skills.updateContent, {
-          skillId,
-          content: body,
-        });
-      }
-    } catch {
-      // Silently skip failed fetches
-    }
-  },
-});
-
-export const updateContent = internalMutation({
-  args: {
-    skillId: v.id("skills"),
-    content: v.string(),
-  },
-  handler: async (ctx, { skillId, content }) => {
-    await ctx.db.patch(skillId, { content });
   },
 });
 
