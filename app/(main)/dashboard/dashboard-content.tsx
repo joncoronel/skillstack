@@ -24,6 +24,7 @@ interface DashboardContentProps {
 export function DashboardContent({ preloadedBundles }: DashboardContentProps) {
   const bundles = usePreloadedQuery(preloadedBundles);
   const deleteBundle = useMutation(api.bundles.deleteBundle);
+  const updateVisibility = useMutation(api.bundles.updateBundleVisibility);
   const [deletingId, setDeletingId] = useState<Id<"bundles"> | null>(null);
 
   async function handleDelete() {
@@ -73,6 +74,18 @@ export function DashboardContent({ preloadedBundles }: DashboardContentProps) {
                   render={<Link href={`/stack/${bundle.slug}`} />}
                 >
                   View
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={() =>
+                    updateVisibility({
+                      bundleId: bundle._id,
+                      isPublic: !bundle.isPublic,
+                    })
+                  }
+                >
+                  {bundle.isPublic ? "Make private" : "Make public"}
                 </Button>
                 <Button
                   variant="ghost"

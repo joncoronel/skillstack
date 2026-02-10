@@ -62,6 +62,23 @@ export const createBundle = mutation({
   },
 });
 
+export const updateBundleVisibility = mutation({
+  args: {
+    bundleId: v.id("bundles"),
+    isPublic: v.boolean(),
+  },
+  handler: async (ctx, { bundleId, isPublic }) => {
+    const user = await getCurrentUserOrThrow(ctx);
+    const bundle = await ctx.db.get(bundleId);
+
+    if (!bundle || bundle.userId !== user._id) {
+      throw new Error("Bundle not found or unauthorized");
+    }
+
+    await ctx.db.patch(bundleId, { isPublic });
+  },
+});
+
 export const deleteBundle = mutation({
   args: { bundleId: v.id("bundles") },
   handler: async (ctx, { bundleId }) => {

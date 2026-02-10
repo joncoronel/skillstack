@@ -33,5 +33,5 @@ export function generateInstallCommands(
 export function generateAllCommandsText(skills: BundleSkill[]): string {
   return generateInstallCommands(skills)
     .map((cmd) => cmd.command)
-    .join("\n");
+    .join(" && ");
 }

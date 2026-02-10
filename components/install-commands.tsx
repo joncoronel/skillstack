@@ -37,7 +37,7 @@ export function InstallCommands({ skills }: InstallCommandsProps) {
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold">Install commands</h3>
         <Button variant="outline" size="xs" onClick={handleCopyAll}>
-          {copiedAll ? "Copied!" : "Copy all"}
+          {copiedAll ? "Copied!" : "Copy"}
         </Button>
       </div>
 
