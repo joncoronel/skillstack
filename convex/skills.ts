@@ -216,7 +216,7 @@ function extractFrontmatterDescription(content: string): string | null {
   const frontmatter = match[1];
 
   // Look for description field in YAML
-  const descMatch = frontmatter.match(/^description:\s*["']?([^|>].*?)["']?\s*$/m);
+  const descMatch = frontmatter.match(/^description:\s*["']?([^\s|>].*?)["']?\s*$/m);
   if (descMatch) return descMatch[1].trim();
 
   // Fallback: try multi-line description
@@ -556,7 +556,12 @@ export const listSkillsNeedingContentFetch = internalQuery({
     const result = await ctx.db.query("skills").paginate(paginationOpts);
 
     const ids = result.page
-      .filter((s) => s.skillMdUrl && s.skillMdUrl !== "" && !s.content)
+      .filter(
+        (s) =>
+          s.skillMdUrl &&
+          s.skillMdUrl !== "" &&
+          (!s.content || s.description === "|" || s.description === ">")
+      )
       .map((s) => s._id);
 
     return {
@@ -573,27 +578,36 @@ export const fetchSkillContent = internalAction({
     const skill = await ctx.runQuery(internal.skills.getById, { skillId });
     if (!skill || !skill.skillMdUrl) return;
 
-    try {
-      const res = await fetch(skill.skillMdUrl);
-      if (!res.ok) {
-        console.error(`Failed to fetch content for ${skill.skillId}: ${res.status}`);
+    const MAX_RETRIES = 3;
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        const res = await fetch(skill.skillMdUrl);
+        if (!res.ok) {
+          console.error(`Failed to fetch content for ${skill.skillId}: ${res.status}`);
+          return;
+        }
+
+        const raw = await res.text();
+        const description = extractFrontmatterDescription(raw);
+        const body = extractBodyContent(raw);
+
+        if (description || body) {
+          await ctx.runMutation(internal.skills.updateDescription, {
+            skillId,
+            description: description ?? undefined,
+            content: body ?? undefined,
+            skillMdUrl: skill.skillMdUrl,
+          });
+        }
         return;
+      } catch (e) {
+        if (attempt < MAX_RETRIES - 1) {
+          console.warn(`Retry ${attempt + 1}/${MAX_RETRIES} for ${skill.skillId}: ${e}`);
+          await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+        } else {
+          console.error(`Error fetching content for ${skill.skillId} after ${MAX_RETRIES} attempts:`, e);
+        }
       }
-
-      const raw = await res.text();
-      const description = extractFrontmatterDescription(raw);
-      const body = extractBodyContent(raw);
-
-      if (description || body) {
-        await ctx.runMutation(internal.skills.updateDescription, {
-          skillId,
-          description: description ?? undefined,
-          content: body ?? undefined,
-          skillMdUrl: skill.skillMdUrl,
-        });
-      }
-    } catch (e) {
-      console.error(`Error fetching content for ${skill.skillId}:`, e);
     }
   },
 });
