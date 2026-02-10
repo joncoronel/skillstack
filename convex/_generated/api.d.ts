@@ -12,6 +12,7 @@ import type * as bundles from "../bundles.js";
 import type * as crons from "../crons.js";
 import type * as github from "../github.js";
 import type * as http from "../http.js";
+import type * as lib_github from "../lib/github.js";
 import type * as skills from "../skills.js";
 import type * as users from "../users.js";
 
@@ -26,6 +27,7 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   github: typeof github;
   http: typeof http;
+  "lib/github": typeof lib_github;
   skills: typeof skills;
   users: typeof users;
 }>;

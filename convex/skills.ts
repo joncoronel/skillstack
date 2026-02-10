@@ -6,6 +6,7 @@ import {
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
+import { resolveDefaultBranch, fetchRepoTree } from "./lib/github";
 
 // ---------------------------------------------------------------------------
 // Technology tagging
@@ -291,59 +292,19 @@ export const discoverSkillMdUrls = internalAction({
     ),
   },
   handler: async (ctx, { source, skills }) => {
-    const token = process.env.GITHUB_TOKEN;
-    const headers: Record<string, string> = {
-      Accept: "application/vnd.github.v3+json",
-      "User-Agent": "SkillStack-Backfill",
-    };
-    if (token) headers.Authorization = `Bearer ${token}`;
+    // source is "owner/repo" format
+    const [owner, repo] = source.split("/");
+    const defaultBranch = await resolveDefaultBranch(owner, repo);
 
-    // Resolve the default branch via the repo API, fall back to main/master
-    type TreeResponse = { tree: Array<{ path: string; type: string }>; truncated: boolean };
-    let treeData: TreeResponse | null = null;
-    let resolvedBranch = "main";
-
-    const branches: string[] = [];
-    try {
-      const repoRes = await fetch(`https://api.github.com/repos/${source}`, { headers });
-      if (repoRes.ok) {
-        const repoData = await repoRes.json() as { default_branch: string };
-        branches.push(repoData.default_branch);
-      }
-    } catch {
-      // Fall through to hardcoded branches
-    }
-    // Add main/master as fallbacks if not already the default
+    const branches = [defaultBranch];
     if (!branches.includes("main")) branches.push("main");
     if (!branches.includes("master")) branches.push("master");
 
-    for (const branch of branches) {
-      const url = `https://api.github.com/repos/${source}/git/trees/${branch}?recursive=1`;
-      try {
-        const res = await fetch(url, { headers });
-        if (res.ok) {
-          treeData = await res.json() as TreeResponse;
-          resolvedBranch = branch;
-          break;
-        }
-        if (res.status === 404) continue;
-        // 409 = tree too large for recursive listing — fall back below
-        if (res.status === 409) {
-          resolvedBranch = branch;
-          console.log(`Tree API 409 (too large) for ${source}/${branch} — falling back to direct path guessing`);
-          break;
-        }
-        // Rate limited or other error — stop
-        console.error(`Tree API ${res.status} for ${source}/${branch}`);
-        return;
-      } catch (e) {
-        console.error(`Tree API fetch error for ${source}/${branch}:`, e);
-        continue;
-      }
-    }
+    const tree = await fetchRepoTree(owner, repo, branches);
+    const resolvedBranch = tree?.branch ?? defaultBranch;
 
     // Fallback: if tree fetch failed or repo too large, try direct path guessing per skill
-    if (!treeData) {
+    if (!tree) {
       console.log(`Could not fetch tree for ${source} — trying direct path guessing`);
       const matchedSkillIds = new Set<string>();
       for (const s of skills) {
@@ -387,7 +348,7 @@ export const discoverSkillMdUrls = internalAction({
     // Collect all SKILL.md paths and build a directory-name lookup
     const allSkillMdPaths: string[] = [];
     const skillMdByDir = new Map<string, string>();
-    for (const entry of treeData.tree) {
+    for (const entry of tree.entries) {
       if (entry.type !== "blob") continue;
       const lowerPath = entry.path.toLowerCase();
       if (lowerPath !== "skill.md" && !lowerPath.endsWith("/skill.md")) continue;
@@ -479,7 +440,7 @@ export const discoverSkillMdUrls = internalAction({
 
     console.log(
       `${source}: ${matchedSkillIds.size} matched, ${finalUnmatched.length} not found` +
-        (treeData.truncated ? " (tree truncated)" : "")
+        (tree.truncated ? " (tree truncated)" : "")
     );
   },
 });

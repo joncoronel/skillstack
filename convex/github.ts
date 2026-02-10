@@ -1,5 +1,6 @@
 import { action } from "./_generated/server";
 import { v } from "convex/values";
+import { resolveDefaultBranch, fetchRepoTree } from "./lib/github";
 
 // ---------------------------------------------------------------------------
 // Package name → technology ID mapping
@@ -102,8 +103,88 @@ function parseGitHubUrl(url: string): { owner: string; repo: string } | null {
 }
 
 // ---------------------------------------------------------------------------
+// package.json helpers
+// ---------------------------------------------------------------------------
+
+interface PackageJson {
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  workspaces?: string[] | { packages: string[] };
+}
+
+/** Fetch and parse a single package.json via raw.githubusercontent.com (not rate-limited). */
+async function fetchPackageJson(
+  owner: string,
+  repo: string,
+  branch: string,
+  path: string,
+): Promise<PackageJson | null> {
+  const url = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${path}`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    return (await res.json()) as PackageJson;
+  } catch {
+    return null;
+  }
+}
+
+/** Directories that should never contain relevant package.json files. */
+const EXCLUDED_SEGMENTS = [
+  "node_modules",
+  "test/fixtures",
+  "__fixtures__",
+  "__tests__",
+  ".next",
+  "dist",
+  "build",
+  "examples",
+  ".cache",
+  "coverage",
+];
+
+/** Check if a tree path is a relevant package.json to analyze. */
+function isRelevantPackageJson(path: string): boolean {
+  if (!path.endsWith("package.json")) return false;
+  const segments = path.split("/");
+  if (segments[segments.length - 1] !== "package.json") return false;
+  const lowerPath = path.toLowerCase();
+  return !EXCLUDED_SEGMENTS.some((seg) => lowerPath.includes(seg));
+}
+
+/** Sort paths: root first, then by depth (shallower first). Cap to maxCount. */
+function prioritizeAndCap(paths: string[], maxCount: number): string[] {
+  return paths
+    .sort((a, b) => {
+      if (a === "package.json") return -1;
+      if (b === "package.json") return 1;
+      const depthA = a.split("/").length;
+      const depthB = b.split("/").length;
+      if (depthA !== depthB) return depthA - depthB;
+      return a.localeCompare(b);
+    })
+    .slice(0, maxCount);
+}
+
+/** Collect technology IDs from a package.json's dependencies. */
+function collectTechnologies(
+  pkg: PackageJson,
+  into: Set<string>,
+): void {
+  const deps = {
+    ...(pkg.dependencies ?? {}),
+    ...(pkg.devDependencies ?? {}),
+  };
+  for (const tech of mapPackages(deps)) {
+    into.add(tech);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Action
 // ---------------------------------------------------------------------------
+
+const MAX_PACKAGE_JSONS = 15;
 
 export const detectTechnologies = action({
   args: { repoUrl: v.string() },
@@ -114,41 +195,102 @@ export const detectTechnologies = action({
     }
 
     const { owner, repo } = parsed;
+    const repoName = `${owner}/${repo}`;
 
-    // Try main branch first, then master
-    let packageJson: Record<string, unknown> | null = null;
+    // Phase 1: Fetch root package.json (free — raw.githubusercontent.com)
+    let rootPkg: PackageJson | null = null;
+    let rootBranch = "main";
     for (const branch of ["main", "master"]) {
-      const url = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/package.json`;
-      try {
-        const res = await fetch(url);
-        if (res.ok) {
-          packageJson = (await res.json()) as Record<string, unknown>;
-          break;
-        }
-      } catch {
-        continue;
+      rootPkg = await fetchPackageJson(owner, repo, branch, "package.json");
+      if (rootPkg) {
+        rootBranch = branch;
+        break;
       }
     }
 
-    if (!packageJson) {
+    if (!rootPkg) {
       return {
         error: "Could not find package.json in this repository",
         technologies: [],
-        repoName: `${owner}/${repo}`,
+        repoName,
       };
     }
 
-    const deps = {
-      ...((packageJson.dependencies as Record<string, string>) ?? {}),
-      ...((packageJson.devDependencies as Record<string, string>) ?? {}),
-    };
+    const technologies = new Set<string>();
+    collectTechnologies(rootPkg, technologies);
 
-    const technologies = mapPackages(deps);
+    // Check for monorepo — only hit the GitHub API if workspaces detected.
+    // npm/yarn use "workspaces" in package.json, pnpm uses pnpm-workspace.yaml
+    let hasWorkspaces =
+      rootPkg.workspaces !== undefined && rootPkg.workspaces !== null;
+
+    if (!hasWorkspaces) {
+      // Check for pnpm-workspace.yaml (free — raw URL)
+      const pnpmWorkspaceUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${rootBranch}/pnpm-workspace.yaml`;
+      try {
+        const res = await fetch(pnpmWorkspaceUrl, { method: "HEAD" });
+        if (res.ok) hasWorkspaces = true;
+      } catch {
+        // Not a pnpm workspace
+      }
+    }
+
+    if (!hasWorkspaces) {
+      // Standard repo — done, zero API calls used
+      return {
+        error: null,
+        technologies: Array.from(technologies),
+        repoName,
+      };
+    }
+
+    // Phase 2: Monorepo — discover workspace package.json files via tree API
+    const defaultBranch = await resolveDefaultBranch(owner, repo);
+    const branches = [defaultBranch];
+    if (!branches.includes(rootBranch)) branches.push(rootBranch);
+    if (!branches.includes("main")) branches.push("main");
+    if (!branches.includes("master")) branches.push("master");
+
+    const tree = await fetchRepoTree(owner, repo, branches);
+
+    if (!tree) {
+      // Tree API failed — return root results only (graceful degradation)
+      return {
+        error: null,
+        technologies: Array.from(technologies),
+        repoName,
+      };
+    }
+
+    // Filter and prioritize package.json paths (skip root, already processed)
+    const workspacePaths = tree.entries
+      .filter(
+        (e) =>
+          e.type === "blob" &&
+          e.path !== "package.json" &&
+          isRelevantPackageJson(e.path),
+      )
+      .map((e) => e.path);
+
+    const cappedPaths = prioritizeAndCap(workspacePaths, MAX_PACKAGE_JSONS);
+
+    // Fetch all workspace package.json files in parallel (free — raw URLs)
+    const results = await Promise.allSettled(
+      cappedPaths.map((path) =>
+        fetchPackageJson(owner, repo, tree.branch, path),
+      ),
+    );
+
+    for (const result of results) {
+      if (result.status === "fulfilled" && result.value) {
+        collectTechnologies(result.value, technologies);
+      }
+    }
 
     return {
       error: null,
-      technologies,
-      repoName: `${owner}/${repo}`,
+      technologies: Array.from(technologies),
+      repoName,
     };
   },
 });
