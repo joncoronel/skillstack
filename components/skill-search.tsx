@@ -1,62 +1,78 @@
 "use client";
 
-import { useMemo, useState, useRef, useEffect, useCallback } from "react";
-import Fuse from "fuse.js";
+import { useState, useRef, useEffect, useCallback } from "react";
+import MiniSearch, { type SearchResult } from "minisearch";
 import { SearchIcon, XIcon, LoaderIcon } from "lucide-react";
 import { Input } from "@/components/ui/cubby-ui/input";
 import { SkillCard } from "@/components/skill-card";
 import { SkillDetailSheet } from "@/components/skill-detail-sheet";
 
-const MAX_RESULTS = 20;
+const MINISEARCH_OPTIONS = {
+  fields: ["name"],
+  storeFields: [
+    "source",
+    "skillId",
+    "name",
+    "description",
+    "installs",
+    "technologies",
+  ],
+};
 
-interface SkillSummary {
-  _id: string;
+type SkillResult = SearchResult & {
   source: string;
   skillId: string;
   name: string;
   description?: string;
   installs: number;
   technologies: string[];
-}
+};
 
 export function SkillSearch() {
   const [query, setQuery] = useState("");
-  const [activeSkill, setActiveSkill] = useState<SkillSummary | null>(null);
-  const [searchActivated, setSearchActivated] = useState(false);
-  const [skills, setSkills] = useState<SkillSummary[] | null>(null);
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [activeSkill, setActiveSkill] = useState<SkillResult | null>(null);
+  const [searchIndex, setSearchIndex] = useState<MiniSearch | null>(null);
+  const [indexLoading, setIndexLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch skill summaries from cached Route Handler on first focus
+  // Debounce query by 300ms
   useEffect(() => {
-    if (!searchActivated) return;
-    let cancelled = false;
-    fetch("/api/skill-summaries")
-      .then((res) => res.json())
-      .then((data: SkillSummary[]) => {
-        if (!cancelled) setSkills(data);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [searchActivated]);
+    const trimmed = query.trim();
+    const id = setTimeout(() => setDebouncedQuery(trimmed), trimmed ? 0 : 0);
+    return () => clearTimeout(id);
+  }, [query]);
 
-  const fuse = useMemo(() => {
-    if (!skills) return null;
-    return new Fuse(skills, {
-      keys: ["name"],
-      threshold: 0.3,
-      includeScore: true,
-    });
-  }, [skills]);
-
-  const results = useMemo(() => {
-    if (!query.trim() || !fuse) return [];
-    return fuse.search(query.trim(), { limit: MAX_RESULTS }).map((r) => r.item);
-  }, [fuse, query]);
-
+  // Lazy-load search index on first focus
   const handleFocus = useCallback(() => {
-    if (!searchActivated) setSearchActivated(true);
-  }, [searchActivated]);
+    if (searchIndex || indexLoading) return;
+    setIndexLoading(true);
+    fetch("/api/skill-summaries")
+      .then((r) => r.json())
+      .then((data) => {
+        const index = MiniSearch.loadJSON(
+          JSON.stringify(data),
+          MINISEARCH_OPTIONS,
+        );
+        setSearchIndex(index);
+      })
+      .finally(() => setIndexLoading(false));
+  }, [searchIndex, indexLoading]);
+
+  // Search locally
+  const results =
+    debouncedQuery && searchIndex
+      ? (searchIndex
+          .search(debouncedQuery, { fuzzy: 0.2, prefix: true })
+          .sort(
+            (a, b) =>
+              ((b as SkillResult).installs ?? 0) -
+              ((a as SkillResult).installs ?? 0),
+          )
+          .slice(0, 50) as SkillResult[])
+      : [];
+
+  const isLoading = indexLoading;
 
   // Keyboard shortcut: focus on / key
   useEffect(() => {
@@ -75,8 +91,6 @@ export function SkillSearch() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
-
-  const isLoading = searchActivated && skills === null;
 
   return (
     <div>
@@ -107,7 +121,7 @@ export function SkillSearch() {
         <div className="mt-4">
           {isLoading ? (
             <p className="text-sm text-muted-foreground text-center py-8">
-              Loading skills…
+              Loading search index…
             </p>
           ) : results.length > 0 ? (
             <>
@@ -130,11 +144,11 @@ export function SkillSearch() {
                 ))}
               </div>
             </>
-          ) : (
+          ) : debouncedQuery ? (
             <p className="text-sm text-muted-foreground text-center py-8">
               No skills found for &ldquo;{query}&rdquo;
             </p>
-          )}
+          ) : null}
         </div>
       )}
 
