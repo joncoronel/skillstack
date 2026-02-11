@@ -206,7 +206,7 @@ export const TECHNOLOGY_REGISTRY: TechnologyDef[] = [
     id: "kotlin",
     name: "Kotlin",
     category: "Languages",
-    nameKeywords: ["kotlin", "android"],
+    nameKeywords: ["kotlin"],
     contentPhrases: [
       "kotlin class", "android app", "kotlin project", "kotlin function",
     ],

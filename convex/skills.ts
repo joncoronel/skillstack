@@ -376,17 +376,18 @@ function extractFrontmatterDescription(content: string): string | null {
   );
   if (descMatch) return descMatch[1].trim();
 
-  // Fallback: try multi-line description
+  // Fallback: try multi-line description (YAML block scalar with > or |)
   const multiLineMatch = frontmatter.match(
-    /^description:\s*[|>]-?\s*\n([\s\S]*?)(?=\n\w|\n---|\n$)/m,
+    /^description:\s*[|>]-?\s*\n((?:[ \t]+.*(?:\n|$))*)/m,
   );
   if (multiLineMatch) {
-    return multiLineMatch[1]
+    const result = multiLineMatch[1]
       .split("\n")
       .map((l) => l.trim())
       .filter(Boolean)
       .join(" ")
       .trim();
+    if (result) return result;
   }
 
   return null;
@@ -689,7 +690,7 @@ export const listSkillsNeedingContentFetch = internalQuery({
         if (!s.skillMdUrl || s.skillMdUrl === "") return false;
 
         // Case 1: Never fetched content (or broken parse artifacts)
-        if (!s.content || s.description === "|" || s.description === ">") {
+        if (!s.content || s.description === "|" || s.description === ">" || s.description === "") {
           return true;
         }
 
@@ -721,6 +722,10 @@ export const fetchSkillContent = internalAction({
           console.error(
             `Failed to fetch content for ${skill.skillId}: ${res.status}`,
           );
+          // Mark as fetched so we don't retry endlessly on persistent errors (e.g. 404)
+          await ctx.runMutation(internal.skills.markContentFetched, {
+            skillId,
+          });
           return;
         }
 
@@ -728,10 +733,16 @@ export const fetchSkillContent = internalAction({
         const description = extractFrontmatterDescription(raw);
         const body = extractBodyContent(raw);
 
-        if (description || body) {
+        // Clear broken legacy descriptions ("|" or ">") when no valid description parsed
+        const isBrokenDesc =
+          skill.description === "|" || skill.description === ">";
+        const effectiveDescription =
+          description ?? (isBrokenDesc ? "" : undefined);
+
+        if (effectiveDescription !== undefined || body) {
           await ctx.runMutation(internal.skills.updateDescription, {
             skillId,
-            description: description ?? undefined,
+            description: effectiveDescription,
             content: body ?? undefined,
             skillMdUrl: skill.skillMdUrl,
           });
