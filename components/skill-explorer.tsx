@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ChevronDownIcon } from "lucide-react";
 import { BundleSelectionProvider } from "@/lib/bundle-selection-context";
 import { TechnologySelector } from "@/components/technology-selector";
 import { RepoUrlInput } from "@/components/repo-url-input";
 import { SkillResults } from "@/components/skill-results";
 import { BundleBar } from "@/components/bundle-bar";
+import { StickyTechBar } from "@/components/sticky-tech-bar";
 import {
   Collapsible,
   CollapsibleTrigger,
@@ -16,6 +17,7 @@ import {
 export function SkillExplorer() {
   const [selected, setSelected] = useState<string[]>([]);
   const [pickerOpen, setPickerOpen] = useState(true);
+  const selectorRef = useRef<HTMLDivElement>(null);
 
   function handleToggle(id: string) {
     setSelected((prev) =>
@@ -27,9 +29,19 @@ export function SkillExplorer() {
     setSelected(technologies);
   }
 
+  function handleEditStack() {
+    setPickerOpen(true);
+    setTimeout(() => {
+      selectorRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 100);
+  }
+
   return (
     <BundleSelectionProvider>
-      <section>
+      <section ref={selectorRef}>
         <h2 className="mb-4 text-lg font-semibold">
           What&apos;s in your stack?
         </h2>
@@ -65,6 +77,13 @@ export function SkillExplorer() {
           </CollapsibleContent>
         </Collapsible>
       </section>
+
+      <StickyTechBar
+        selected={selected}
+        onRemove={handleToggle}
+        onEditClick={handleEditStack}
+        selectorRef={selectorRef}
+      />
 
       <section className="mt-10">
         <SkillResults selectedTechnologies={selected} />

@@ -45,39 +45,44 @@ export function BundleBar() {
             transition={{ type: "spring", damping: 25, stiffness: 300 }}
             className="fixed bottom-0 inset-x-0 z-40 sm:bottom-6 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2"
           >
-            <div className="flex items-center gap-3 border-t sm:border sm:rounded-2xl bg-card px-4 py-3 shadow-lg sm:shadow-xl">
-              <span className="text-sm font-medium whitespace-nowrap">
-                {count} skill{count !== 1 ? "s" : ""} selected
-              </span>
-
-              <Button variant="ghost" size="xs" onClick={clearAll}>
-                Clear
-              </Button>
-
-              <div className="h-4 w-px bg-border" />
-
-              <Button variant="outline" size="sm" onClick={handleCopy}>
-                {copied ? "Copied!" : "Copy install"}
-              </Button>
-
-              {count >= 2 && count <= 3 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    const params = selectedSkills
-                      .map((s) => `${s.source}:${s.skillId}`)
-                      .join(",");
-                    router.push(`/compare?skills=${encodeURIComponent(params)}`);
-                  }}
-                >
-                  Compare
+            <div className="flex flex-col gap-2 border-t sm:flex-row sm:items-center sm:gap-3 sm:border sm:rounded-2xl bg-card px-4 py-3 shadow-lg sm:shadow-xl">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <span className="text-sm font-medium whitespace-nowrap">
+                  {count} skill{count !== 1 ? "s" : ""} selected
+                </span>
+                <Button variant="ghost" size="xs" onClick={clearAll}>
+                  Clear
                 </Button>
-              )}
+              </div>
 
-              <Button variant="primary" size="sm" onClick={handleSave}>
-                {isSignedIn ? "Save bundle" : "Sign in to save"}
-              </Button>
+              <div className="hidden sm:block h-4 w-px bg-border" />
+
+              <div className="flex items-center gap-2 sm:gap-3">
+                <Button variant="outline" size="sm" onClick={handleCopy}>
+                  {copied ? "Copied!" : "Copy install"}
+                </Button>
+
+                {count >= 2 && count <= 3 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const params = selectedSkills
+                        .map((s) => `${s.source}:${s.skillId}`)
+                        .join(",");
+                      router.push(
+                        `/compare?skills=${encodeURIComponent(params)}`,
+                      );
+                    }}
+                  >
+                    Compare
+                  </Button>
+                )}
+
+                <Button variant="primary" size="sm" onClick={handleSave}>
+                  {isSignedIn ? "Save bundle" : "Sign in to save"}
+                </Button>
+              </div>
             </div>
           </motion.div>
         )}
