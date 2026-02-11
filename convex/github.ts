@@ -1,6 +1,7 @@
 import { action } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
-import { resolveDefaultBranch, fetchRepoTree } from "./lib/github";
+import { resolveDefaultBranch, fetchRepoTree, NOT_MODIFIED } from "./lib/github";
 
 // ---------------------------------------------------------------------------
 // Package name → technology ID mapping
@@ -103,6 +104,202 @@ function parseGitHubUrl(url: string): { owner: string; repo: string } | null {
 }
 
 // ---------------------------------------------------------------------------
+// Non-JS ecosystem detection
+// ---------------------------------------------------------------------------
+
+const NON_JS_DEPENDENCY_FILES = [
+  "requirements.txt",
+  "pyproject.toml",
+  "Cargo.toml",
+  "go.mod",
+  "Dockerfile",
+] as const;
+
+/** File presence → base technology ID. */
+const FILE_TECH_MAP: Record<string, string> = {
+  "requirements.txt": "python",
+  "pyproject.toml": "python",
+  "Cargo.toml": "rust",
+  "go.mod": "go",
+  "Dockerfile": "docker",
+};
+
+const PYTHON_PACKAGE_MAP: Record<string, string> = {
+  django: "python",
+  flask: "python",
+  fastapi: "python",
+  starlette: "python",
+  pytest: "testing",
+  "psycopg2": "postgres",
+  "psycopg2-binary": "postgres",
+  asyncpg: "postgres",
+  sqlalchemy: "postgres",
+  pymongo: "mongodb",
+  motor: "mongodb",
+  boto3: "aws",
+  openai: "ai",
+  anthropic: "ai",
+  langchain: "ai",
+  "firebase-admin": "firebase",
+  tailwindcss: "tailwind",
+  typescript: "typescript",
+};
+
+const RUST_CRATE_MAP: Record<string, string> = {
+  tokio: "rust",
+  "actix-web": "rust",
+  axum: "rust",
+  rocket: "rust",
+  sqlx: "postgres",
+  diesel: "postgres",
+  mongodb: "mongodb",
+};
+
+const RUST_PREFIX_PATTERNS: [string, string][] = [
+  ["aws-sdk-", "aws"],
+];
+
+const GO_MODULE_MAP: Record<string, string> = {
+  "github.com/gin-gonic/gin": "go",
+  "github.com/labstack/echo": "go",
+  "github.com/gofiber/fiber": "go",
+  "github.com/lib/pq": "postgres",
+  "github.com/jackc/pgx": "postgres",
+  "go.mongodb.org/mongo-driver": "mongodb",
+  "github.com/aws/aws-sdk-go": "aws",
+  "github.com/sashabaranov/go-openai": "ai",
+};
+
+function parseRequirementsTxt(content: string): string[] {
+  const techs = new Set<string>();
+  for (const line of content.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith("-")) continue;
+    const pkgName = trimmed.split(/[=<>!~\[;@\s]/)[0].toLowerCase();
+    if (pkgName && PYTHON_PACKAGE_MAP[pkgName]) {
+      techs.add(PYTHON_PACKAGE_MAP[pkgName]);
+    }
+  }
+  return Array.from(techs);
+}
+
+function parsePyprojectToml(content: string): string[] {
+  const techs = new Set<string>();
+  const depsMatch = content.match(/dependencies\s*=\s*\[([\s\S]*?)\]/);
+  if (depsMatch) {
+    const pkgMatches = depsMatch[1].matchAll(/["']([a-zA-Z0-9_-]+)/g);
+    for (const m of pkgMatches) {
+      const pkgName = m[1].toLowerCase();
+      if (PYTHON_PACKAGE_MAP[pkgName]) {
+        techs.add(PYTHON_PACKAGE_MAP[pkgName]);
+      }
+    }
+  }
+  return Array.from(techs);
+}
+
+function parseCargoToml(content: string): string[] {
+  const techs = new Set<string>();
+  const depsMatch = content.match(
+    /\[(?:dev-)?dependencies\]([\s\S]*?)(?=\n\[|\s*$)/g,
+  );
+  if (depsMatch) {
+    for (const section of depsMatch) {
+      for (const line of section.split("\n")) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith("["))
+          continue;
+        const crateName = trimmed.split(/[\s=]/)[0];
+        if (!crateName) continue;
+        if (RUST_CRATE_MAP[crateName]) {
+          techs.add(RUST_CRATE_MAP[crateName]);
+        }
+        for (const [prefix, techId] of RUST_PREFIX_PATTERNS) {
+          if (crateName.startsWith(prefix)) {
+            techs.add(techId);
+            break;
+          }
+        }
+      }
+    }
+  }
+  return Array.from(techs);
+}
+
+function parseGoMod(content: string): string[] {
+  const techs = new Set<string>();
+
+  function matchModule(modulePath: string) {
+    if (GO_MODULE_MAP[modulePath]) {
+      techs.add(GO_MODULE_MAP[modulePath]);
+      return;
+    }
+    for (const [path, techId] of Object.entries(GO_MODULE_MAP)) {
+      if (modulePath.startsWith(path)) {
+        techs.add(techId);
+        return;
+      }
+    }
+  }
+
+  // Multi-line require blocks
+  const requireMatch = content.match(/require\s*\(([\s\S]*?)\)/g);
+  if (requireMatch) {
+    for (const block of requireMatch) {
+      for (const line of block.split("\n")) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith("//") || trimmed.startsWith("require") || trimmed === ")") continue;
+        const modulePath = trimmed.split(/\s/)[0];
+        if (modulePath) matchModule(modulePath);
+      }
+    }
+  }
+
+  // Single-line require statements
+  const singleRequires = content.matchAll(/^require\s+(\S+)\s/gm);
+  for (const m of singleRequires) {
+    matchModule(m[1]);
+  }
+
+  return Array.from(techs);
+}
+
+function parseNonJsDependencyFile(
+  filename: string,
+  content: string,
+): string[] {
+  switch (filename) {
+    case "requirements.txt":
+      return parseRequirementsTxt(content);
+    case "pyproject.toml":
+      return parsePyprojectToml(content);
+    case "Cargo.toml":
+      return parseCargoToml(content);
+    case "go.mod":
+      return parseGoMod(content);
+    default:
+      return [];
+  }
+}
+
+/** Fetch a raw file from GitHub (not rate-limited). */
+async function fetchRawFile(
+  owner: string,
+  repo: string,
+  branch: string,
+  path: string,
+): Promise<string | null> {
+  const url = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${path}`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    return await res.text();
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // package.json helpers
 // ---------------------------------------------------------------------------
 
@@ -186,9 +383,75 @@ function collectTechnologies(
 
 const MAX_PACKAGE_JSONS = 15;
 
+/** Fetch package.json + non-JS files for a given branch in parallel. */
+async function fetchAllDependencyFiles(
+  owner: string,
+  repo: string,
+  branch: string,
+): Promise<{
+  packageJson: PackageJson | null;
+  nonJsFiles: Map<string, string>;
+}> {
+  const [pkgResult, ...nonJsResults] = await Promise.allSettled([
+    fetchPackageJson(owner, repo, branch, "package.json"),
+    ...NON_JS_DEPENDENCY_FILES.map(async (file) => {
+      const content = await fetchRawFile(owner, repo, branch, file);
+      return { file, content };
+    }),
+  ]);
+
+  const packageJson =
+    pkgResult.status === "fulfilled" ? pkgResult.value : null;
+
+  const nonJsFiles = new Map<string, string>();
+  for (const r of nonJsResults) {
+    if (r.status === "fulfilled" && r.value.content) {
+      nonJsFiles.set(r.value.file, r.value.content);
+    }
+  }
+
+  return { packageJson, nonJsFiles };
+}
+
+/** Process non-JS dependency files and add detected technologies. */
+function processNonJsFiles(
+  nonJsFiles: Map<string, string>,
+  into: Set<string>,
+): void {
+  for (const [file, content] of nonJsFiles) {
+    // File presence implies the base technology
+    const baseTech = FILE_TECH_MAP[file];
+    if (baseTech) into.add(baseTech);
+
+    // Parse file contents for deeper dependency detection
+    for (const tech of parseNonJsDependencyFile(file, content)) {
+      into.add(tech);
+    }
+  }
+}
+
+/** Fetch workspace package.json files and collect their technologies. */
+async function fetchAndCollectWorkspacePackages(
+  owner: string,
+  repo: string,
+  branch: string,
+  allPaths: string[],
+  into: Set<string>,
+): Promise<void> {
+  const cappedPaths = prioritizeAndCap(allPaths, MAX_PACKAGE_JSONS);
+  const results = await Promise.allSettled(
+    cappedPaths.map((path) => fetchPackageJson(owner, repo, branch, path)),
+  );
+  for (const result of results) {
+    if (result.status === "fulfilled" && result.value) {
+      collectTechnologies(result.value, into);
+    }
+  }
+}
+
 export const detectTechnologies = action({
   args: { repoUrl: v.string() },
-  handler: async (_ctx, { repoUrl }) => {
+  handler: async (ctx, { repoUrl }) => {
     const parsed = parseGitHubUrl(repoUrl);
     if (!parsed) {
       return { error: "Invalid GitHub URL", technologies: [], repoName: "" };
@@ -197,93 +460,139 @@ export const detectTechnologies = action({
     const { owner, repo } = parsed;
     const repoName = `${owner}/${repo}`;
 
-    // Phase 1: Fetch root package.json (free — raw.githubusercontent.com)
-    let rootPkg: PackageJson | null = null;
+    // Phase 1: Fetch all dependency files in parallel (free — raw URLs)
+    // Try "main" branch first
+    let { packageJson: rootPkg, nonJsFiles } = await fetchAllDependencyFiles(
+      owner,
+      repo,
+      "main",
+    );
     let rootBranch = "main";
-    for (const branch of ["main", "master"]) {
-      rootPkg = await fetchPackageJson(owner, repo, branch, "package.json");
-      if (rootPkg) {
-        rootBranch = branch;
-        break;
-      }
+
+    // If nothing found on "main", try "master"
+    if (!rootPkg && nonJsFiles.size === 0) {
+      const masterResult = await fetchAllDependencyFiles(
+        owner,
+        repo,
+        "master",
+      );
+      rootPkg = masterResult.packageJson;
+      nonJsFiles = masterResult.nonJsFiles;
+      rootBranch = "master";
     }
 
-    if (!rootPkg) {
+    // If still nothing found, return error
+    if (!rootPkg && nonJsFiles.size === 0) {
       return {
-        error: "Could not find package.json in this repository",
+        error: "Could not find any dependency files in this repository",
         technologies: [],
         repoName,
       };
     }
 
     const technologies = new Set<string>();
-    collectTechnologies(rootPkg, technologies);
 
-    // Check for monorepo — only hit the GitHub API if workspaces detected.
-    // npm/yarn use "workspaces" in package.json, pnpm uses pnpm-workspace.yaml
-    let hasWorkspaces =
-      rootPkg.workspaces !== undefined && rootPkg.workspaces !== null;
+    // Process JS dependencies
+    if (rootPkg) {
+      collectTechnologies(rootPkg, technologies);
+    }
 
-    if (!hasWorkspaces) {
-      // Check for pnpm-workspace.yaml (free — raw URL)
-      const pnpmWorkspaceUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${rootBranch}/pnpm-workspace.yaml`;
-      try {
-        const res = await fetch(pnpmWorkspaceUrl, { method: "HEAD" });
-        if (res.ok) hasWorkspaces = true;
-      } catch {
-        // Not a pnpm workspace
+    // Process non-JS dependencies
+    processNonJsFiles(nonJsFiles, technologies);
+
+    // Phase 2: Monorepo detection (only if JS package.json found)
+    if (rootPkg) {
+      // Check for workspaces — npm/yarn in package.json, pnpm in yaml
+      let hasWorkspaces =
+        rootPkg.workspaces !== undefined && rootPkg.workspaces !== null;
+
+      if (!hasWorkspaces) {
+        const pnpmWorkspaceUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${rootBranch}/pnpm-workspace.yaml`;
+        try {
+          const res = await fetch(pnpmWorkspaceUrl, { method: "HEAD" });
+          if (res.ok) hasWorkspaces = true;
+        } catch {
+          // Not a pnpm workspace
+        }
       }
-    }
 
-    if (!hasWorkspaces) {
-      // Standard repo — done, zero API calls used
-      return {
-        error: null,
-        technologies: Array.from(technologies),
-        repoName,
-      };
-    }
+      if (hasWorkspaces) {
+        const repoKey = `${owner}/${repo}`;
 
-    // Phase 2: Monorepo — discover workspace package.json files via tree API
-    const defaultBranch = await resolveDefaultBranch(owner, repo);
-    const branches = [defaultBranch];
-    if (!branches.includes(rootBranch)) branches.push(rootBranch);
-    if (!branches.includes("main")) branches.push("main");
-    if (!branches.includes("master")) branches.push("master");
+        // Check tree cache first
+        const cache = await ctx.runQuery(
+          internal.githubCache.getTreeCache,
+          { repo: repoKey },
+        );
 
-    const tree = await fetchRepoTree(owner, repo, branches);
+        if (cache && !cache.isExpired) {
+          // Cache hit within TTL — skip API entirely
+          await fetchAndCollectWorkspacePackages(
+            owner,
+            repo,
+            cache.branch,
+            cache.dependencyFilePaths,
+            technologies,
+          );
+        } else {
+          // Cache miss or expired — make a (possibly conditional) tree request
+          const defaultBranch = await resolveDefaultBranch(owner, repo);
+          const branches = [defaultBranch];
+          if (!branches.includes(rootBranch)) branches.push(rootBranch);
+          if (!branches.includes("main")) branches.push("main");
+          if (!branches.includes("master")) branches.push("master");
 
-    if (!tree) {
-      // Tree API failed — return root results only (graceful degradation)
-      return {
-        error: null,
-        technologies: Array.from(technologies),
-        repoName,
-      };
-    }
+          const treeResult = await fetchRepoTree(owner, repo, branches, {
+            etag: cache?.etag,
+          });
 
-    // Filter and prioritize package.json paths (skip root, already processed)
-    const workspacePaths = tree.entries
-      .filter(
-        (e) =>
-          e.type === "blob" &&
-          e.path !== "package.json" &&
-          isRelevantPackageJson(e.path),
-      )
-      .map((e) => e.path);
+          if (treeResult === NOT_MODIFIED) {
+            // 304 — content unchanged, refresh cache and use cached paths
+            await ctx.runMutation(
+              internal.githubCache.touchTreeCache,
+              { repo: repoKey },
+            );
+            await fetchAndCollectWorkspacePackages(
+              owner,
+              repo,
+              cache!.branch,
+              cache!.dependencyFilePaths,
+              technologies,
+            );
+          } else if (treeResult) {
+            // Fresh tree response — filter, cache, and process
+            const workspacePaths = treeResult.entries
+              .filter(
+                (e) =>
+                  e.type === "blob" &&
+                  e.path !== "package.json" &&
+                  isRelevantPackageJson(e.path),
+              )
+              .map((e) => e.path);
 
-    const cappedPaths = prioritizeAndCap(workspacePaths, MAX_PACKAGE_JSONS);
+            // Update cache
+            if (treeResult.etag) {
+              await ctx.runMutation(
+                internal.githubCache.setTreeCache,
+                {
+                  repo: repoKey,
+                  branch: treeResult.branch,
+                  etag: treeResult.etag,
+                  dependencyFilePaths: workspacePaths,
+                },
+              );
+            }
 
-    // Fetch all workspace package.json files in parallel (free — raw URLs)
-    const results = await Promise.allSettled(
-      cappedPaths.map((path) =>
-        fetchPackageJson(owner, repo, tree.branch, path),
-      ),
-    );
-
-    for (const result of results) {
-      if (result.status === "fulfilled" && result.value) {
-        collectTechnologies(result.value, technologies);
+            await fetchAndCollectWorkspacePackages(
+              owner,
+              repo,
+              treeResult.branch,
+              workspacePaths,
+              technologies,
+            );
+          }
+          // If treeResult is null, tree API failed — graceful degradation
+        }
       }
     }
 

@@ -44,30 +44,57 @@ export interface TreeResult {
   entries: TreeEntry[];
   truncated: boolean;
   branch: string;
+  etag?: string;
 }
+
+/** Sentinel value returned when a conditional request gets 304 Not Modified. */
+export const NOT_MODIFIED = "not_modified" as const;
+export type NotModified = typeof NOT_MODIFIED;
 
 /**
  * Fetch the recursive file tree for a repo.
  * Tries branches in priority order (pass the default branch first).
+ *
+ * When `options.etag` is provided, sends `If-None-Match` for the first branch.
+ * Returns `NOT_MODIFIED` on 304 (cache is still valid, no rate limit cost).
  * Returns null if the tree cannot be fetched (404, 409 too large, rate limit).
  */
 export async function fetchRepoTree(
   owner: string,
   repo: string,
   branches: string[],
-): Promise<TreeResult | null> {
-  const headers = githubHeaders();
+  options?: { etag?: string },
+): Promise<TreeResult | NotModified | null> {
+  const baseHeaders = githubHeaders();
 
   for (const branch of branches) {
     const url = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`;
+    const reqHeaders = { ...baseHeaders };
+
+    // Only send If-None-Match for the first branch (etag is branch-specific)
+    if (options?.etag && branch === branches[0]) {
+      reqHeaders["If-None-Match"] = options.etag;
+    }
+
     try {
-      const res = await fetch(url, { headers });
+      const res = await fetch(url, { headers: reqHeaders });
+
+      if (res.status === 304) {
+        return NOT_MODIFIED;
+      }
+
       if (res.ok) {
         const data = (await res.json()) as {
           tree: TreeEntry[];
           truncated: boolean;
         };
-        return { entries: data.tree, truncated: data.truncated, branch };
+        const responseEtag = res.headers.get("etag") ?? undefined;
+        return {
+          entries: data.tree,
+          truncated: data.truncated,
+          branch,
+          etag: responseEtag,
+        };
       }
       if (res.status === 404) continue;
       if (res.status === 409) {

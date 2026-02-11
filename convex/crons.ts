@@ -9,4 +9,10 @@ crons.daily(
   internal.skills.syncSkills,
 );
 
+crons.daily(
+  "cleanup github tree cache",
+  { hourUTC: 5, minuteUTC: 0 },
+  internal.githubCache.cleanupExpiredCache,
+);
+
 export default crons;

@@ -33,6 +33,14 @@ export default defineSchema({
     .index("by_technology", ["technology", "installs"])
     .index("by_skillId", ["skillId"]),
 
+  githubTreeCache: defineTable({
+    repo: v.string(),
+    branch: v.string(),
+    etag: v.string(),
+    dependencyFilePaths: v.array(v.string()),
+    cachedAt: v.number(),
+  }).index("by_repo", ["repo"]),
+
   bundles: defineTable({
     userId: v.id("users"),
     name: v.string(),

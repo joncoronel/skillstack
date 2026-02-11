@@ -6,7 +6,7 @@ import {
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
-import { resolveDefaultBranch, fetchRepoTree } from "./lib/github";
+import { resolveDefaultBranch, fetchRepoTree, NOT_MODIFIED } from "./lib/github";
 
 // ---------------------------------------------------------------------------
 // Technology tagging
@@ -300,7 +300,10 @@ export const discoverSkillMdUrls = internalAction({
     if (!branches.includes("main")) branches.push("main");
     if (!branches.includes("master")) branches.push("master");
 
-    const tree = await fetchRepoTree(owner, repo, branches);
+    const treeResult = await fetchRepoTree(owner, repo, branches);
+    // Skills sync never passes an etag so NOT_MODIFIED can't occur,
+    // but TypeScript requires handling it. Treat as a miss.
+    const tree = treeResult === NOT_MODIFIED ? null : treeResult;
     const resolvedBranch = tree?.branch ?? defaultBranch;
 
     // Fallback: if tree fetch failed or repo too large, try direct path guessing per skill
