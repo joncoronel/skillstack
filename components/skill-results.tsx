@@ -3,10 +3,16 @@
 import { useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { ChevronDownIcon } from "lucide-react";
 import { SkillCard } from "@/components/skill-card";
 import { SkillDetailSheet } from "@/components/skill-detail-sheet";
 import { Skeleton } from "@/components/ui/cubby-ui/skeleton";
 import { Button } from "@/components/ui/cubby-ui/button";
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@/components/ui/cubby-ui/collapsible";
 import { TECHNOLOGIES } from "@/lib/technologies";
 
 interface SkillInfo {
@@ -140,41 +146,48 @@ export function SkillResults({ selectedTechnologies }: SkillResultsProps) {
           if (skills.length === 0) return null;
 
           return (
-            <section key={technology}>
-              <h3 className="mb-3 text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                {techNameMap.get(technology) ?? technology}
-                <span className="ml-2 text-xs font-normal">
-                  ({skills.length})
-                </span>
-              </h3>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {skills.map((skill) => (
-                  <SkillCard
-                    key={`${skill.source}/${skill.skillId}`}
-                    name={skill.name}
-                    source={skill.source}
-                    skillId={skill.skillId}
-                    description={skill.description}
-                    installs={skill.installs}
-                    technologies={skill.technologies}
-                    selectable
-                    onViewDetail={() => setActiveSkill(skill)}
-                  />
-                ))}
-              </div>
-              {hasMore && (
-                <div className="flex justify-center mt-3">
-                  <Button
-                    variant="ghost"
-                    size="xs"
-                    disabled={isLoading}
-                    onClick={() => handleShowMore(technology)}
-                  >
-                    {isLoading ? "Loading…" : "Show more"}
-                  </Button>
-                </div>
-              )}
-            </section>
+            <Collapsible key={technology} defaultOpen>
+              <section>
+                <CollapsibleTrigger className="border-none bg-transparent shadow-none ring-0 py-1 hover:bg-transparent hover:opacity-80">
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                    {techNameMap.get(technology) ?? technology}
+                    <span className="ml-2 text-xs font-normal">
+                      ({skills.length})
+                    </span>
+                  </h3>
+                  <ChevronDownIcon className="size-4 text-muted-foreground transition-transform duration-200 group-data-[panel-open]/collapsible:rotate-180" />
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {skills.map((skill) => (
+                      <SkillCard
+                        key={`${skill.source}/${skill.skillId}`}
+                        name={skill.name}
+                        source={skill.source}
+                        skillId={skill.skillId}
+                        description={skill.description}
+                        installs={skill.installs}
+                        technologies={skill.technologies}
+                        selectable
+                        onViewDetail={() => setActiveSkill(skill)}
+                      />
+                    ))}
+                  </div>
+                  {hasMore && (
+                    <div className="flex justify-center mt-3">
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        disabled={isLoading}
+                        onClick={() => handleShowMore(technology)}
+                      >
+                        {isLoading ? "Loading…" : "Show more"}
+                      </Button>
+                    </div>
+                  )}
+                </CollapsibleContent>
+              </section>
+            </Collapsible>
           );
         })}
 
