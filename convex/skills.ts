@@ -1017,8 +1017,8 @@ export const listByTechnologies = query({
         .order("desc")
         .take(fetchCount);
 
+      // Index orders by installs desc — just resolve and dedup, no re-sorting needed
       const skills: SkillDoc[] = [];
-      const weightMap = new Map<string, number>();
 
       for (const entry of entries) {
         if (skills.length >= limit) break;
@@ -1034,23 +1034,12 @@ export const listByTechnologies = query({
         }
         seen.add(id);
         skills.push(skill);
-        weightMap.set(id, entry.weight ?? 0.5);
       }
 
-      // More exist if we filled our limit AND the junction table may have more entries
       const hasMore = skills.length >= limit && entries.length === fetchCount;
-
-      // Blend weight (30%) with normalized installs (70%) for ranking
-      const maxInstalls = Math.max(...skills.map((s) => s.installs), 1);
       groups.push({
         technology: tech,
-        skills: skills.sort((a, b) => {
-          const wA = weightMap.get(a._id.toString()) ?? 0.5;
-          const wB = weightMap.get(b._id.toString()) ?? 0.5;
-          const scoreA = wA * 0.3 + (a.installs / maxInstalls) * 0.7;
-          const scoreB = wB * 0.3 + (b.installs / maxInstalls) * 0.7;
-          return scoreB - scoreA;
-        }),
+        skills,
         hasMore,
       });
     }
