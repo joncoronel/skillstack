@@ -63,7 +63,7 @@ export function SkillSearch() {
   const results =
     debouncedQuery && searchIndex
       ? (searchIndex
-          .search(debouncedQuery, { fuzzy: 0.2, prefix: true })
+          .search(debouncedQuery, { fuzzy: 0.3, prefix: true })
           .sort(
             (a, b) =>
               ((b as SkillResult).installs ?? 0) -
