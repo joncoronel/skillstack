@@ -14,6 +14,7 @@ import type * as github from "../github.js";
 import type * as githubCache from "../githubCache.js";
 import type * as http from "../http.js";
 import type * as lib_github from "../lib/github.js";
+import type * as lib_technologyRegistry from "../lib/technologyRegistry.js";
 import type * as skills from "../skills.js";
 import type * as users from "../users.js";
 
@@ -30,6 +31,7 @@ declare const fullApi: ApiFromModules<{
   githubCache: typeof githubCache;
   http: typeof http;
   "lib/github": typeof lib_github;
+  "lib/technologyRegistry": typeof lib_technologyRegistry;
   skills: typeof skills;
   users: typeof users;
 }>;

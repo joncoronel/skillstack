@@ -2,10 +2,19 @@ import { action } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { resolveDefaultBranch, fetchRepoTree, NOT_MODIFIED } from "./lib/github";
+import { buildConfigFileMap } from "./lib/technologyRegistry";
 
 // ---------------------------------------------------------------------------
 // Package name → technology ID mapping
 // ---------------------------------------------------------------------------
+
+// Packages that imply multiple technologies (checked first)
+const MULTI_TAG_PACKAGES: Record<string, string[]> = {
+  "next-auth": ["nextjs", "security"],
+  "@clerk/nextjs": ["nextjs", "security"],
+  "@supabase/ssr": ["supabase", "nextjs"],
+  "@auth/prisma-adapter": ["security", "prisma"],
+};
 
 const PACKAGE_MAP: Record<string, string> = {
   // React
@@ -21,12 +30,25 @@ const PACKAGE_MAP: Record<string, string> = {
   redux: "react",
   "@reduxjs/toolkit": "react",
   "@tanstack/react-query": "react",
+  "@tanstack/react-table": "react",
+  "@tanstack/react-form": "react",
+  "react-select": "react",
+  "react-beautiful-dnd": "react",
+  "@dnd-kit/core": "react",
+  "framer-motion": "react",
+  motion: "react",
+  "react-spring": "react",
+  swr: "react",
 
   // Next.js
   next: "nextjs",
-  "next-auth": "nextjs",
   "@next/font": "nextjs",
   "@next/mdx": "nextjs",
+  "@next/bundle-analyzer": "nextjs",
+  "next-themes": "nextjs",
+  "next-intl": "nextjs",
+  "@next/env": "nextjs",
+  "next-sitemap": "nextjs",
 
   // Vue
   vue: "vue",
@@ -34,6 +56,7 @@ const PACKAGE_MAP: Record<string, string> = {
   "vue-router": "vue",
   pinia: "vue",
   vuex: "vue",
+  "@vueuse/core": "vue",
 
   // Svelte
   svelte: "svelte",
@@ -54,7 +77,6 @@ const PACKAGE_MAP: Record<string, string> = {
 
   // Supabase
   "@supabase/supabase-js": "supabase",
-  "@supabase/ssr": "supabase",
 
   // Convex
   convex: "convex",
@@ -76,16 +98,26 @@ const PACKAGE_MAP: Record<string, string> = {
   morgan: "node",
   nodemon: "node",
   elysia: "node",
+  "socket.io": "node",
+  ws: "node",
+  multer: "node",
+  compression: "node",
+  "@trpc/server": "node",
 
   // PostgreSQL
   pg: "postgres",
   postgres: "postgres",
   "@neondatabase/serverless": "postgres",
   "drizzle-orm": "postgres",
+  "drizzle-kit": "postgres",
   "@libsql/client": "postgres",
+  knex: "postgres",
+  typeorm: "postgres",
+  "better-sqlite3": "postgres",
 
   // MySQL
   mysql2: "mysql",
+  "@planetscale/database": "mysql",
 
   // MongoDB
   mongodb: "mongodb",
@@ -120,6 +152,10 @@ const PACKAGE_MAP: Record<string, string> = {
   llamaindex: "ai",
   replicate: "ai",
   "cohere-ai": "ai",
+  "@mistralai/mistralai": "ai",
+  "@pinecone-database/pinecone": "ai",
+  chromadb: "ai",
+  tiktoken: "ai",
 
   // Testing
   jest: "testing",
@@ -130,6 +166,10 @@ const PACKAGE_MAP: Record<string, string> = {
   chai: "testing",
   supertest: "testing",
   msw: "testing",
+  "@jest/globals": "testing",
+  "happy-dom": "testing",
+  jsdom: "testing",
+  nock: "testing",
 
   // CSS
   sass: "css",
@@ -137,14 +177,24 @@ const PACKAGE_MAP: Record<string, string> = {
   "@emotion/react": "css",
   postcss: "css",
   autoprefixer: "css",
+  "@vanilla-extract/css": "css",
+  unocss: "css",
+  lightningcss: "css",
 
   // Security
   jsonwebtoken: "security",
   bcrypt: "security",
   bcryptjs: "security",
   passport: "security",
-  "@clerk/nextjs": "security",
   "@auth/core": "security",
+  jose: "security",
+
+  // REST / API
+  zod: "rest",
+  "swagger-ui-express": "rest",
+
+  // Docker
+  dockerode: "docker",
 };
 
 const PREFIX_PATTERNS: [string, string][] = [
@@ -164,12 +214,31 @@ const PREFIX_PATTERNS: [string, string][] = [
   ["@tailwindcss/", "tailwind"],
   ["@huggingface/", "ai"],
   ["@upstash/", "redis"],
+  ["@trpc/", "node"],
+  ["@tanstack/", "react"],
+  ["@radix-ui/", "react"],
+  ["@mantine/", "react"],
+  ["@chakra-ui/", "react"],
+  ["@mui/", "react"],
+  ["@next/", "nextjs"],
+  ["@firebase/", "firebase"],
+  ["@openai/", "ai"],
+  ["@mistralai/", "ai"],
+  ["@planetscale/", "mysql"],
+  ["@vitest/", "testing"],
 ];
 
 function mapPackages(dependencies: Record<string, string>): string[] {
   const matched = new Set<string>();
 
   for (const pkg of Object.keys(dependencies)) {
+    // Check multi-tag packages first (e.g. next-auth → nextjs + security)
+    const multiTags = MULTI_TAG_PACKAGES[pkg];
+    if (multiTags) {
+      for (const tech of multiTags) matched.add(tech);
+      continue;
+    }
+
     const exact = PACKAGE_MAP[pkg];
     if (exact) {
       matched.add(exact);
@@ -206,6 +275,45 @@ function parseGitHubUrl(url: string): { owner: string; repo: string } | null {
 }
 
 // ---------------------------------------------------------------------------
+// Config file detection
+// ---------------------------------------------------------------------------
+
+/** Config/lockfile presence → technology ID (derived from registry). */
+const CONFIG_FILE_MAP: Record<string, string> = buildConfigFileMap();
+
+/** Path-based config patterns (for files nested in directories). */
+const CONFIG_PATH_PATTERNS: [string, string][] = [
+  ["prisma/schema.prisma", "prisma"],
+  [".github/workflows/", "ci"],
+];
+
+/** Detect technologies from config files in a tree API response. */
+function detectConfigFileTechnologies(
+  entries: Array<{ path: string; type: string }>,
+  into: Set<string>,
+): void {
+  for (const entry of entries) {
+    if (entry.type !== "blob") continue;
+    const filename = entry.path.split("/").pop() ?? "";
+
+    // Exact filename match (root or nested)
+    if (CONFIG_FILE_MAP[filename]) {
+      into.add(CONFIG_FILE_MAP[filename]);
+      continue;
+    }
+
+    // Path-based matches (e.g., "prisma/schema.prisma", ".github/workflows/")
+    for (const [pattern, tech] of CONFIG_PATH_PATTERNS) {
+      if (entry.path.includes(pattern)) {
+        into.add(tech);
+        break;
+      }
+    }
+  }
+}
+
+
+// ---------------------------------------------------------------------------
 // Non-JS ecosystem detection
 // ---------------------------------------------------------------------------
 
@@ -231,18 +339,25 @@ const PYTHON_PACKAGE_MAP: Record<string, string> = {
   flask: "python",
   fastapi: "python",
   starlette: "python",
+  uvicorn: "python",
+  gunicorn: "python",
+  celery: "python",
   pytest: "testing",
-  "psycopg2": "postgres",
+  psycopg2: "postgres",
   "psycopg2-binary": "postgres",
   asyncpg: "postgres",
   sqlalchemy: "postgres",
   pymongo: "mongodb",
   motor: "mongodb",
+  pymysql: "mysql",
   boto3: "aws",
+  redis: "redis",
   openai: "ai",
   anthropic: "ai",
   langchain: "ai",
   "firebase-admin": "firebase",
+  "google-cloud-storage": "gcp",
+  "azure-storage-blob": "azure",
   tailwindcss: "tailwind",
   typescript: "typescript",
 };
@@ -252,8 +367,12 @@ const RUST_CRATE_MAP: Record<string, string> = {
   "actix-web": "rust",
   axum: "rust",
   rocket: "rust",
+  reqwest: "rust",
+  serde: "rust",
+  warp: "rust",
   sqlx: "postgres",
   diesel: "postgres",
+  "sea-orm": "postgres",
   mongodb: "mongodb",
 };
 
@@ -265,9 +384,12 @@ const GO_MODULE_MAP: Record<string, string> = {
   "github.com/gin-gonic/gin": "go",
   "github.com/labstack/echo": "go",
   "github.com/gofiber/fiber": "go",
+  "github.com/gorilla/mux": "go",
+  "gorm.io/gorm": "go",
   "github.com/lib/pq": "postgres",
   "github.com/jackc/pgx": "postgres",
   "go.mongodb.org/mongo-driver": "mongodb",
+  "github.com/go-redis/redis": "redis",
   "github.com/aws/aws-sdk-go": "aws",
   "github.com/sashabaranov/go-openai": "ai",
 };
@@ -662,6 +784,9 @@ export const detectTechnologies = action({
               technologies,
             );
           } else if (treeResult) {
+            // Scan tree for config files (strong technology signals)
+            detectConfigFileTechnologies(treeResult.entries, technologies);
+
             // Fresh tree response — filter, cache, and process
             const workspacePaths = treeResult.entries
               .filter(

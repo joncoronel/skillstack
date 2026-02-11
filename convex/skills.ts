@@ -14,300 +14,52 @@ import {
   fetchRepoTree,
   NOT_MODIFIED,
 } from "./lib/github";
+import {
+  buildTechKeywords,
+  buildContentKeywords,
+} from "./lib/technologyRegistry";
 
 // ---------------------------------------------------------------------------
 // Technology tagging
 // ---------------------------------------------------------------------------
 
-// Tier 1: Matches against name/source/skillId (single keyword match = tag)
-const TECH_KEYWORDS: Record<string, string[]> = {
-  react: ["react", "jsx", "hooks"],
-  nextjs: ["nextjs", "next-js", "next.js", "vercel"],
-  vue: ["vue", "vuejs", "nuxt"],
-  svelte: ["svelte", "sveltekit"],
-  angular: ["angular"],
-  tailwind: ["tailwind", "tailwindcss"],
-  typescript: ["typescript"],
-  javascript: ["javascript"],
-  python: ["python", "django", "flask", "fastapi"],
-  supabase: ["supabase"],
-  convex: ["convex"],
-  prisma: ["prisma"],
-  node: ["node", "express", "nestjs", "fastify"],
-  postgres: ["postgres", "postgresql"],
-  mysql: ["mysql"],
-  mongodb: ["mongodb", "mongoose"],
-  redis: ["redis"],
-  docker: ["docker", "container", "dockerfile"],
-  aws: ["aws", "amazon", "s3", "lambda", "dynamodb"],
-  gcp: ["gcp", "google-cloud"],
-  azure: ["azure"],
-  firebase: ["firebase", "firestore"],
-  graphql: ["graphql", "apollo"],
-  rest: ["rest-api", "openapi", "swagger"],
-  rust: ["rust", "cargo"],
-  go: ["golang"],
-  java: ["java", "spring", "maven", "gradle"],
-  ruby: ["ruby", "rails"],
-  php: ["php", "laravel"],
-  swift: ["swift", "swiftui", "ios"],
-  kotlin: ["kotlin", "android"],
-  flutter: ["flutter", "dart"],
-  css: ["css", "scss", "sass", "less"],
-  testing: ["test", "jest", "vitest", "cypress", "playwright"],
-  git: ["git", "github", "gitlab"],
-  ci: ["ci", "cd", "github-actions", "jenkins"],
-  security: ["security", "auth", "oauth", "jwt"],
-  ai: ["ai", "ml", "llm", "openai", "anthropic", "claude", "gpt"],
-  cursor: ["cursor"],
+// Source org → technology, ONLY for orgs that exclusively produce skills for one tech
+const SOURCE_TECH_MAP: Record<string, string> = {
+  supabase: "supabase",
+  "convex-dev": "convex",
+  prisma: "prisma",
+  firebase: "firebase",
 };
 
-// Tier 2: Matches against content/description (stricter — specific phrases only)
-const CONTENT_KEYWORDS: Record<string, string[]> = {
-  react: [
-    "react component",
-    "usestate",
-    "useeffect",
-    "react hook",
-    "react-dom",
-    "jsx component",
-    "react app",
-  ],
-  nextjs: [
-    "app router",
-    "pages router",
-    "next/image",
-    "next/link",
-    "getserversideprops",
-    "getstaticprops",
-    "next.js app",
-    "nextjs app",
-  ],
-  vue: [
-    "vue component",
-    "vue 3",
-    "vue.js app",
-    "vue plugin",
-    "composition api",
-    "options api",
-  ],
-  svelte: ["svelte component", "svelte store", "sveltekit app", "svelte app"],
-  angular: [
-    "angular component",
-    "angular module",
-    "angular service",
-    "angular app",
-    "ngmodule",
-  ],
-  tailwind: [
-    "tailwind class",
-    "tailwind config",
-    "tailwind css",
-    "tailwind utility",
-    "tailwindcss config",
-  ],
-  typescript: [
-    "typescript config",
-    "tsconfig",
-    "type annotation",
-    "type safety",
-    "typescript project",
-    "type inference",
-  ],
-  javascript: [
-    "javascript function",
-    "javascript project",
-    "ecmascript",
-    "vanilla js",
-    "javascript app",
-  ],
-  python: [
-    "python script",
-    "python package",
-    "pip install",
-    "python function",
-    "python project",
-    "python class",
-  ],
-  supabase: [
-    "supabase client",
-    "supabase auth",
-    "supabase database",
-    "supabase project",
-  ],
-  convex: [
-    "convex function",
-    "convex schema",
-    "convex query",
-    "convex mutation",
-    "convex action",
-  ],
-  prisma: ["prisma schema", "prisma client", "prisma migrate", "prisma model"],
-  node: [
-    "node.js app",
-    "express app",
-    "node server",
-    "express server",
-    "node.js project",
-    "fastify server",
-  ],
-  postgres: [
-    "postgresql database",
-    "postgres query",
-    "sql query",
-    "database migration",
-    "postgres connection",
-  ],
-  mysql: ["mysql database", "mysql query", "mysql connection", "mysql server"],
-  mongodb: [
-    "mongodb collection",
-    "mongodb query",
-    "mongoose model",
-    "mongodb database",
-    "mongo query",
-  ],
-  redis: ["redis cache", "redis client", "redis connection", "redis store"],
-  docker: [
-    "docker container",
-    "docker image",
-    "docker-compose",
-    "dockerfile",
-    "docker build",
-  ],
-  aws: [
-    "aws service",
-    "aws lambda",
-    "aws s3",
-    "amazon web services",
-    "aws sdk",
-    "aws cloud",
-  ],
-  gcp: [
-    "google cloud",
-    "gcp service",
-    "cloud function",
-    "google cloud platform",
-  ],
-  azure: ["azure service", "azure function", "azure cloud", "azure devops"],
-  firebase: [
-    "firebase auth",
-    "firebase database",
-    "firestore collection",
-    "firebase project",
-    "firebase sdk",
-  ],
-  graphql: [
-    "graphql query",
-    "graphql mutation",
-    "graphql schema",
-    "graphql resolver",
-    "graphql api",
-  ],
-  rest: [
-    "rest api",
-    "restful api",
-    "api endpoint",
-    "openapi spec",
-    "swagger doc",
-  ],
-  rust: [
-    "rust project",
-    "cargo.toml",
-    "rust function",
-    "rust crate",
-    "rust code",
-  ],
-  go: ["go module", "go function", "golang project", "go routine", "go code"],
-  java: [
-    "java class",
-    "java project",
-    "spring boot",
-    "maven project",
-    "gradle project",
-    "java application",
-  ],
-  ruby: [
-    "ruby on rails",
-    "rails app",
-    "ruby gem",
-    "ruby project",
-    "ruby class",
-  ],
-  php: [
-    "php project",
-    "laravel app",
-    "php function",
-    "composer.json",
-    "php class",
-  ],
-  swift: [
-    "swift code",
-    "swiftui view",
-    "ios app",
-    "swift project",
-    "xcode project",
-  ],
-  kotlin: ["kotlin class", "android app", "kotlin project", "kotlin function"],
-  flutter: ["flutter widget", "flutter app", "dart code", "flutter project"],
-  css: [
-    "css style",
-    "css architecture",
-    "css module",
-    "css framework",
-    "css-in-js",
-    "css best practice",
-    "css class",
-  ],
-  testing: [
-    "unit test",
-    "e2e test",
-    "test suite",
-    "test coverage",
-    "test runner",
-    "integration test",
-    "test case",
-  ],
-  git: [
-    "git workflow",
-    "git branch",
-    "git commit",
-    "git hook",
-    "github action",
-    "git repository",
-  ],
-  ci: [
-    "ci/cd pipeline",
-    "github actions",
-    "ci pipeline",
-    "continuous integration",
-    "continuous deployment",
-  ],
-  security: [
-    "security best practice",
-    "authentication flow",
-    "authorization",
-    "oauth flow",
-    "jwt token",
-    "security audit",
-  ],
-  ai: [
-    "ai model",
-    "llm integration",
-    "machine learning",
-    "ai assistant",
-    "ai agent",
-    "prompt engineering",
-    "ai coding",
-  ],
-  cursor: ["cursor rule", "cursor ide", "cursor editor", "cursor agent"],
-};
+// Keywords that must ALWAYS use word-boundary regex regardless of length,
+// because they commonly appear as substrings in unrelated words.
+const STRICT_BOUNDARY_KEYWORDS = new Set([
+  "test", "ai", "go", "ci", "cd", "git", "css", "rest", "node",
+  "java", "ruby", "php", "dart", "swift", "rust", "less",
+]);
 
-/** Word-boundary-aware match for short keywords to avoid false positives. */
+// Tier 1: Matches against name/skillId (derived from registry)
+// NOTE: `source` is checked separately via SOURCE_TECH_MAP — not here
+const TECH_KEYWORDS: Record<string, string[]> = buildTechKeywords();
+
+// Tier 2: Matches against content/description (derived from registry)
+const CONTENT_KEYWORDS: Record<string, string[]> = buildContentKeywords();
+
+/** Word-boundary-aware match for short or ambiguous keywords to avoid false positives. */
 function matchesKeyword(text: string, keyword: string): boolean {
-  if (keyword.length <= 3) {
+  if (keyword.length <= 3 || STRICT_BOUNDARY_KEYWORDS.has(keyword)) {
     return new RegExp(`\\b${keyword}\\b`, "i").test(text);
   }
   return text.includes(keyword);
+}
+
+// ---------------------------------------------------------------------------
+// Weighted tagging
+// ---------------------------------------------------------------------------
+
+interface TagResult {
+  tech: string;
+  weight: number;
 }
 
 function tagSkill(
@@ -316,29 +68,53 @@ function tagSkill(
   name: string,
   description?: string,
   content?: string,
-): string[] {
-  const nameText = `${source} ${skillId} ${name}`.toLowerCase();
+): TagResult[] {
+  const tagWeights = new Map<string, number>();
+
+  function setMax(tech: string, weight: number) {
+    tagWeights.set(tech, Math.max(tagWeights.get(tech) ?? 0, weight));
+  }
+
+  // Match against skillId + name only (NOT source — avoids false positives
+  // like every vercel-labs skill being tagged as nextjs)
+  const identityText = `${skillId} ${name}`.toLowerCase();
   const contentText = `${description ?? ""} ${content ?? ""}`.toLowerCase();
-  const tags = new Set<string>();
+
+  // Source org check — only for orgs that exclusively produce one-tech skills
+  const orgName = source.split("/")[0];
+  const sourceTech = SOURCE_TECH_MAP[orgName];
+  if (sourceTech) {
+    setMax(sourceTech, 0.8);
+  }
 
   for (const [tech, keywords] of Object.entries(TECH_KEYWORDS)) {
-    // Tier 1: name/source/skillId — single keyword match
-    if (keywords.some((kw) => matchesKeyword(nameText, kw))) {
-      tags.add(tech);
+    // Tier 1: skillId/name — single keyword match → weight 0.9
+    if (keywords.some((kw) => matchesKeyword(identityText, kw))) {
+      setMax(tech, 0.9);
       continue;
     }
-    // Tier 2: content/description — require specific phrases
+    // Tier 2: content/description — require specific phrases → weight 0.3-0.7
     const contentKws = CONTENT_KEYWORDS[tech];
-    if (
-      contentKws &&
-      contentText &&
-      contentKws.some((kw) => contentText.includes(kw))
-    ) {
-      tags.add(tech);
+    if (contentKws && contentText) {
+      const matchCount = contentKws.filter((kw) =>
+        contentText.includes(kw),
+      ).length;
+      if (matchCount >= 2) {
+        const weight = Math.min(0.3 + (matchCount - 1) * 0.1, 0.7);
+        setMax(tech, weight);
+      }
     }
   }
 
-  return Array.from(tags);
+  return Array.from(tagWeights.entries()).map(([tech, weight]) => ({
+    tech,
+    weight,
+  }));
+}
+
+/** Extract flat technology ID array from weighted tag results. */
+function tagResultsToIds(results: TagResult[]): string[] {
+  return results.map((r) => r.tech);
 }
 
 // ---------------------------------------------------------------------------
@@ -424,7 +200,7 @@ export const syncSkills = internalAction({
 async function syncSkillTechnologies(
   ctx: MutationCtx,
   skillDocId: Id<"skills">,
-  technologies: string[],
+  tagResults: TagResult[],
   installs: number,
 ) {
   const existingEntries = await ctx.db
@@ -433,14 +209,21 @@ async function syncSkillTechnologies(
     .collect();
 
   const existingTechs = existingEntries.map((e) => e.technology).sort();
-  const newTechs = [...technologies].sort();
+  const newTechs = tagResults.map((r) => r.tech).sort();
   const installsMatch =
     existingEntries.length === 0 || existingEntries[0].installs === installs;
+  const weightsMatch =
+    existingEntries.length > 0 &&
+    existingEntries.every((e) => {
+      const tr = tagResults.find((r) => r.tech === e.technology);
+      return tr !== undefined && e.weight === tr.weight;
+    });
 
   if (
     existingTechs.length === newTechs.length &&
     existingTechs.every((t, i) => t === newTechs[i]) &&
-    installsMatch
+    installsMatch &&
+    weightsMatch
   ) {
     return;
   }
@@ -448,11 +231,12 @@ async function syncSkillTechnologies(
   for (const entry of existingEntries) {
     await ctx.db.delete(entry._id);
   }
-  for (const tech of technologies) {
+  for (const { tech, weight } of tagResults) {
     await ctx.db.insert("skillTechnologies", {
       skillId: skillDocId,
       technology: tech,
       installs,
+      weight,
     });
   }
 }
@@ -510,13 +294,14 @@ export const upsertSkillsBatch = internalMutation({
         )
         .unique();
 
-      const technologies = tagSkill(
+      const tagResults = tagSkill(
         skill.source,
         skill.skillId,
         skill.name,
         existing?.description,
         existing?.content,
       );
+      const technologies = tagResultsToIds(tagResults);
 
       let skillDocId;
 
@@ -539,7 +324,7 @@ export const upsertSkillsBatch = internalMutation({
           await syncSkillTechnologies(
             ctx,
             skillDocId,
-            technologies,
+            tagResults,
             skill.installs,
           );
         }
@@ -557,7 +342,7 @@ export const upsertSkillsBatch = internalMutation({
         await syncSkillTechnologies(
           ctx,
           skillDocId,
-          technologies,
+          tagResults,
           skill.installs,
         );
       }
@@ -1015,7 +800,10 @@ export const updateDescription = internalMutation({
     content: v.optional(v.string()),
     skillMdUrl: v.string(),
   },
-  handler: async (ctx, { skillId, description, content, skillMdUrl }) => {
+  handler: async (
+    ctx,
+    { skillId, description, content, skillMdUrl },
+  ) => {
     const skill = await ctx.db.get(skillId);
     if (!skill) return;
 
@@ -1029,14 +817,15 @@ export const updateDescription = internalMutation({
     const contentChanged = content !== undefined && content !== skill.content;
     const hasActualChange = descriptionChanged || contentChanged;
 
-    // Re-tag with all available text (name + content)
-    const technologies = tagSkill(
+    // Re-tag with all available text (name + description + content)
+    const tagResults = tagSkill(
       skill.source,
       skill.skillId,
       skill.name,
       newDescription,
       newContent,
     );
+    const technologies = tagResultsToIds(tagResults);
 
     const tagsChanged =
       JSON.stringify(skill.technologies.slice().sort()) !==
@@ -1052,7 +841,7 @@ export const updateDescription = internalMutation({
     });
 
     if (tagsChanged) {
-      await syncSkillTechnologies(ctx, skillId, technologies, skill.installs);
+      await syncSkillTechnologies(ctx, skillId, tagResults, skill.installs);
     }
 
     if (descriptionChanged || tagsChanged) {
@@ -1089,19 +878,20 @@ export const retagBatch = internalMutation({
       const skill = await ctx.db.get(id);
       if (!skill) continue;
 
-      const newTags = tagSkill(
+      const tagResults = tagSkill(
         skill.source,
         skill.skillId,
         skill.name,
         skill.description,
         skill.content,
       );
+      const newTags = tagResultsToIds(tagResults);
 
       const oldTags = skill.technologies.slice().sort();
       const sortedNew = newTags.slice().sort();
       if (JSON.stringify(oldTags) !== JSON.stringify(sortedNew)) {
         await ctx.db.patch(id, { technologies: newTags });
-        await syncSkillTechnologies(ctx, id, newTags, skill.installs);
+        await syncSkillTechnologies(ctx, id, tagResults, skill.installs);
         updated++;
       }
     }
@@ -1217,6 +1007,7 @@ export const listByTechnologies = query({
         .take(fetchCount);
 
       const skills: SkillDoc[] = [];
+      const weightMap = new Map<string, number>();
 
       for (const entry of entries) {
         if (skills.length >= limit) break;
@@ -1232,14 +1023,23 @@ export const listByTechnologies = query({
         }
         seen.add(id);
         skills.push(skill);
+        weightMap.set(id, entry.weight ?? 0.5);
       }
 
       // More exist if we filled our limit AND the junction table may have more entries
       const hasMore = skills.length >= limit && entries.length === fetchCount;
 
+      // Blend weight (30%) with normalized installs (70%) for ranking
+      const maxInstalls = Math.max(...skills.map((s) => s.installs), 1);
       groups.push({
         technology: tech,
-        skills: skills.sort((a, b) => b.installs - a.installs),
+        skills: skills.sort((a, b) => {
+          const wA = weightMap.get(a._id.toString()) ?? 0.5;
+          const wB = weightMap.get(b._id.toString()) ?? 0.5;
+          const scoreA = wA * 0.3 + (a.installs / maxInstalls) * 0.7;
+          const scoreB = wB * 0.3 + (b.installs / maxInstalls) * 0.7;
+          return scoreB - scoreA;
+        }),
         hasMore,
       });
     }

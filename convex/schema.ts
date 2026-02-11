@@ -40,6 +40,7 @@ export default defineSchema({
     skillId: v.id("skills"),
     technology: v.string(),
     installs: v.number(),
+    weight: v.optional(v.number()),
   })
     .index("by_technology", ["technology", "installs"])
     .index("by_skillId", ["skillId"]),
