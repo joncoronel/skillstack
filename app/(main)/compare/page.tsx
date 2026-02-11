@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { CompareView } from "./compare-view";
 
 export default function ComparePage() {
@@ -6,7 +7,9 @@ export default function ComparePage() {
       <h1 className="text-2xl font-bold tracking-tight mb-8">
         Compare Skills
       </h1>
-      <CompareView />
+      <Suspense>
+        <CompareView />
+      </Suspense>
     </main>
   );
 }

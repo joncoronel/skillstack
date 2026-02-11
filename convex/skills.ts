@@ -7,8 +7,13 @@ import {
 import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
-import { resolveDefaultBranch, fetchRepoTree, NOT_MODIFIED } from "./lib/github";
+import {
+  resolveDefaultBranch,
+  fetchRepoTree,
+  NOT_MODIFIED,
+} from "./lib/github";
 
 // ---------------------------------------------------------------------------
 // Technology tagging
@@ -59,44 +64,241 @@ const TECH_KEYWORDS: Record<string, string[]> = {
 
 // Tier 2: Matches against content/description (stricter — specific phrases only)
 const CONTENT_KEYWORDS: Record<string, string[]> = {
-  react: ["react component", "usestate", "useeffect", "react hook", "react-dom", "jsx component", "react app"],
-  nextjs: ["app router", "pages router", "next/image", "next/link", "getserversideprops", "getstaticprops", "next.js app", "nextjs app"],
-  vue: ["vue component", "vue 3", "vue.js app", "vue plugin", "composition api", "options api"],
+  react: [
+    "react component",
+    "usestate",
+    "useeffect",
+    "react hook",
+    "react-dom",
+    "jsx component",
+    "react app",
+  ],
+  nextjs: [
+    "app router",
+    "pages router",
+    "next/image",
+    "next/link",
+    "getserversideprops",
+    "getstaticprops",
+    "next.js app",
+    "nextjs app",
+  ],
+  vue: [
+    "vue component",
+    "vue 3",
+    "vue.js app",
+    "vue plugin",
+    "composition api",
+    "options api",
+  ],
   svelte: ["svelte component", "svelte store", "sveltekit app", "svelte app"],
-  angular: ["angular component", "angular module", "angular service", "angular app", "ngmodule"],
-  tailwind: ["tailwind class", "tailwind config", "tailwind css", "tailwind utility", "tailwindcss config"],
-  typescript: ["typescript config", "tsconfig", "type annotation", "type safety", "typescript project", "type inference"],
-  javascript: ["javascript function", "javascript project", "ecmascript", "vanilla js", "javascript app"],
-  python: ["python script", "python package", "pip install", "python function", "python project", "python class"],
-  supabase: ["supabase client", "supabase auth", "supabase database", "supabase project"],
-  convex: ["convex function", "convex schema", "convex query", "convex mutation", "convex action"],
+  angular: [
+    "angular component",
+    "angular module",
+    "angular service",
+    "angular app",
+    "ngmodule",
+  ],
+  tailwind: [
+    "tailwind class",
+    "tailwind config",
+    "tailwind css",
+    "tailwind utility",
+    "tailwindcss config",
+  ],
+  typescript: [
+    "typescript config",
+    "tsconfig",
+    "type annotation",
+    "type safety",
+    "typescript project",
+    "type inference",
+  ],
+  javascript: [
+    "javascript function",
+    "javascript project",
+    "ecmascript",
+    "vanilla js",
+    "javascript app",
+  ],
+  python: [
+    "python script",
+    "python package",
+    "pip install",
+    "python function",
+    "python project",
+    "python class",
+  ],
+  supabase: [
+    "supabase client",
+    "supabase auth",
+    "supabase database",
+    "supabase project",
+  ],
+  convex: [
+    "convex function",
+    "convex schema",
+    "convex query",
+    "convex mutation",
+    "convex action",
+  ],
   prisma: ["prisma schema", "prisma client", "prisma migrate", "prisma model"],
-  node: ["node.js app", "express app", "node server", "express server", "node.js project", "fastify server"],
-  postgres: ["postgresql database", "postgres query", "sql query", "database migration", "postgres connection"],
+  node: [
+    "node.js app",
+    "express app",
+    "node server",
+    "express server",
+    "node.js project",
+    "fastify server",
+  ],
+  postgres: [
+    "postgresql database",
+    "postgres query",
+    "sql query",
+    "database migration",
+    "postgres connection",
+  ],
   mysql: ["mysql database", "mysql query", "mysql connection", "mysql server"],
-  mongodb: ["mongodb collection", "mongodb query", "mongoose model", "mongodb database", "mongo query"],
+  mongodb: [
+    "mongodb collection",
+    "mongodb query",
+    "mongoose model",
+    "mongodb database",
+    "mongo query",
+  ],
   redis: ["redis cache", "redis client", "redis connection", "redis store"],
-  docker: ["docker container", "docker image", "docker-compose", "dockerfile", "docker build"],
-  aws: ["aws service", "aws lambda", "aws s3", "amazon web services", "aws sdk", "aws cloud"],
-  gcp: ["google cloud", "gcp service", "cloud function", "google cloud platform"],
+  docker: [
+    "docker container",
+    "docker image",
+    "docker-compose",
+    "dockerfile",
+    "docker build",
+  ],
+  aws: [
+    "aws service",
+    "aws lambda",
+    "aws s3",
+    "amazon web services",
+    "aws sdk",
+    "aws cloud",
+  ],
+  gcp: [
+    "google cloud",
+    "gcp service",
+    "cloud function",
+    "google cloud platform",
+  ],
   azure: ["azure service", "azure function", "azure cloud", "azure devops"],
-  firebase: ["firebase auth", "firebase database", "firestore collection", "firebase project", "firebase sdk"],
-  graphql: ["graphql query", "graphql mutation", "graphql schema", "graphql resolver", "graphql api"],
-  rest: ["rest api", "restful api", "api endpoint", "openapi spec", "swagger doc"],
-  rust: ["rust project", "cargo.toml", "rust function", "rust crate", "rust code"],
+  firebase: [
+    "firebase auth",
+    "firebase database",
+    "firestore collection",
+    "firebase project",
+    "firebase sdk",
+  ],
+  graphql: [
+    "graphql query",
+    "graphql mutation",
+    "graphql schema",
+    "graphql resolver",
+    "graphql api",
+  ],
+  rest: [
+    "rest api",
+    "restful api",
+    "api endpoint",
+    "openapi spec",
+    "swagger doc",
+  ],
+  rust: [
+    "rust project",
+    "cargo.toml",
+    "rust function",
+    "rust crate",
+    "rust code",
+  ],
   go: ["go module", "go function", "golang project", "go routine", "go code"],
-  java: ["java class", "java project", "spring boot", "maven project", "gradle project", "java application"],
-  ruby: ["ruby on rails", "rails app", "ruby gem", "ruby project", "ruby class"],
-  php: ["php project", "laravel app", "php function", "composer.json", "php class"],
-  swift: ["swift code", "swiftui view", "ios app", "swift project", "xcode project"],
+  java: [
+    "java class",
+    "java project",
+    "spring boot",
+    "maven project",
+    "gradle project",
+    "java application",
+  ],
+  ruby: [
+    "ruby on rails",
+    "rails app",
+    "ruby gem",
+    "ruby project",
+    "ruby class",
+  ],
+  php: [
+    "php project",
+    "laravel app",
+    "php function",
+    "composer.json",
+    "php class",
+  ],
+  swift: [
+    "swift code",
+    "swiftui view",
+    "ios app",
+    "swift project",
+    "xcode project",
+  ],
   kotlin: ["kotlin class", "android app", "kotlin project", "kotlin function"],
   flutter: ["flutter widget", "flutter app", "dart code", "flutter project"],
-  css: ["css style", "css architecture", "css module", "css framework", "css-in-js", "css best practice", "css class"],
-  testing: ["unit test", "e2e test", "test suite", "test coverage", "test runner", "integration test", "test case"],
-  git: ["git workflow", "git branch", "git commit", "git hook", "github action", "git repository"],
-  ci: ["ci/cd pipeline", "github actions", "ci pipeline", "continuous integration", "continuous deployment"],
-  security: ["security best practice", "authentication flow", "authorization", "oauth flow", "jwt token", "security audit"],
-  ai: ["ai model", "llm integration", "machine learning", "ai assistant", "ai agent", "prompt engineering", "ai coding"],
+  css: [
+    "css style",
+    "css architecture",
+    "css module",
+    "css framework",
+    "css-in-js",
+    "css best practice",
+    "css class",
+  ],
+  testing: [
+    "unit test",
+    "e2e test",
+    "test suite",
+    "test coverage",
+    "test runner",
+    "integration test",
+    "test case",
+  ],
+  git: [
+    "git workflow",
+    "git branch",
+    "git commit",
+    "git hook",
+    "github action",
+    "git repository",
+  ],
+  ci: [
+    "ci/cd pipeline",
+    "github actions",
+    "ci pipeline",
+    "continuous integration",
+    "continuous deployment",
+  ],
+  security: [
+    "security best practice",
+    "authentication flow",
+    "authorization",
+    "oauth flow",
+    "jwt token",
+    "security audit",
+  ],
+  ai: [
+    "ai model",
+    "llm integration",
+    "machine learning",
+    "ai assistant",
+    "ai agent",
+    "prompt engineering",
+    "ai coding",
+  ],
   cursor: ["cursor rule", "cursor ide", "cursor editor", "cursor agent"],
 };
 
@@ -127,7 +329,11 @@ function tagSkill(
     }
     // Tier 2: content/description — require specific phrases
     const contentKws = CONTENT_KEYWORDS[tech];
-    if (contentKws && contentText && contentKws.some((kw) => contentText.includes(kw))) {
+    if (
+      contentKws &&
+      contentText &&
+      contentKws.some((kw) => contentText.includes(kw))
+    ) {
       tags.add(tech);
     }
   }
@@ -203,7 +409,11 @@ export const syncSkills = internalAction({
     console.log(`Synced ${totalSynced} skills (min ${MIN_INSTALLS} installs)`);
 
     // Schedule two-phase content backfill (URL discovery → content fetch)
-    await ctx.scheduler.runAfter(10_000, internal.skills.backfillDiscoverUrls, {});
+    await ctx.scheduler.runAfter(
+      10_000,
+      internal.skills.backfillDiscoverUrls,
+      {},
+    );
   },
 });
 
@@ -247,6 +457,36 @@ async function syncSkillTechnologies(
   }
 }
 
+async function upsertSkillSummary(
+  ctx: MutationCtx,
+  fields: {
+    source: string;
+    skillId: string;
+    name: string;
+    description?: string;
+    installs: number;
+    technologies: string[];
+  },
+) {
+  const existing = await ctx.db
+    .query("skillSummaries")
+    .withIndex("by_source_skillId", (q) =>
+      q.eq("source", fields.source).eq("skillId", fields.skillId),
+    )
+    .unique();
+
+  if (existing) {
+    await ctx.db.patch(existing._id, {
+      name: fields.name,
+      description: fields.description,
+      installs: fields.installs,
+      technologies: fields.technologies,
+    });
+  } else {
+    await ctx.db.insert("skillSummaries", fields);
+  }
+}
+
 export const upsertSkillsBatch = internalMutation({
   args: {
     skills: v.array(
@@ -255,7 +495,7 @@ export const upsertSkillsBatch = internalMutation({
         skillId: v.string(),
         name: v.string(),
         installs: v.number(),
-      })
+      }),
     ),
     leaderboard: v.string(),
   },
@@ -266,12 +506,17 @@ export const upsertSkillsBatch = internalMutation({
       const existing = await ctx.db
         .query("skills")
         .withIndex("by_source_skillId", (q) =>
-          q.eq("source", skill.source).eq("skillId", skill.skillId)
+          q.eq("source", skill.source).eq("skillId", skill.skillId),
         )
         .unique();
 
-      const technologies = tagSkill(skill.source, skill.skillId, skill.name,
-        existing?.description, existing?.content);
+      const technologies = tagSkill(
+        skill.source,
+        skill.skillId,
+        skill.name,
+        existing?.description,
+        existing?.content,
+      );
 
       let skillDocId;
 
@@ -291,7 +536,12 @@ export const upsertSkillsBatch = internalMutation({
 
         // Only sync junction table if tags or installs changed
         if (tagsChanged || existing.installs !== skill.installs) {
-          await syncSkillTechnologies(ctx, skillDocId, technologies, skill.installs);
+          await syncSkillTechnologies(
+            ctx,
+            skillDocId,
+            technologies,
+            skill.installs,
+          );
         }
       } else {
         skillDocId = await ctx.db.insert("skills", {
@@ -304,8 +554,22 @@ export const upsertSkillsBatch = internalMutation({
           lastSynced: now,
         });
 
-        await syncSkillTechnologies(ctx, skillDocId, technologies, skill.installs);
+        await syncSkillTechnologies(
+          ctx,
+          skillDocId,
+          technologies,
+          skill.installs,
+        );
       }
+
+      await upsertSkillSummary(ctx, {
+        source: skill.source,
+        skillId: skill.skillId,
+        name: skill.name,
+        description: existing?.description,
+        installs: skill.installs,
+        technologies,
+      });
     }
   },
 });
@@ -322,12 +586,14 @@ function extractFrontmatterDescription(content: string): string | null {
   const frontmatter = match[1];
 
   // Look for description field in YAML
-  const descMatch = frontmatter.match(/^description:\s*["']?([^\s|>].*?)["']?\s*$/m);
+  const descMatch = frontmatter.match(
+    /^description:\s*["']?([^\s|>].*?)["']?\s*$/m,
+  );
   if (descMatch) return descMatch[1].trim();
 
   // Fallback: try multi-line description
   const multiLineMatch = frontmatter.match(
-    /^description:\s*[|>]-?\s*\n([\s\S]*?)(?=\n\w|\n---|\n$)/m
+    /^description:\s*[|>]-?\s*\n([\s\S]*?)(?=\n\w|\n---|\n$)/m,
   );
   if (multiLineMatch) {
     return multiLineMatch[1]
@@ -377,9 +643,10 @@ export const listSourcesNeedingDiscovery = internalQuery({
       bySource.set(s.source, list);
     }
 
-    const sources = Array.from(bySource.entries()).map(
-      ([source, skills]) => ({ source, skills })
-    );
+    const sources = Array.from(bySource.entries()).map(([source, skills]) => ({
+      source,
+      skills,
+    }));
 
     return {
       sources,
@@ -392,9 +659,7 @@ export const listSourcesNeedingDiscovery = internalQuery({
 export const discoverSkillMdUrls = internalAction({
   args: {
     source: v.string(),
-    skills: v.array(
-      v.object({ docId: v.string(), skillId: v.string() })
-    ),
+    skills: v.array(v.object({ docId: v.string(), skillId: v.string() })),
   },
   handler: async (ctx, { source, skills }) => {
     // source is "owner/repo" format
@@ -413,7 +678,9 @@ export const discoverSkillMdUrls = internalAction({
 
     // Fallback: if tree fetch failed or repo too large, try direct path guessing per skill
     if (!tree) {
-      console.log(`Could not fetch tree for ${source} — trying direct path guessing`);
+      console.log(
+        `Could not fetch tree for ${source} — trying direct path guessing`,
+      );
       const matchedSkillIds = new Set<string>();
       for (const s of skills) {
         // Try common SKILL.md path patterns
@@ -448,7 +715,7 @@ export const discoverSkillMdUrls = internalAction({
         });
       }
       console.log(
-        `${source} (fallback): ${matchedSkillIds.size} matched, ${unmatched.length} not found`
+        `${source} (fallback): ${matchedSkillIds.size} matched, ${unmatched.length} not found`,
       );
       return;
     }
@@ -459,7 +726,8 @@ export const discoverSkillMdUrls = internalAction({
     for (const entry of tree.entries) {
       if (entry.type !== "blob") continue;
       const lowerPath = entry.path.toLowerCase();
-      if (lowerPath !== "skill.md" && !lowerPath.endsWith("/skill.md")) continue;
+      if (lowerPath !== "skill.md" && !lowerPath.endsWith("/skill.md"))
+        continue;
 
       allSkillMdPaths.push(entry.path);
       const parts = entry.path.split("/");
@@ -489,7 +757,9 @@ export const discoverSkillMdUrls = internalAction({
     // Pass 2: for unmatched skills, fetch unmatched SKILL.md files and check
     // the frontmatter `name` field (directory name often differs from skillId,
     // or SKILL.md may be at the repo root)
-    const unmatchedSkills = skills.filter((s) => !matchedSkillIds.has(s.skillId));
+    const unmatchedSkills = skills.filter(
+      (s) => !matchedSkillIds.has(s.skillId),
+    );
     const unmatchedMdPaths = allSkillMdPaths
       .filter((path) => !matchedPaths.has(path))
       .map((path) => [path, path] as const);
@@ -538,7 +808,9 @@ export const discoverSkillMdUrls = internalAction({
     }
 
     // Mark remaining unmatched skills as not found
-    const finalUnmatched = skills.filter((s) => !matchedSkillIds.has(s.skillId));
+    const finalUnmatched = skills.filter(
+      (s) => !matchedSkillIds.has(s.skillId),
+    );
     for (const s of finalUnmatched) {
       await ctx.runMutation(internal.skills.updateSkillMdUrl, {
         docId: s.docId as ReturnType<typeof v.id<"skills">>["type"],
@@ -548,7 +820,7 @@ export const discoverSkillMdUrls = internalAction({
 
     console.log(
       `${source}: ${matchedSkillIds.size} matched, ${finalUnmatched.length} not found` +
-        (tree.truncated ? " (tree truncated)" : "")
+        (tree.truncated ? " (tree truncated)" : ""),
     );
   },
 });
@@ -572,7 +844,7 @@ export const backfillDiscoverUrls = internalAction({
 
     const result = await ctx.runQuery(
       internal.skills.listSourcesNeedingDiscovery,
-      { cursor: cursor ?? undefined }
+      { cursor: cursor ?? undefined },
     );
 
     const batch = result.sources.slice(0, REPOS_PER_BATCH);
@@ -582,7 +854,7 @@ export const backfillDiscoverUrls = internalAction({
         await ctx.scheduler.runAfter(
           i * stagger,
           internal.skills.discoverSkillMdUrls,
-          { source: batch[i].source, skills: batch[i].skills }
+          { source: batch[i].source, skills: batch[i].skills },
         );
       }
     }
@@ -599,14 +871,14 @@ export const backfillDiscoverUrls = internalAction({
       await ctx.scheduler.runAfter(
         delay,
         internal.skills.backfillDiscoverUrls,
-        { cursor: nextCursor }
+        { cursor: nextCursor },
       );
     } else {
       console.log("URL discovery complete — starting content fetch");
       await ctx.scheduler.runAfter(
         batch.length * stagger + 10_000,
         internal.skills.backfillFetchContent,
-        {}
+        {},
       );
     }
   },
@@ -661,7 +933,9 @@ export const fetchSkillContent = internalAction({
       try {
         const res = await fetch(skill.skillMdUrl);
         if (!res.ok) {
-          console.error(`Failed to fetch content for ${skill.skillId}: ${res.status}`);
+          console.error(
+            `Failed to fetch content for ${skill.skillId}: ${res.status}`,
+          );
           return;
         }
 
@@ -678,15 +952,22 @@ export const fetchSkillContent = internalAction({
           });
         } else {
           // Content fetched but nothing parseable — still record the fetch time
-          await ctx.runMutation(internal.skills.markContentFetched, { skillId });
+          await ctx.runMutation(internal.skills.markContentFetched, {
+            skillId,
+          });
         }
         return;
       } catch (e) {
         if (attempt < MAX_RETRIES - 1) {
-          console.warn(`Retry ${attempt + 1}/${MAX_RETRIES} for ${skill.skillId}: ${e}`);
+          console.warn(
+            `Retry ${attempt + 1}/${MAX_RETRIES} for ${skill.skillId}: ${e}`,
+          );
           await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
         } else {
-          console.error(`Error fetching content for ${skill.skillId} after ${MAX_RETRIES} attempts:`, e);
+          console.error(
+            `Error fetching content for ${skill.skillId} after ${MAX_RETRIES} attempts:`,
+            e,
+          );
         }
       }
     }
@@ -700,7 +981,7 @@ export const backfillFetchContent = internalAction({
 
     const result = await ctx.runQuery(
       internal.skills.listSkillsNeedingContentFetch,
-      { cursor: cursor ?? undefined }
+      { cursor: cursor ?? undefined },
     );
 
     if (result.ids.length > 0) {
@@ -709,7 +990,7 @@ export const backfillFetchContent = internalAction({
         await ctx.scheduler.runAfter(
           i * STAGGER_MS,
           internal.skills.fetchSkillContent,
-          { skillId: result.ids[i] }
+          { skillId: result.ids[i] },
         );
       }
     }
@@ -719,7 +1000,7 @@ export const backfillFetchContent = internalAction({
       await ctx.scheduler.runAfter(
         delay,
         internal.skills.backfillFetchContent,
-        { cursor: result.nextCursor }
+        { cursor: result.nextCursor },
       );
     } else {
       console.log("Content backfill complete");
@@ -743,14 +1024,18 @@ export const updateDescription = internalMutation({
     const newContent = content ?? skill.content;
 
     // Detect if content actually changed
-    const descriptionChanged = description !== undefined && description !== skill.description;
+    const descriptionChanged =
+      description !== undefined && description !== skill.description;
     const contentChanged = content !== undefined && content !== skill.content;
     const hasActualChange = descriptionChanged || contentChanged;
 
     // Re-tag with all available text (name + content)
     const technologies = tagSkill(
-      skill.source, skill.skillId, skill.name,
-      newDescription, newContent,
+      skill.source,
+      skill.skillId,
+      skill.name,
+      newDescription,
+      newContent,
     );
 
     const tagsChanged =
@@ -768,6 +1053,17 @@ export const updateDescription = internalMutation({
 
     if (tagsChanged) {
       await syncSkillTechnologies(ctx, skillId, technologies, skill.installs);
+    }
+
+    if (descriptionChanged || tagsChanged) {
+      await upsertSkillSummary(ctx, {
+        source: skill.source,
+        skillId: skill.skillId,
+        name: skill.name,
+        description: newDescription,
+        installs: skill.installs,
+        technologies,
+      });
     }
   },
 });
@@ -794,8 +1090,11 @@ export const retagBatch = internalMutation({
       if (!skill) continue;
 
       const newTags = tagSkill(
-        skill.source, skill.skillId, skill.name,
-        skill.description, skill.content,
+        skill.source,
+        skill.skillId,
+        skill.name,
+        skill.description,
+        skill.content,
       );
 
       const oldTags = skill.technologies.slice().sort();
@@ -818,18 +1117,23 @@ export const retagAllSkills = internalAction({
     let totalUpdated = 0;
 
     for (;;) {
-      const result: { ids: string[]; nextCursor: string | undefined; isDone: boolean } =
-        await ctx.runQuery(internal.skills.listSkillIdsForRetag, {
-          cursor,
-          limit: BATCH_SIZE,
-        });
+      const result: {
+        ids: string[];
+        nextCursor: string | undefined;
+        isDone: boolean;
+      } = await ctx.runQuery(internal.skills.listSkillIdsForRetag, {
+        cursor,
+        limit: BATCH_SIZE,
+      });
 
       if (result.ids.length > 0) {
         const updated = await ctx.runMutation(internal.skills.retagBatch, {
           skillIds: result.ids as Id<"skills">[],
         });
         totalUpdated += updated as number;
-        console.log(`Retagged batch: ${updated} of ${result.ids.length} skills updated`);
+        console.log(
+          `Retagged batch: ${updated} of ${result.ids.length} skills updated`,
+        );
       }
 
       if (result.isDone) break;
@@ -876,7 +1180,7 @@ export const getBySourceAndSkillId = query({
     return await ctx.db
       .query("skills")
       .withIndex("by_source_skillId", (q) =>
-        q.eq("source", source).eq("skillId", skillId)
+        q.eq("source", source).eq("skillId", skillId),
       )
       .unique();
   },
@@ -954,12 +1258,91 @@ export const list = query({
       ? await ctx.db
           .query("skills")
           .withIndex("by_leaderboard", (idx) =>
-            idx.eq("leaderboard", leaderboard)
+            idx.eq("leaderboard", leaderboard),
           )
           .take(limit)
       : await ctx.db.query("skills").take(limit);
 
     return skills.sort((a, b) => b.installs - a.installs);
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Skill summaries (for client-side search)
+// ---------------------------------------------------------------------------
+
+export const listSkillSummaries = query({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, { paginationOpts }) => {
+    const result = await ctx.db.query("skills").paginate(paginationOpts);
+    return {
+      ...result,
+      page: result.page.map((s) => ({
+        _id: s._id,
+        source: s.source,
+        skillId: s.skillId,
+        name: s.name,
+        description: s.description,
+        installs: s.installs,
+        technologies: s.technologies,
+      })),
+    };
+  },
+});
+
+export const listAllSkillSummaries = query({
+  args: {},
+  handler: async (ctx) => {
+    const summaries = await ctx.db.query("skillSummaries").collect();
+    return summaries.sort((a, b) => b.installs - a.installs);
+  },
+});
+
+export const backfillSkillSummaries = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    let cursor: string | undefined;
+    let isDone = false;
+    let total = 0;
+
+    while (!isDone) {
+      const result: { nextCursor: string; isDone: boolean; count: number } =
+        await ctx.runMutation(internal.skills.backfillSkillSummariesBatch, {
+          cursor,
+        });
+      total += result.count;
+      cursor = result.nextCursor;
+      isDone = result.isDone;
+    }
+
+    console.log(`Backfilled ${total} skill summaries`);
+  },
+});
+
+export const backfillSkillSummariesBatch = internalMutation({
+  args: { cursor: v.optional(v.string()) },
+  handler: async (ctx, { cursor }) => {
+    const paginationOpts = cursor
+      ? { numItems: 200, cursor }
+      : { numItems: 200, cursor: null };
+    const result = await ctx.db.query("skills").paginate(paginationOpts);
+
+    for (const s of result.page) {
+      await upsertSkillSummary(ctx, {
+        source: s.source,
+        skillId: s.skillId,
+        name: s.name,
+        description: s.description,
+        installs: s.installs,
+        technologies: s.technologies,
+      });
+    }
+
+    return {
+      nextCursor: result.continueCursor,
+      isDone: result.isDone,
+      count: result.page.length,
+    };
   },
 });
 
@@ -973,7 +1356,7 @@ export const getContent = query({
     const skill = await ctx.db
       .query("skills")
       .withIndex("by_source_skillId", (q) =>
-        q.eq("source", source).eq("skillId", skillId)
+        q.eq("source", source).eq("skillId", skillId),
       )
       .unique();
     return skill?.content ?? null;

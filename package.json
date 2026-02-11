@@ -24,6 +24,7 @@
     "convex": "^1.31.7",
     "dayjs": "^1.11.19",
     "embla-carousel-react": "^8.6.0",
+    "fuse.js": "^7.1.0",
     "hast-util-to-jsx-runtime": "^2.3.6",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.563.0",

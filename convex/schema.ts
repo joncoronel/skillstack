@@ -27,6 +27,15 @@ export default defineSchema({
     .index("by_source_skillId", ["source", "skillId"])
     .searchIndex("search_name", { searchField: "name" }),
 
+  skillSummaries: defineTable({
+    source: v.string(),
+    skillId: v.string(),
+    name: v.string(),
+    description: v.optional(v.string()),
+    installs: v.number(),
+    technologies: v.array(v.string()),
+  }).index("by_source_skillId", ["source", "skillId"]),
+
   skillTechnologies: defineTable({
     skillId: v.id("skills"),
     technology: v.string(),
