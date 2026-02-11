@@ -144,22 +144,30 @@ function SheetContent({
   variant = "default",
   footerVariant = "default",
   showCloseButton = true,
+  showBackdrop = true,
   ...props
 }: BaseSheet.Popup.Props &
   VariantProps<typeof sheetContentVariants> & {
     footerVariant?: "default" | "inset";
     showCloseButton?: boolean;
+    showBackdrop?: boolean;
   }) {
   return (
     <SheetPortal>
-      <SheetBackdrop />
-      <SheetViewport>
+      {showBackdrop && <SheetBackdrop />}
+      <SheetViewport
+        className={!showBackdrop ? "pointer-events-none" : undefined}
+      >
         <BaseSheet.Popup
           data-slot="sheet-content"
           data-side={side}
           data-variant={variant}
           data-footer-variant={footerVariant}
-          className={cn(sheetContentVariants({ variant, side }), className)}
+          className={cn(
+            sheetContentVariants({ variant, side }),
+            !showBackdrop && "pointer-events-auto",
+            className,
+          )}
           {...props}
         >
           {children}
