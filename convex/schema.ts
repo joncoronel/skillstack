@@ -19,6 +19,8 @@ export default defineSchema({
     technologies: v.array(v.string()),
     leaderboard: v.string(),
     skillMdUrl: v.optional(v.string()),
+    contentFetchedAt: v.optional(v.number()),
+    contentUpdatedAt: v.optional(v.number()),
     lastSynced: v.number(),
   })
     .index("by_leaderboard", ["leaderboard"])
@@ -49,6 +51,7 @@ export default defineSchema({
       v.object({
         source: v.string(),
         skillId: v.string(),
+        addedAt: v.optional(v.number()),
       }),
     ),
     isPublic: v.boolean(),

@@ -20,6 +20,7 @@ interface SkillInfo {
   description?: string;
   installs: number;
   technologies: string[];
+  updatedSinceAdded?: boolean;
 }
 
 export function BundleView({ preloadedBundle }: BundleViewProps) {
@@ -45,6 +46,8 @@ export function BundleView({ preloadedBundle }: BundleViewProps) {
     );
   }
 
+  const updatedCount = bundle.skills.filter((s) => s.updatedSinceAdded).length;
+
   return (
     <main className="mx-auto max-w-5xl px-4 pt-12 pb-20">
       <div className="mb-8">
@@ -54,6 +57,14 @@ export function BundleView({ preloadedBundle }: BundleViewProps) {
           {bundle.skills.length !== 1 ? "s" : ""}
         </p>
       </div>
+
+      {updatedCount > 0 && (
+        <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:border-blue-800/50 dark:bg-blue-950/30 dark:text-blue-300">
+          {updatedCount} skill{updatedCount !== 1 ? "s have" : " has"} been
+          updated since you saved this bundle. Re-run the install commands to
+          get the latest versions.
+        </div>
+      )}
 
       <section className="mb-10">
         <InstallCommands skills={bundle.skills} />
@@ -73,6 +84,7 @@ export function BundleView({ preloadedBundle }: BundleViewProps) {
               description={skill.description}
               installs={skill.installs}
               technologies={skill.technologies}
+              updatedSinceAdded={skill.updatedSinceAdded}
               onViewDetail={() => setActiveSkill(skill)}
             />
           ))}

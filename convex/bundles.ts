@@ -49,13 +49,14 @@ export const createBundle = mutation({
     const baseSlug = generateSlug(name);
     const slug = await ensureUniqueSlug(ctx, baseSlug);
 
+    const now = Date.now();
     const bundleId = await ctx.db.insert("bundles", {
       userId: user._id,
       name,
       slug,
-      skills,
+      skills: skills.map((s) => ({ ...s, addedAt: now })),
       isPublic,
-      createdAt: Date.now(),
+      createdAt: now,
     });
 
     return { bundleId, slug };
@@ -116,6 +117,13 @@ export const getBySlug = query({
           )
           .unique();
 
+        const addedAt = s.addedAt;
+        const contentUpdatedAt = skill?.contentUpdatedAt;
+        const updatedSinceAdded =
+          addedAt !== undefined &&
+          contentUpdatedAt !== undefined &&
+          contentUpdatedAt > addedAt;
+
         return {
           source: s.source,
           skillId: s.skillId,
@@ -123,6 +131,7 @@ export const getBySlug = query({
           description: skill?.description,
           installs: skill?.installs ?? 0,
           technologies: skill?.technologies ?? [],
+          updatedSinceAdded,
         };
       }),
     );

@@ -25,6 +25,7 @@ interface SkillCardProps {
   technologies: string[];
   selectable?: boolean;
   onViewDetail?: () => void;
+  updatedSinceAdded?: boolean;
 }
 
 function formatInstalls(n: number): string {
@@ -42,6 +43,7 @@ export function SkillCard({
   technologies,
   selectable = false,
   onViewDetail,
+  updatedSinceAdded,
 }: SkillCardProps) {
   const techMap = new Map(TECHNOLOGIES.map((t) => [t.id, t.name]));
   const id = useId();
@@ -85,9 +87,16 @@ export function SkillCard({
           </CardTitle>
         </div>
         <CardAction>
-          <span className="text-xs tabular-nums text-muted-foreground">
-            {formatInstalls(installs)} installs
-          </span>
+          <div className="flex items-center gap-1.5">
+            {updatedSinceAdded && (
+              <Badge variant="info" className="text-[10px] px-1.5 py-0.5">
+                Updated
+              </Badge>
+            )}
+            <span className="text-xs tabular-nums text-muted-foreground">
+              {formatInstalls(installs)} installs
+            </span>
+          </div>
         </CardAction>
         <CardDescription className="text-xs line-clamp-2">
           {description ?? source}

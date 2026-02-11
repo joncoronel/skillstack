@@ -207,7 +207,10 @@ export const syncSkills = internalAction({
   },
 });
 
-/** Sync the skillTechnologies junction table for a skill. */
+/** Sync the skillTechnologies junction table for a skill.
+ *  Skips the delete+insert cycle when tags and installs are unchanged
+ *  to avoid unnecessary database bandwidth consumption.
+ */
 async function syncSkillTechnologies(
   ctx: MutationCtx,
   skillDocId: Id<"skills">,
@@ -218,6 +221,20 @@ async function syncSkillTechnologies(
     .query("skillTechnologies")
     .withIndex("by_skillId", (q) => q.eq("skillId", skillDocId))
     .collect();
+
+  const existingTechs = existingEntries.map((e) => e.technology).sort();
+  const newTechs = [...technologies].sort();
+  const installsMatch =
+    existingEntries.length === 0 || existingEntries[0].installs === installs;
+
+  if (
+    existingTechs.length === newTechs.length &&
+    existingTechs.every((t, i) => t === newTechs[i]) &&
+    installsMatch
+  ) {
+    return;
+  }
+
   for (const entry of existingEntries) {
     await ctx.db.delete(entry._id);
   }
@@ -253,7 +270,6 @@ export const upsertSkillsBatch = internalMutation({
         )
         .unique();
 
-      // Tier 1 tagging (name only — content may not be available yet)
       const technologies = tagSkill(skill.source, skill.skillId, skill.name,
         existing?.description, existing?.content);
 
@@ -261,12 +277,22 @@ export const upsertSkillsBatch = internalMutation({
 
       if (existing) {
         skillDocId = existing._id;
+
+        const tagsChanged =
+          JSON.stringify(existing.technologies.slice().sort()) !==
+          JSON.stringify(technologies.slice().sort());
+
         await ctx.db.patch(existing._id, {
           installs: skill.installs,
           leaderboard,
-          technologies,
+          ...(tagsChanged && { technologies }),
           lastSynced: now,
         });
+
+        // Only sync junction table if tags or installs changed
+        if (tagsChanged || existing.installs !== skill.installs) {
+          await syncSkillTechnologies(ctx, skillDocId, technologies, skill.installs);
+        }
       } else {
         skillDocId = await ctx.db.insert("skills", {
           source: skill.source,
@@ -277,9 +303,9 @@ export const upsertSkillsBatch = internalMutation({
           leaderboard,
           lastSynced: now,
         });
-      }
 
-      await syncSkillTechnologies(ctx, skillDocId, technologies, skill.installs);
+        await syncSkillTechnologies(ctx, skillDocId, technologies, skill.installs);
+      }
     }
   },
 });
@@ -590,6 +616,8 @@ export const backfillDiscoverUrls = internalAction({
 // Phase 2 — Content Fetching (raw.githubusercontent.com)
 // ---------------------------------------------------------------------------
 
+const CONTENT_REFRESH_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
 export const listSkillsNeedingContentFetch = internalQuery({
   args: { cursor: v.optional(v.string()) },
   handler: async (ctx, { cursor }) => {
@@ -597,14 +625,21 @@ export const listSkillsNeedingContentFetch = internalQuery({
       ? { numItems: 200, cursor }
       : { numItems: 200, cursor: null };
     const result = await ctx.db.query("skills").paginate(paginationOpts);
+    const now = Date.now();
 
     const ids = result.page
-      .filter(
-        (s) =>
-          s.skillMdUrl &&
-          s.skillMdUrl !== "" &&
-          (!s.content || s.description === "|" || s.description === ">")
-      )
+      .filter((s) => {
+        if (!s.skillMdUrl || s.skillMdUrl === "") return false;
+
+        // Case 1: Never fetched content (or broken parse artifacts)
+        if (!s.content || s.description === "|" || s.description === ">") {
+          return true;
+        }
+
+        // Case 2: Content is stale — re-fetch periodically
+        const fetchedAt = s.contentFetchedAt ?? 0;
+        return now - fetchedAt > CONTENT_REFRESH_INTERVAL_MS;
+      })
       .map((s) => s._id);
 
     return {
@@ -641,6 +676,9 @@ export const fetchSkillContent = internalAction({
             content: body ?? undefined,
             skillMdUrl: skill.skillMdUrl,
           });
+        } else {
+          // Content fetched but nothing parseable — still record the fetch time
+          await ctx.runMutation(internal.skills.markContentFetched, { skillId });
         }
         return;
       } catch (e) {
@@ -700,8 +738,14 @@ export const updateDescription = internalMutation({
     const skill = await ctx.db.get(skillId);
     if (!skill) return;
 
+    const now = Date.now();
     const newDescription = description ?? skill.description;
     const newContent = content ?? skill.content;
+
+    // Detect if content actually changed
+    const descriptionChanged = description !== undefined && description !== skill.description;
+    const contentChanged = content !== undefined && content !== skill.content;
+    const hasActualChange = descriptionChanged || contentChanged;
 
     // Re-tag with all available text (name + content)
     const technologies = tagSkill(
@@ -709,14 +753,29 @@ export const updateDescription = internalMutation({
       newDescription, newContent,
     );
 
+    const tagsChanged =
+      JSON.stringify(skill.technologies.slice().sort()) !==
+      JSON.stringify(technologies.slice().sort());
+
     await ctx.db.patch(skillId, {
       ...(description !== undefined && { description }),
       ...(content !== undefined && { content }),
       skillMdUrl,
-      technologies,
+      ...(tagsChanged && { technologies }),
+      contentFetchedAt: now,
+      ...(hasActualChange && { contentUpdatedAt: now }),
     });
 
-    await syncSkillTechnologies(ctx, skillId, technologies, skill.installs);
+    if (tagsChanged) {
+      await syncSkillTechnologies(ctx, skillId, technologies, skill.installs);
+    }
+  },
+});
+
+export const markContentFetched = internalMutation({
+  args: { skillId: v.id("skills") },
+  handler: async (ctx, { skillId }) => {
+    await ctx.db.patch(skillId, { contentFetchedAt: Date.now() });
   },
 });
 
