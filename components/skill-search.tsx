@@ -59,17 +59,41 @@ export function SkillSearch() {
       .finally(() => setIndexLoading(false));
   }, [searchIndex, indexLoading]);
 
-  // Search locally
+  // Blend relevance with popularity (normalized weighted)
+  // RELEVANCE_WEIGHT: 1 = pure relevance, 0 = pure popularity
+  const RELEVANCE_WEIGHT = 0.4;
   const results =
     debouncedQuery && searchIndex
-      ? (searchIndex
-          .search(debouncedQuery, { fuzzy: 0.3, prefix: true })
-          .sort(
-            (a, b) =>
-              ((b as SkillResult).installs ?? 0) -
-              ((a as SkillResult).installs ?? 0),
-          )
-          .slice(0, 50) as SkillResult[])
+      ? (() => {
+          const raw = searchIndex.search(debouncedQuery, {
+            fuzzy: 0.3,
+            prefix: true,
+          }) as SkillResult[];
+          if (raw.length === 0) return [];
+
+          const maxScore = Math.max(...raw.map((r) => r.score));
+          const maxPop = Math.max(
+            ...raw.map((r) => Math.log10(1 + (r.installs ?? 0))),
+          );
+
+          return raw
+            .sort((a, b) => {
+              const aNorm = maxScore ? a.score / maxScore : 0;
+              const bNorm = maxScore ? b.score / maxScore : 0;
+              const aPop = maxPop
+                ? Math.log10(1 + (a.installs ?? 0)) / maxPop
+                : 0;
+              const bPop = maxPop
+                ? Math.log10(1 + (b.installs ?? 0)) / maxPop
+                : 0;
+              return (
+                RELEVANCE_WEIGHT * bNorm +
+                (1 - RELEVANCE_WEIGHT) * bPop -
+                (RELEVANCE_WEIGHT * aNorm + (1 - RELEVANCE_WEIGHT) * aPop)
+              );
+            })
+            .slice(0, 50);
+        })()
       : [];
 
   const isLoading = indexLoading;
