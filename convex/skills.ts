@@ -4,6 +4,8 @@ import {
   internalQuery,
   query,
 } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { resolveDefaultBranch, fetchRepoTree, NOT_MODIFIED } from "./lib/github";
@@ -12,6 +14,7 @@ import { resolveDefaultBranch, fetchRepoTree, NOT_MODIFIED } from "./lib/github"
 // Technology tagging
 // ---------------------------------------------------------------------------
 
+// Tier 1: Matches against name/source/skillId (single keyword match = tag)
 const TECH_KEYWORDS: Record<string, string[]> = {
   react: ["react", "jsx", "hooks"],
   nextjs: ["nextjs", "next-js", "next.js", "vercel"],
@@ -54,17 +57,82 @@ const TECH_KEYWORDS: Record<string, string[]> = {
   cursor: ["cursor"],
 };
 
-function tagSkill(source: string, skillId: string, name: string): string[] {
-  const text = `${source} ${skillId} ${name}`.toLowerCase();
-  const tags: string[] = [];
+// Tier 2: Matches against content/description (stricter — specific phrases only)
+const CONTENT_KEYWORDS: Record<string, string[]> = {
+  react: ["react component", "usestate", "useeffect", "react hook", "react-dom", "jsx component", "react app"],
+  nextjs: ["app router", "pages router", "next/image", "next/link", "getserversideprops", "getstaticprops", "next.js app", "nextjs app"],
+  vue: ["vue component", "vue 3", "vue.js app", "vue plugin", "composition api", "options api"],
+  svelte: ["svelte component", "svelte store", "sveltekit app", "svelte app"],
+  angular: ["angular component", "angular module", "angular service", "angular app", "ngmodule"],
+  tailwind: ["tailwind class", "tailwind config", "tailwind css", "tailwind utility", "tailwindcss config"],
+  typescript: ["typescript config", "tsconfig", "type annotation", "type safety", "typescript project", "type inference"],
+  javascript: ["javascript function", "javascript project", "ecmascript", "vanilla js", "javascript app"],
+  python: ["python script", "python package", "pip install", "python function", "python project", "python class"],
+  supabase: ["supabase client", "supabase auth", "supabase database", "supabase project"],
+  convex: ["convex function", "convex schema", "convex query", "convex mutation", "convex action"],
+  prisma: ["prisma schema", "prisma client", "prisma migrate", "prisma model"],
+  node: ["node.js app", "express app", "node server", "express server", "node.js project", "fastify server"],
+  postgres: ["postgresql database", "postgres query", "sql query", "database migration", "postgres connection"],
+  mysql: ["mysql database", "mysql query", "mysql connection", "mysql server"],
+  mongodb: ["mongodb collection", "mongodb query", "mongoose model", "mongodb database", "mongo query"],
+  redis: ["redis cache", "redis client", "redis connection", "redis store"],
+  docker: ["docker container", "docker image", "docker-compose", "dockerfile", "docker build"],
+  aws: ["aws service", "aws lambda", "aws s3", "amazon web services", "aws sdk", "aws cloud"],
+  gcp: ["google cloud", "gcp service", "cloud function", "google cloud platform"],
+  azure: ["azure service", "azure function", "azure cloud", "azure devops"],
+  firebase: ["firebase auth", "firebase database", "firestore collection", "firebase project", "firebase sdk"],
+  graphql: ["graphql query", "graphql mutation", "graphql schema", "graphql resolver", "graphql api"],
+  rest: ["rest api", "restful api", "api endpoint", "openapi spec", "swagger doc"],
+  rust: ["rust project", "cargo.toml", "rust function", "rust crate", "rust code"],
+  go: ["go module", "go function", "golang project", "go routine", "go code"],
+  java: ["java class", "java project", "spring boot", "maven project", "gradle project", "java application"],
+  ruby: ["ruby on rails", "rails app", "ruby gem", "ruby project", "ruby class"],
+  php: ["php project", "laravel app", "php function", "composer.json", "php class"],
+  swift: ["swift code", "swiftui view", "ios app", "swift project", "xcode project"],
+  kotlin: ["kotlin class", "android app", "kotlin project", "kotlin function"],
+  flutter: ["flutter widget", "flutter app", "dart code", "flutter project"],
+  css: ["css style", "css architecture", "css module", "css framework", "css-in-js", "css best practice", "css class"],
+  testing: ["unit test", "e2e test", "test suite", "test coverage", "test runner", "integration test", "test case"],
+  git: ["git workflow", "git branch", "git commit", "git hook", "github action", "git repository"],
+  ci: ["ci/cd pipeline", "github actions", "ci pipeline", "continuous integration", "continuous deployment"],
+  security: ["security best practice", "authentication flow", "authorization", "oauth flow", "jwt token", "security audit"],
+  ai: ["ai model", "llm integration", "machine learning", "ai assistant", "ai agent", "prompt engineering", "ai coding"],
+  cursor: ["cursor rule", "cursor ide", "cursor editor", "cursor agent"],
+};
+
+/** Word-boundary-aware match for short keywords to avoid false positives. */
+function matchesKeyword(text: string, keyword: string): boolean {
+  if (keyword.length <= 3) {
+    return new RegExp(`\\b${keyword}\\b`, "i").test(text);
+  }
+  return text.includes(keyword);
+}
+
+function tagSkill(
+  source: string,
+  skillId: string,
+  name: string,
+  description?: string,
+  content?: string,
+): string[] {
+  const nameText = `${source} ${skillId} ${name}`.toLowerCase();
+  const contentText = `${description ?? ""} ${content ?? ""}`.toLowerCase();
+  const tags = new Set<string>();
 
   for (const [tech, keywords] of Object.entries(TECH_KEYWORDS)) {
-    if (keywords.some((kw) => text.includes(kw))) {
-      tags.push(tech);
+    // Tier 1: name/source/skillId — single keyword match
+    if (keywords.some((kw) => matchesKeyword(nameText, kw))) {
+      tags.add(tech);
+      continue;
+    }
+    // Tier 2: content/description — require specific phrases
+    const contentKws = CONTENT_KEYWORDS[tech];
+    if (contentKws && contentText && contentKws.some((kw) => contentText.includes(kw))) {
+      tags.add(tech);
     }
   }
 
-  return tags;
+  return Array.from(tags);
 }
 
 // ---------------------------------------------------------------------------
@@ -139,6 +207,29 @@ export const syncSkills = internalAction({
   },
 });
 
+/** Sync the skillTechnologies junction table for a skill. */
+async function syncSkillTechnologies(
+  ctx: MutationCtx,
+  skillDocId: Id<"skills">,
+  technologies: string[],
+  installs: number,
+) {
+  const existingEntries = await ctx.db
+    .query("skillTechnologies")
+    .withIndex("by_skillId", (q) => q.eq("skillId", skillDocId))
+    .collect();
+  for (const entry of existingEntries) {
+    await ctx.db.delete(entry._id);
+  }
+  for (const tech of technologies) {
+    await ctx.db.insert("skillTechnologies", {
+      skillId: skillDocId,
+      technology: tech,
+      installs,
+    });
+  }
+}
+
 export const upsertSkillsBatch = internalMutation({
   args: {
     skills: v.array(
@@ -162,7 +253,9 @@ export const upsertSkillsBatch = internalMutation({
         )
         .unique();
 
-      const technologies = tagSkill(skill.source, skill.skillId, skill.name);
+      // Tier 1 tagging (name only — content may not be available yet)
+      const technologies = tagSkill(skill.source, skill.skillId, skill.name,
+        existing?.description, existing?.content);
 
       let skillDocId;
 
@@ -186,21 +279,7 @@ export const upsertSkillsBatch = internalMutation({
         });
       }
 
-      // Sync junction table: delete old entries, insert current ones
-      const existingEntries = await ctx.db
-        .query("skillTechnologies")
-        .withIndex("by_skillId", (q) => q.eq("skillId", skillDocId))
-        .collect();
-      for (const entry of existingEntries) {
-        await ctx.db.delete(entry._id);
-      }
-      for (const tech of technologies) {
-        await ctx.db.insert("skillTechnologies", {
-          skillId: skillDocId,
-          technology: tech,
-          installs: skill.installs,
-        });
-      }
+      await syncSkillTechnologies(ctx, skillDocId, technologies, skill.installs);
     }
   },
 });
@@ -618,11 +697,106 @@ export const updateDescription = internalMutation({
     skillMdUrl: v.string(),
   },
   handler: async (ctx, { skillId, description, content, skillMdUrl }) => {
+    const skill = await ctx.db.get(skillId);
+    if (!skill) return;
+
+    const newDescription = description ?? skill.description;
+    const newContent = content ?? skill.content;
+
+    // Re-tag with all available text (name + content)
+    const technologies = tagSkill(
+      skill.source, skill.skillId, skill.name,
+      newDescription, newContent,
+    );
+
     await ctx.db.patch(skillId, {
       ...(description !== undefined && { description }),
       ...(content !== undefined && { content }),
       skillMdUrl,
+      technologies,
     });
+
+    await syncSkillTechnologies(ctx, skillId, technologies, skill.installs);
+  },
+});
+
+// ---------------------------------------------------------------------------
+// One-time re-tag backfill
+// ---------------------------------------------------------------------------
+
+export const retagBatch = internalMutation({
+  args: {
+    skillIds: v.array(v.id("skills")),
+  },
+  handler: async (ctx, { skillIds }) => {
+    let updated = 0;
+    for (const id of skillIds) {
+      const skill = await ctx.db.get(id);
+      if (!skill) continue;
+
+      const newTags = tagSkill(
+        skill.source, skill.skillId, skill.name,
+        skill.description, skill.content,
+      );
+
+      const oldTags = skill.technologies.slice().sort();
+      const sortedNew = newTags.slice().sort();
+      if (JSON.stringify(oldTags) !== JSON.stringify(sortedNew)) {
+        await ctx.db.patch(id, { technologies: newTags });
+        await syncSkillTechnologies(ctx, id, newTags, skill.installs);
+        updated++;
+      }
+    }
+    return updated;
+  },
+});
+
+export const retagAllSkills = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    const BATCH_SIZE = 100;
+    let cursor: string | undefined;
+    let totalUpdated = 0;
+
+    for (;;) {
+      const result: { ids: string[]; nextCursor: string | undefined; isDone: boolean } =
+        await ctx.runQuery(internal.skills.listSkillIdsForRetag, {
+          cursor,
+          limit: BATCH_SIZE,
+        });
+
+      if (result.ids.length > 0) {
+        const updated = await ctx.runMutation(internal.skills.retagBatch, {
+          skillIds: result.ids as Id<"skills">[],
+        });
+        totalUpdated += updated as number;
+        console.log(`Retagged batch: ${updated} of ${result.ids.length} skills updated`);
+      }
+
+      if (result.isDone) break;
+      cursor = result.nextCursor;
+    }
+
+    console.log(`Retag complete: ${totalUpdated} skills updated`);
+  },
+});
+
+export const listSkillIdsForRetag = internalQuery({
+  args: {
+    cursor: v.optional(v.string()),
+    limit: v.number(),
+  },
+  handler: async (ctx, { cursor, limit }) => {
+    const query = ctx.db.query("skills");
+    const results = await query
+      .order("asc")
+      .paginate({ numItems: limit, cursor: cursor ?? null });
+
+    return {
+      ids: results.page.map((s) => s._id),
+      nextCursor: results.continueCursor,
+      isDone: results.isDone,
+    };
   },
 });
 

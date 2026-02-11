@@ -8,51 +8,143 @@ import { resolveDefaultBranch, fetchRepoTree, NOT_MODIFIED } from "./lib/github"
 // ---------------------------------------------------------------------------
 
 const PACKAGE_MAP: Record<string, string> = {
+  // React
   react: "react",
   "react-dom": "react",
   "react-native": "react",
+  "react-router": "react",
+  "react-router-dom": "react",
+  "react-hook-form": "react",
+  zustand: "react",
+  jotai: "react",
+  recoil: "react",
+  redux: "react",
+  "@reduxjs/toolkit": "react",
+  "@tanstack/react-query": "react",
+
+  // Next.js
   next: "nextjs",
+  "next-auth": "nextjs",
+  "@next/font": "nextjs",
+  "@next/mdx": "nextjs",
+
+  // Vue
   vue: "vue",
   nuxt: "vue",
+  "vue-router": "vue",
+  pinia: "vue",
+  vuex: "vue",
+
+  // Svelte
   svelte: "svelte",
   "@sveltejs/kit": "svelte",
+
+  // Angular
   "@angular/core": "angular",
   "@angular/cli": "angular",
+
+  // Tailwind
   tailwindcss: "tailwind",
+  "tailwind-merge": "tailwind",
+
+  // TypeScript
   typescript: "typescript",
+  "ts-node": "typescript",
+  tsx: "typescript",
+
+  // Supabase
   "@supabase/supabase-js": "supabase",
   "@supabase/ssr": "supabase",
+
+  // Convex
   convex: "convex",
+
+  // Prisma
   prisma: "prisma",
   "@prisma/client": "prisma",
+
+  // Node.js
   express: "node",
   fastify: "node",
   koa: "node",
   hono: "node",
   "@nestjs/core": "node",
+  "@hono/node-server": "node",
+  "body-parser": "node",
+  cors: "node",
+  helmet: "node",
+  morgan: "node",
+  nodemon: "node",
+  elysia: "node",
+
+  // PostgreSQL
   pg: "postgres",
   postgres: "postgres",
   "@neondatabase/serverless": "postgres",
+  "drizzle-orm": "postgres",
+  "@libsql/client": "postgres",
+
+  // MySQL
+  mysql2: "mysql",
+
+  // MongoDB
   mongodb: "mongodb",
   mongoose: "mongodb",
+
+  // Redis
+  redis: "redis",
+  ioredis: "redis",
+
+  // AWS
   "aws-sdk": "aws",
+
+  // Firebase
   firebase: "firebase",
   "firebase-admin": "firebase",
+
+  // GraphQL
   graphql: "graphql",
   "@apollo/client": "graphql",
   "@apollo/server": "graphql",
+  "graphql-tag": "graphql",
+  urql: "graphql",
+
+  // AI
   openai: "ai",
   "@anthropic-ai/sdk": "ai",
   "@google/generative-ai": "ai",
   ai: "ai",
   langchain: "ai",
+  "@vercel/ai": "ai",
+  ollama: "ai",
+  llamaindex: "ai",
+  replicate: "ai",
+  "cohere-ai": "ai",
+
+  // Testing
   jest: "testing",
   vitest: "testing",
   "@playwright/test": "testing",
   cypress: "testing",
+  mocha: "testing",
+  chai: "testing",
+  supertest: "testing",
+  msw: "testing",
+
+  // CSS
   sass: "css",
   "styled-components": "css",
   "@emotion/react": "css",
+  postcss: "css",
+  autoprefixer: "css",
+
+  // Security
+  jsonwebtoken: "security",
+  bcrypt: "security",
+  bcryptjs: "security",
+  passport: "security",
+  "@clerk/nextjs": "security",
+  "@auth/core": "security",
 };
 
 const PREFIX_PATTERNS: [string, string][] = [
@@ -62,6 +154,16 @@ const PREFIX_PATTERNS: [string, string][] = [
   ["@sveltejs/", "svelte"],
   ["@supabase/", "supabase"],
   ["@langchain/", "ai"],
+  ["@google-cloud/", "gcp"],
+  ["@azure/", "azure"],
+  ["@clerk/", "security"],
+  ["@auth/", "security"],
+  ["@testing-library/", "testing"],
+  ["@types/", "typescript"],
+  ["@graphql-codegen/", "graphql"],
+  ["@tailwindcss/", "tailwind"],
+  ["@huggingface/", "ai"],
+  ["@upstash/", "redis"],
 ];
 
 function mapPackages(dependencies: Record<string, string>): string[] {
