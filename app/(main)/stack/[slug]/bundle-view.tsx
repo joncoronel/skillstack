@@ -25,9 +25,13 @@ import {
   PopoverTrigger,
   PopoverContent,
 } from "@/components/ui/cubby-ui/popover";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Share01Icon, Loading03Icon } from "@hugeicons/core-free-icons";
 
 interface BundleViewProps {
   preloadedBundle: Preloaded<typeof api.bundles.getBySlug>;
+  slug: string;
+  shareToken?: string;
 }
 
 interface SkillInfo {
@@ -40,13 +44,34 @@ interface SkillInfo {
   updatedSinceAdded?: boolean;
 }
 
-export function BundleView({ preloadedBundle }: BundleViewProps) {
+export function BundleView({ preloadedBundle, slug, shareToken }: BundleViewProps) {
   const bundle = usePreloadedQuery(preloadedBundle);
   const [activeSkill, setActiveSkill] = useState<SkillInfo | null>(null);
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
-  const updateVisibility = useMutation(api.bundles.updateBundleVisibility);
+  const queryArgs = { slug, shareToken };
+  const updateVisibility = useMutation(
+    api.bundles.updateBundleVisibility,
+  ).withOptimisticUpdate((localStore, { isPublic }) => {
+    const current = localStore.getQuery(api.bundles.getBySlug, queryArgs);
+    if (current !== undefined && current !== null) {
+      localStore.setQuery(api.bundles.getBySlug, queryArgs, {
+        ...current,
+        isPublic,
+      });
+    }
+  });
   const generateShare = useMutation(api.bundles.generateShareToken);
-  const revokeShare = useMutation(api.bundles.revokeShareToken);
+  const revokeShare = useMutation(
+    api.bundles.revokeShareToken,
+  ).withOptimisticUpdate((localStore) => {
+    const current = localStore.getQuery(api.bundles.getBySlug, queryArgs);
+    if (current !== undefined && current !== null) {
+      localStore.setQuery(api.bundles.getBySlug, queryArgs, {
+        ...current,
+        shareToken: undefined,
+      });
+    }
+  });
 
   if (bundle === null) {
     return (
@@ -165,6 +190,7 @@ export function BundleView({ preloadedBundle }: BundleViewProps) {
           onOpenChange={setRenameDialogOpen}
           bundleId={bundle._id}
           currentName={bundle.name}
+          queryArgs={queryArgs}
         />
       )}
     </main>
@@ -188,10 +214,20 @@ function SharePopover({
   onGenerate: (args: { bundleId: Id<"bundles"> }) => Promise<string>;
   onRevoke: (args: { bundleId: Id<"bundles"> }) => Promise<null>;
 }) {
+  const [generating, setGenerating] = useState(false);
   const shareUrl =
     typeof window !== "undefined"
       ? `${window.location.origin}/stack/${slug}?share=${shareToken}`
       : `/stack/${slug}?share=${shareToken}`;
+
+  async function handleGenerate() {
+    setGenerating(true);
+    try {
+      await onGenerate({ bundleId });
+    } finally {
+      setGenerating(false);
+    }
+  }
 
   return (
     <Popover>
@@ -232,7 +268,15 @@ function SharePopover({
               <Button
                 variant="primary"
                 size="sm"
-                onClick={() => onGenerate({ bundleId })}
+                onClick={handleGenerate}
+                loading={generating}
+                rightSection={
+                  <HugeiconsIcon
+                    icon={generating ? Loading03Icon : Share01Icon}
+                    className={generating ? "size-4 animate-spin" : "size-4"}
+                    strokeWidth={2}
+                  />
+                }
               >
                 Create share link
               </Button>
@@ -253,6 +297,7 @@ interface RenameBundleDialogProps {
   onOpenChange: (open: boolean) => void;
   bundleId: Id<"bundles">;
   currentName: string;
+  queryArgs: { slug: string; shareToken?: string };
 }
 
 function RenameBundleDialog({
@@ -260,10 +305,21 @@ function RenameBundleDialog({
   onOpenChange,
   bundleId,
   currentName,
+  queryArgs,
 }: RenameBundleDialogProps) {
   const [name, setName] = useState(currentName);
   const [saving, setSaving] = useState(false);
-  const updateName = useMutation(api.bundles.updateBundleName);
+  const updateName = useMutation(
+    api.bundles.updateBundleName,
+  ).withOptimisticUpdate((localStore, { name: newName }) => {
+    const current = localStore.getQuery(api.bundles.getBySlug, queryArgs);
+    if (current !== undefined && current !== null) {
+      localStore.setQuery(api.bundles.getBySlug, queryArgs, {
+        ...current,
+        name: newName.trim(),
+      });
+    }
+  });
 
   useEffect(() => {
     if (open) setName(currentName);

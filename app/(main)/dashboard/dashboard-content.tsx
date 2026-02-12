@@ -23,8 +23,30 @@ interface DashboardContentProps {
 
 export function DashboardContent({ preloadedBundles }: DashboardContentProps) {
   const bundles = usePreloadedQuery(preloadedBundles);
-  const deleteBundle = useMutation(api.bundles.deleteBundle);
-  const updateVisibility = useMutation(api.bundles.updateBundleVisibility);
+  const deleteBundle = useMutation(
+    api.bundles.deleteBundle,
+  ).withOptimisticUpdate((localStore, { bundleId }) => {
+    const current = localStore.getQuery(api.bundles.listByUser, {});
+    if (current !== undefined) {
+      localStore.setQuery(
+        api.bundles.listByUser,
+        {},
+        current.filter((b) => b._id !== bundleId),
+      );
+    }
+  });
+  const updateVisibility = useMutation(
+    api.bundles.updateBundleVisibility,
+  ).withOptimisticUpdate((localStore, { bundleId, isPublic }) => {
+    const current = localStore.getQuery(api.bundles.listByUser, {});
+    if (current !== undefined) {
+      localStore.setQuery(
+        api.bundles.listByUser,
+        {},
+        current.map((b) => (b._id === bundleId ? { ...b, isPublic } : b)),
+      );
+    }
+  });
   const [deletingId, setDeletingId] = useState<Id<"bundles"> | null>(null);
 
   async function handleDelete() {

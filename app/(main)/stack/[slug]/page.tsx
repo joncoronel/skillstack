@@ -21,5 +21,5 @@ export default async function BundlePage({
     { token },
   );
 
-  return <BundleView preloadedBundle={preloadedBundle} />;
+  return <BundleView preloadedBundle={preloadedBundle} slug={slug} shareToken={share} />;
 }

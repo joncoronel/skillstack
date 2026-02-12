@@ -12,7 +12,9 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(pnpm build:*)",
       "Bash(gh search code:*)",
-      "Bash(pnpm lint:*)"
+      "Bash(pnpm lint:*)",
+      "Bash(findstr:*)",
+      "Bash(dir:*)"
     ],
     "additionalDirectories": [
       "c:\\Users\\jonny\\Documents\\Projects\\skillstack\\app\\api\\auth"
