@@ -20,6 +20,11 @@ import {
   DialogFooter,
 } from "@/components/ui/cubby-ui/dialog";
 import { CopyButton } from "@/components/ui/cubby-ui/copy-button/copy-button";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/cubby-ui/popover";
 
 interface BundleViewProps {
   preloadedBundle: Preloaded<typeof api.bundles.getBySlug>;
@@ -74,75 +79,40 @@ export function BundleView({ preloadedBundle }: BundleViewProps) {
         </p>
 
         {bundle.isOwner && (
-          <div className="mt-4 flex flex-col gap-3 border-t pt-4">
-            <div className="flex items-center gap-4">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setRenameDialogOpen(true)}
+          <div className="mt-4 flex items-center gap-4 border-t pt-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setRenameDialogOpen(true)}
+            >
+              Rename
+            </Button>
+            <div className="flex items-center gap-2">
+              <Switch
+                id="bundle-visibility"
+                checked={bundle.isPublic}
+                onCheckedChange={(checked) =>
+                  updateVisibility({
+                    bundleId: bundle._id,
+                    isPublic: checked,
+                  })
+                }
+              />
+              <label
+                htmlFor="bundle-visibility"
+                className="text-sm text-muted-foreground"
               >
-                Rename
-              </Button>
-              <div className="flex items-center gap-2">
-                <Switch
-                  id="bundle-visibility"
-                  checked={bundle.isPublic}
-                  onCheckedChange={(checked) =>
-                    updateVisibility({
-                      bundleId: bundle._id,
-                      isPublic: checked,
-                    })
-                  }
-                />
-                <label
-                  htmlFor="bundle-visibility"
-                  className="text-sm text-muted-foreground"
-                >
-                  {bundle.isPublic ? "Public" : "Private"}
-                </label>
-              </div>
+                {bundle.isPublic ? "Public" : "Private"}
+              </label>
             </div>
-
             {!bundle.isPublic && (
-              <div className="flex items-center gap-2">
-                {bundle.shareToken ? (
-                  <>
-                    <div className="flex min-w-0 flex-1 items-center gap-1 rounded-md border bg-muted/50 px-2.5 py-1.5">
-                      <span className="truncate text-xs text-muted-foreground">
-                        {typeof window !== "undefined"
-                          ? `${window.location.origin}/stack/${bundle.slug}?share=${bundle.shareToken}`
-                          : `/stack/${bundle.slug}?share=${bundle.shareToken}`}
-                      </span>
-                      <CopyButton
-                        content={
-                          typeof window !== "undefined"
-                            ? `${window.location.origin}/stack/${bundle.slug}?share=${bundle.shareToken}`
-                            : `/stack/${bundle.slug}?share=${bundle.shareToken}`
-                        }
-                      />
-                    </div>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() =>
-                        revokeShare({ bundleId: bundle._id })
-                      }
-                    >
-                      Revoke
-                    </Button>
-                  </>
-                ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      generateShare({ bundleId: bundle._id })
-                    }
-                  >
-                    Create share link
-                  </Button>
-                )}
-              </div>
+              <SharePopover
+                bundleId={bundle._id}
+                slug={bundle.slug}
+                shareToken={bundle.shareToken}
+                onGenerate={generateShare}
+                onRevoke={revokeShare}
+              />
             )}
           </div>
         )}
@@ -198,6 +168,79 @@ export function BundleView({ preloadedBundle }: BundleViewProps) {
         />
       )}
     </main>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Share popover
+// ---------------------------------------------------------------------------
+
+function SharePopover({
+  bundleId,
+  slug,
+  shareToken,
+  onGenerate,
+  onRevoke,
+}: {
+  bundleId: Id<"bundles">;
+  slug: string;
+  shareToken?: string;
+  onGenerate: (args: { bundleId: Id<"bundles"> }) => Promise<string>;
+  onRevoke: (args: { bundleId: Id<"bundles"> }) => Promise<null>;
+}) {
+  const shareUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/stack/${slug}?share=${shareToken}`
+      : `/stack/${slug}?share=${shareToken}`;
+
+  return (
+    <Popover>
+      <PopoverTrigger
+        render={<Button variant="outline" size="sm" />}
+      >
+        Share
+      </PopoverTrigger>
+      <PopoverContent side="bottom" align="start" sideOffset={8} className="w-72">
+        <div className="flex flex-col gap-2">
+          {shareToken ? (
+            <>
+              <div className="flex items-center gap-1 rounded-md border bg-muted/50 px-2 py-1.5">
+                <span className="min-w-0 flex-1 overflow-x-auto text-nowrap text-xs text-muted-foreground [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  {shareUrl}
+                </span>
+                <CopyButton content={shareUrl} />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">
+                  Anyone with this link can view
+                </span>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  className="text-destructive"
+                  onClick={() => onRevoke({ bundleId })}
+                >
+                  Revoke
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-xs text-muted-foreground">
+                Create a link to share this private bundle.
+              </p>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => onGenerate({ bundleId })}
+              >
+                Create share link
+              </Button>
+            </>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
