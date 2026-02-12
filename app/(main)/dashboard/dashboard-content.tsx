@@ -115,12 +115,12 @@ export function DashboardContent({ preloadedBundles }: DashboardContentProps) {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogClose>
-              <Button variant="outline">Cancel</Button>
-            </AlertDialogClose>
-            <Button variant="destructive" onClick={handleDelete}>
-              Delete
-            </Button>
+            <AlertDialogClose
+              render={<Button variant="outline">Cancel</Button>}
+            />
+            <AlertDialogClose
+              render={<Button variant="destructive" onClick={handleDelete}>Delete</Button>}
+            />
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
