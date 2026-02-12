@@ -65,6 +65,7 @@ export default defineSchema({
       }),
     ),
     isPublic: v.boolean(),
+    shareToken: v.optional(v.string()),
     createdAt: v.number(),
   })
     .index("by_userId", ["userId"])

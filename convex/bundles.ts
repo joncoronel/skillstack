@@ -80,6 +80,61 @@ export const updateBundleVisibility = mutation({
   },
 });
 
+export const updateBundleName = mutation({
+  args: {
+    bundleId: v.id("bundles"),
+    name: v.string(),
+  },
+  handler: async (ctx, { bundleId, name }) => {
+    const user = await getCurrentUserOrThrow(ctx);
+    const bundle = await ctx.db.get(bundleId);
+
+    if (!bundle || bundle.userId !== user._id) {
+      throw new Error("Bundle not found or unauthorized");
+    }
+
+    const trimmed = name.trim();
+    if (!trimmed) {
+      throw new Error("Name cannot be empty");
+    }
+
+    await ctx.db.patch(bundleId, { name: trimmed });
+  },
+});
+
+export const generateShareToken = mutation({
+  args: { bundleId: v.id("bundles") },
+  handler: async (ctx, { bundleId }) => {
+    const user = await getCurrentUserOrThrow(ctx);
+    const bundle = await ctx.db.get(bundleId);
+
+    if (!bundle || bundle.userId !== user._id) {
+      throw new Error("Bundle not found or unauthorized");
+    }
+
+    const token = Array.from({ length: 4 }, () =>
+      Math.random().toString(36).slice(2),
+    ).join("");
+
+    await ctx.db.patch(bundleId, { shareToken: token });
+    return token;
+  },
+});
+
+export const revokeShareToken = mutation({
+  args: { bundleId: v.id("bundles") },
+  handler: async (ctx, { bundleId }) => {
+    const user = await getCurrentUserOrThrow(ctx);
+    const bundle = await ctx.db.get(bundleId);
+
+    if (!bundle || bundle.userId !== user._id) {
+      throw new Error("Bundle not found or unauthorized");
+    }
+
+    await ctx.db.patch(bundleId, { shareToken: undefined });
+  },
+});
+
 export const deleteBundle = mutation({
   args: { bundleId: v.id("bundles") },
   handler: async (ctx, { bundleId }) => {
@@ -99,14 +154,27 @@ export const deleteBundle = mutation({
 // ---------------------------------------------------------------------------
 
 export const getBySlug = query({
-  args: { slug: v.string() },
-  handler: async (ctx, { slug }) => {
+  args: { slug: v.string(), shareToken: v.optional(v.string()) },
+  handler: async (ctx, { slug, shareToken }) => {
     const bundle = await ctx.db
       .query("bundles")
       .withIndex("by_slug", (q) => q.eq("slug", slug))
       .unique();
 
     if (!bundle) return null;
+
+    const currentUser = await getCurrentUser(ctx);
+    const isOwner = currentUser !== null && currentUser._id === bundle.userId;
+
+    // Access control for private bundles
+    if (!bundle.isPublic) {
+      const hasValidToken =
+        shareToken !== undefined &&
+        bundle.shareToken !== undefined &&
+        shareToken === bundle.shareToken;
+
+      if (!isOwner && !hasValidToken) return null;
+    }
 
     const skillsWithData = await Promise.all(
       bundle.skills.map(async (s) => {
@@ -146,6 +214,9 @@ export const getBySlug = query({
       createdAt: bundle.createdAt,
       skills: skillsWithData,
       creatorName: creator?.name ?? "Anonymous",
+      isOwner,
+      // Only expose shareToken to the owner
+      shareToken: isOwner ? bundle.shareToken : undefined,
     };
   },
 });
