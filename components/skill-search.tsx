@@ -108,6 +108,10 @@ export function SkillSearch() {
         document.activeElement?.tagName !== "INPUT" &&
         document.activeElement?.tagName !== "TEXTAREA"
       ) {
+        // Don't focus the search input when the search tab is hidden
+        const isVisible =
+          inputRef.current && !inputRef.current.closest("[hidden]");
+        if (!isVisible) return;
         e.preventDefault();
         inputRef.current?.focus();
       }

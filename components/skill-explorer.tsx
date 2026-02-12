@@ -54,11 +54,11 @@ export function SkillExplorer() {
           <TabsTrigger value="browse">Browse by Stack</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="search" className="mt-6">
+        <TabsContent value="search" className="mt-6" keepMounted>
           <SkillSearch />
         </TabsContent>
 
-        <TabsContent value="browse" className="mt-6">
+        <TabsContent value="browse" className="mt-6" keepMounted>
           <div ref={selectorRef}>
             <RepoUrlInput onTechnologiesDetected={handleRepoDetected} />
             <Collapsible open={pickerOpen} onOpenChange={setPickerOpen}>

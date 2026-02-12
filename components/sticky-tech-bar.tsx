@@ -30,7 +30,10 @@ export function StickyTechBar({
 
     const observer = new IntersectionObserver(
       ([entry]) => {
-        setIsPastSelector(!entry.isIntersecting);
+        // When the tab panel is hidden (keepMounted), the element reports as
+        // not intersecting — ignore that to avoid a flash on tab switch.
+        const isHidden = !!el.closest("[hidden]");
+        setIsPastSelector(!isHidden && !entry.isIntersecting);
       },
       { rootMargin: "-56px 0px 0px 0px", threshold: 0 },
     );
