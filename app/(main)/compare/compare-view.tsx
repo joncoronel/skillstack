@@ -1,7 +1,8 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useQuery } from "convex/react";
+import { useQuery } from "@tanstack/react-query";
+import { convexQuery } from "@convex-dev/react-query";
 import Link from "next/link";
 import Markdown from "react-markdown";
 import { api } from "@/convex/_generated/api";
@@ -47,15 +48,16 @@ function parseSkillRefs(param: string | null): SkillRef[] {
 }
 
 function CompareColumn({ source, skillId }: SkillRef) {
-  const skill = useQuery(api.skills.getBySourceAndSkillId, {
-    source,
-    skillId,
-  });
-  const content = useQuery(api.skills.getContent, { source, skillId });
+  const { data: skill, isPending: skillLoading } = useQuery(
+    convexQuery(api.skills.getBySourceAndSkillId, { source, skillId }),
+  );
+  const { data: content, isPending: contentLoading } = useQuery(
+    convexQuery(api.skills.getContent, { source, skillId }),
+  );
   const selection = useBundleSelection();
   const isSelected = selection?.isSelected(source, skillId) ?? false;
 
-  if (skill === undefined) {
+  if (skillLoading) {
     return (
       <div className="space-y-3">
         <Skeleton className="h-6 w-3/4" />
@@ -65,7 +67,7 @@ function CompareColumn({ source, skillId }: SkillRef) {
     );
   }
 
-  if (skill === null) {
+  if (!skill) {
     return (
       <div className="text-sm text-muted-foreground">
         Skill not found: {source}/{skillId}
@@ -107,7 +109,7 @@ function CompareColumn({ source, skillId }: SkillRef) {
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto rounded-xl border p-4">
-        {content === undefined ? (
+        {contentLoading ? (
           <div className="space-y-3">
             <Skeleton className="h-4 w-3/4" />
             <Skeleton className="h-4 w-full" />

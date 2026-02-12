@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "convex/react";
+import { useQuery } from "@tanstack/react-query";
+import { convexQuery } from "@convex-dev/react-query";
 import Markdown from "react-markdown";
 import { api } from "@/convex/_generated/api";
 import {
@@ -54,11 +55,13 @@ export function SkillDetailSheet({
   }
   const shownSkill = skill ?? displaySkill;
 
-  const content = useQuery(
-    api.skills.getContent,
-    shownSkill
-      ? { source: shownSkill.source, skillId: shownSkill.skillId }
-      : "skip",
+  const { data: content, isPending: contentLoading } = useQuery(
+    convexQuery(
+      api.skills.getContent,
+      shownSkill
+        ? { source: shownSkill.source, skillId: shownSkill.skillId }
+        : "skip",
+    ),
   );
 
   const selection = useBundleSelection();
@@ -103,7 +106,7 @@ export function SkillDetailSheet({
               )}
             </SheetHeader>
             <SheetBody>
-              {content === undefined ? (
+              {contentLoading ? (
                 <div className="space-y-3">
                   <Skeleton className="h-4 w-3/4" />
                   <Skeleton className="h-4 w-full" />
