@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "convex/react";
+import { useQuery } from "@tanstack/react-query";
+import { convexQuery } from "@convex-dev/react-query";
 import { api } from "@/convex/_generated/api";
 import { ChevronDownIcon } from "lucide-react";
 import { SkillCard } from "@/components/skill-card";
@@ -47,11 +48,13 @@ export function SkillResults({ selectedTechnologies }: SkillResultsProps) {
   );
   const [prevTechs, setPrevTechs] = useState(selectedTechnologies);
 
-  const result = useQuery(
-    api.skills.listByTechnologies,
-    selectedTechnologies.length > 0
-      ? { technologies: selectedTechnologies, techLimits }
-      : "skip",
+  const { data: result, isPending } = useQuery(
+    convexQuery(
+      api.skills.listByTechnologies,
+      selectedTechnologies.length > 0
+        ? { technologies: selectedTechnologies, techLimits }
+        : "skip",
+    ),
   );
 
   // Cache latest successful result
@@ -87,7 +90,7 @@ export function SkillResults({ selectedTechnologies }: SkillResultsProps) {
     }
   }
 
-  const isLoading = result === undefined;
+  const isLoading = isPending;
 
   if (selectedTechnologies.length === 0) {
     return (
