@@ -26,6 +26,8 @@ interface SkillCardProps {
   selectable?: boolean;
   onViewDetail?: () => void;
   updatedSinceAdded?: boolean;
+  className?: string;
+  variant?: "card" | "row";
 }
 
 function formatInstalls(n: number): string {
@@ -44,6 +46,8 @@ export function SkillCard({
   selectable = false,
   onViewDetail,
   updatedSinceAdded,
+  className,
+  variant = "card",
 }: SkillCardProps) {
   const techMap = new Map(TECHNOLOGIES.map((t) => [t.id, t.name]));
   const id = useId();
@@ -53,6 +57,65 @@ export function SkillCard({
   const selection = useBundleSelection();
   const selected =
     selectable && selection ? selection.isSelected(source, skillId) : false;
+
+  if (variant === "row") {
+    const rowInner = (
+      <div className="flex items-center gap-3 px-4">
+        {selectable && (
+          <Checkbox
+            id={checkboxId}
+            checked={selected}
+            onCheckedChange={() => {
+              if (selection) selection.toggleSkill({ source, skillId, name });
+            }}
+            className="shrink-0"
+          />
+        )}
+        <span className="text-sm font-semibold">
+          {onViewDetail ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onViewDetail();
+              }}
+              className="hover:underline text-left"
+            >
+              {name}
+            </button>
+          ) : (
+            name
+          )}
+        </span>
+        <span className="text-sm text-muted-foreground">{source}</span>
+        <span className="ml-auto text-xs tabular-nums text-muted-foreground shrink-0">
+          {formatInstalls(installs)}
+        </span>
+      </div>
+    );
+
+    if (selectable) {
+      return (
+        <Label
+          htmlFor={checkboxId}
+          data-variant="default"
+          className={cn(
+            "text-card-foreground flex flex-col bg-card rounded-2xl border dark:border-border/50 py-3",
+            "cursor-pointer transition-colors",
+            "has-data-checked:border-primary/40 has-data-checked:bg-primary/5",
+            "[&:has(+_label_[data-checked])]:border-b-primary/40",
+            "hover:bg-muted/50",
+            className
+          )}
+        >
+          {rowInner}
+        </Label>
+      );
+    }
+
+    return rowInner;
+  }
 
   const cardInner = (
     <>
@@ -134,7 +197,8 @@ export function SkillCard({
           "text-card-foreground flex flex-col bg-card gap-3 rounded-2xl border dark:border-border/50 py-4",
           "cursor-pointer transition-colors",
           "has-data-checked:border-primary/40 has-data-checked:bg-primary/5",
-          "hover:bg-muted/50"
+          "hover:bg-muted/50",
+          className
         )}
       >
         {cardInner}

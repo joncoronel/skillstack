@@ -152,20 +152,35 @@ export function SkillSearch() {
               <p className="text-xs text-muted-foreground mb-3">
                 {results.length} result{results.length !== 1 && "s"}
               </p>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {results.map((skill) => (
-                  <SkillCard
-                    key={`${skill.source}/${skill.skillId}`}
-                    name={skill.name}
-                    source={skill.source}
-                    skillId={skill.skillId}
-                    description={skill.description}
-                    installs={skill.installs}
-                    technologies={skill.technologies}
-                    selectable
-                    onViewDetail={() => setActiveSkill(skill)}
-                  />
-                ))}
+              <div className="grid">
+                {results.map((skill, i) => {
+                  const isFirst = i === 0;
+                  const isLast = i === results.length - 1;
+                  const isSolo = results.length === 1;
+                  return (
+                    <SkillCard
+                      key={`${skill.source}/${skill.skillId}`}
+                      name={skill.name}
+                      source={skill.source}
+                      skillId={skill.skillId}
+                      description={skill.description}
+                      installs={skill.installs}
+                      technologies={skill.technologies}
+                      selectable
+                      variant="row"
+                      onViewDetail={() => setActiveSkill(skill)}
+                      className={
+                        isSolo
+                          ? undefined
+                          : isFirst
+                            ? "rounded-b-none"
+                            : isLast
+                              ? "rounded-t-none border-t-0"
+                              : "rounded-none border-t-0"
+                      }
+                    />
+                  );
+                })}
               </div>
             </>
           ) : debouncedQuery ? (
