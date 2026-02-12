@@ -71,24 +71,26 @@ export function SkillCard({
             className="shrink-0"
           />
         )}
-        <span className="text-sm font-semibold">
-          {onViewDetail ? (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onViewDetail();
-              }}
-              className="hover:underline text-left"
-            >
-              {name}
-            </button>
-          ) : (
-            name
-          )}
-        </span>
-        <span className="text-sm text-muted-foreground">{source}</span>
+        <div className="flex flex-wrap items-baseline gap-x-2 min-w-0">
+          <span className="text-sm font-semibold">
+            {onViewDetail ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onViewDetail();
+                }}
+                className="hover:underline text-left"
+              >
+                {name}
+              </button>
+            ) : (
+              name
+            )}
+          </span>
+          <span className="text-sm text-muted-foreground">{source}</span>
+        </div>
         <span className="ml-auto text-xs tabular-nums text-muted-foreground shrink-0">
           {formatInstalls(installs)}
         </span>
