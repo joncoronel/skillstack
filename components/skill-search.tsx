@@ -28,7 +28,11 @@ type SkillResult = SearchResult & {
   technologies: string[];
 };
 
-export function SkillSearch() {
+interface SkillSearchProps {
+  onSearchActiveChange?: (active: boolean) => void;
+}
+
+export function SkillSearch({ onSearchActiveChange }: SkillSearchProps) {
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [activeSkill, setActiveSkill] = useState<SkillResult | null>(null);
@@ -128,14 +132,21 @@ export function SkillSearch() {
           ref={inputRef}
           placeholder="Search skills by name…"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            const value = e.target.value;
+            setQuery(value);
+            onSearchActiveChange?.(value.trim().length > 0);
+          }}
           onFocus={handleFocus}
           className="pl-9 pr-9"
         />
         {query ? (
           <button
             type="button"
-            onClick={() => setQuery("")}
+            onClick={() => {
+              setQuery("");
+              onSearchActiveChange?.(false);
+            }}
             className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
           >
             <XIcon className="size-4" />

@@ -21,7 +21,11 @@ import {
   CollapsibleContent,
 } from "@/components/ui/cubby-ui/collapsible";
 
-export function SkillExplorer() {
+interface SkillExplorerProps {
+  onSearchActiveChange?: (active: boolean) => void;
+}
+
+export function SkillExplorer({ onSearchActiveChange }: SkillExplorerProps) {
   const [selected, setSelected] = useState<string[]>([]);
   const [pickerOpen, setPickerOpen] = useState(true);
   const selectorRef = useRef<HTMLDivElement>(null);
@@ -55,7 +59,7 @@ export function SkillExplorer() {
         </TabsList>
 
         <TabsContent value="search" className="mt-6" keepMounted>
-          <SkillSearch />
+          <SkillSearch onSearchActiveChange={onSearchActiveChange} />
         </TabsContent>
 
         <TabsContent value="browse" className="mt-6" keepMounted>
