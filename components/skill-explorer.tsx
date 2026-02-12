@@ -86,7 +86,7 @@ export function SkillExplorer({ onSearchActiveChange }: SkillExplorerProps) {
                   </CollapsibleTrigger>
                 </div>
               </div>
-              <CollapsibleContent>
+              <CollapsibleContent className="max-sm:duration-0">
                 <div className="mt-5 pb-1">
                   <TechnologySelector
                     selected={selected}

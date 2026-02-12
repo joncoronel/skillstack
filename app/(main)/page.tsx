@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { cn } from "@/lib/utils";
 import { SkillExplorer } from "@/components/skill-explorer";
 import {
   Collapsible,
@@ -18,7 +19,7 @@ export default function Home() {
     <>
       {/* Hero */}
       <Collapsible open={!searchActive}>
-        <CollapsibleContent>
+        <CollapsibleContent className="max-sm:duration-0">
           <section className="mx-auto max-w-5xl px-4 pt-16 pb-10 text-center">
             <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
               Build your AI skill stack
@@ -33,7 +34,7 @@ export default function Home() {
       </Collapsible>
 
       {/* Main content */}
-      <main className="mx-auto max-w-5xl px-4 pb-20">
+      <main className={cn("mx-auto max-w-5xl px-4 pb-20 transition-[padding-top] duration-200 max-sm:duration-0 ease-out-cubic", searchActive ? "pt-6" : "pt-0")}>
         <SkillExplorer onSearchActiveChange={handleSearchActiveChange} />
       </main>
     </>

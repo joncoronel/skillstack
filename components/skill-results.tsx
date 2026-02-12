@@ -160,7 +160,7 @@ export function SkillResults({ selectedTechnologies }: SkillResultsProps) {
                   </h3>
                   <ChevronDownIcon className="size-4 text-muted-foreground transition-transform duration-200 group-data-[panel-open]/collapsible:rotate-180" />
                 </CollapsibleTrigger>
-                <CollapsibleContent>
+                <CollapsibleContent className="max-sm:duration-0">
                   <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     {skills.map((skill) => (
                       <SkillCard
