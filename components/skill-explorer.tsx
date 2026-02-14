@@ -60,56 +60,56 @@ export function SkillExplorer({ onSearchActiveChange }: SkillExplorerProps) {
         </TabsList>
 
         <TabsPanels className="mt-6">
-        <TabsContent value="search" keepMounted>
-          <SkillSearch onSearchActiveChange={onSearchActiveChange} />
-        </TabsContent>
+          <TabsContent value="search" keepMounted>
+            <SkillSearch onSearchActiveChange={onSearchActiveChange} />
+          </TabsContent>
 
-        <TabsContent value="browse" keepMounted>
-          <div ref={selectorRef}>
-            <RepoUrlInput onTechnologiesDetected={handleRepoDetected} />
-            <Collapsible open={pickerOpen} onOpenChange={setPickerOpen}>
-              <div className="relative mt-5">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t" />
+          <TabsContent value="browse" keepMounted>
+            <div ref={selectorRef}>
+              <RepoUrlInput onTechnologiesDetected={handleRepoDetected} />
+              <Collapsible open={pickerOpen} onOpenChange={setPickerOpen}>
+                <div className="relative mt-5">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <CollapsibleTrigger className="w-auto border-none bg-transparent shadow-none ring-0 py-0 hover:bg-transparent hover:opacity-80 gap-1.5">
+                      <span className="bg-background px-2 text-muted-foreground">
+                        or select manually
+                        {!pickerOpen && selected.length > 0 && (
+                          <span className="ml-1 text-primary">
+                            ({selected.length})
+                          </span>
+                        )}
+                      </span>
+                      <span className="bg-background pr-1">
+                        <ChevronDownIcon className="size-3.5 text-muted-foreground transition-transform duration-200 group-data-[panel-open]/collapsible:rotate-180" />
+                      </span>
+                    </CollapsibleTrigger>
+                  </div>
                 </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <CollapsibleTrigger className="w-auto border-none bg-transparent shadow-none ring-0 py-0 hover:bg-transparent hover:opacity-80 gap-1.5">
-                    <span className="bg-background px-2 text-muted-foreground">
-                      or select manually
-                      {!pickerOpen && selected.length > 0 && (
-                        <span className="ml-1 text-primary">
-                          ({selected.length})
-                        </span>
-                      )}
-                    </span>
-                    <span className="bg-background pr-1">
-                      <ChevronDownIcon className="size-3.5 text-muted-foreground transition-transform duration-200 group-data-[panel-open]/collapsible:rotate-180" />
-                    </span>
-                  </CollapsibleTrigger>
-                </div>
-              </div>
-              <CollapsibleContent className="max-sm:duration-0">
-                <div className="mt-5 pb-1">
-                  <TechnologySelector
-                    selected={selected}
-                    onToggle={handleToggle}
-                  />
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-          </div>
+                <CollapsibleContent className="max-sm:duration-0">
+                  <div className="mt-5 pb-1">
+                    <TechnologySelector
+                      selected={selected}
+                      onToggle={handleToggle}
+                    />
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            </div>
 
-          <StickyTechBar
-            selected={selected}
-            onRemove={handleToggle}
-            onEditClick={handleEditStack}
-            selectorRef={selectorRef}
-          />
+            <StickyTechBar
+              selected={selected}
+              onRemove={handleToggle}
+              onEditClick={handleEditStack}
+              selectorRef={selectorRef}
+            />
 
-          <section className="mt-10">
-            <SkillResults selectedTechnologies={selected} />
-          </section>
-        </TabsContent>
+            <section className="mt-10">
+              <SkillResults selectedTechnologies={selected} />
+            </section>
+          </TabsContent>
         </TabsPanels>
       </Tabs>
 

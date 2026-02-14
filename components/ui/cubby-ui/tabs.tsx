@@ -237,7 +237,7 @@ function TabsPanels({
       data-slot="tabs-panels"
       className={cn(
         "min-h-0 grow",
-        "has-[>_*_>_[data-ending-style]]:transition-[height] has-[>_*_>_[data-ending-style]]:duration-270 has-[>_*_>_[data-ending-style]]:ease-[cubic-bezier(0.25,1,0.5,1)] has-[>_*_>_[data-ending-style]]:overflow-y-clip",
+        "has-[>_*_>_[data-ending-style]]:transition-[height] has-[>_*_>_[data-ending-style]]:duration-270 has-[>_*_>_[data-ending-style]]:ease-[cubic-bezier(0.25,1,0.5,1)] ",
         className,
       )}
       {...props}
@@ -256,13 +256,14 @@ function TabsContent({ className, ...props }: BaseTabs.Panel.Props) {
       className={cn(
         "min-w-0 flex-1 outline-none",
         "[grid-area:1/1]",
-        "ease-out-cubic transition-[opacity,translate,filter,scale] duration-[var(--fade-duration,0.2s),400ms,300ms,200ms]",
+        "ease-out-cubic transition-[opacity,translate,filter,scale] duration-[var(--fade-duration,0.2s),400ms,var(--fade-duration,0.2s),200ms]",
         // Enter/exit: fade and blur
-        "data-starting-style:opacity-0",
-        "data-ending-style:opacity-0 data-ending-style:contain-[size]",
+        "data-starting-style:opacity-0 ",
+        "data-ending-style:opacity-0 data-ending-style:contain-[size] ",
         // Horizontal directional slide
         "data-starting-style:scale-97",
         "data-ending-style:scale-97",
+        "origin-top",
         "motion-reduce:blur-none motion-reduce:transition-none",
         className,
       )}
