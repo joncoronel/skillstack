@@ -258,8 +258,8 @@ function TabsContent({ className, ...props }: BaseTabs.Panel.Props) {
         "[grid-area:1/1]",
         "ease-out-cubic transition-[opacity,translate,filter,scale] duration-[var(--fade-duration,0.2s),400ms,var(--fade-duration,0.2s),200ms]",
         // Enter/exit: fade and blur
-        "data-starting-style:opacity-0 ",
-        "data-ending-style:opacity-0 data-ending-style:contain-[size] ",
+        "data-starting-style:opacity-0 data-starting-style:blur-sm",
+        "data-ending-style:opacity-0 data-ending-style:contain-[size] data-ending-style:blur-sm",
         // Horizontal directional slide
         "data-starting-style:scale-97",
         "data-ending-style:scale-97",
