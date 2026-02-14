@@ -105,8 +105,8 @@ export function SkillCard({
           className={cn(
             "text-card-foreground flex flex-col bg-card rounded-2xl border dark:border-border/50 py-3",
             "cursor-pointer transition-colors",
-            "has-data-checked:border-primary/40 has-data-checked:bg-primary/5",
-            "[&:has(+_label_[data-checked])]:border-b-primary/40",
+            "has-data-checked:border-primary/40 dark:has-data-checked:border-primary/40 has-data-checked:bg-primary/5",
+            "[&:has(+_label_[data-checked])]:border-b-primary/40 dark:[&:has(+_label_[data-checked])]:border-b-primary/40",
             "hover:bg-muted/50",
             className
           )}
@@ -198,7 +198,7 @@ export function SkillCard({
         className={cn(
           "text-card-foreground flex flex-col bg-card gap-3 rounded-2xl border dark:border-border/50 py-4",
           "cursor-pointer transition-colors",
-          "has-data-checked:border-primary/40 has-data-checked:bg-primary/5",
+          "has-data-checked:border-primary/40 dark:has-data-checked:border-primary/40 has-data-checked:bg-primary/5",
           "hover:bg-muted/50",
           className
         )}
