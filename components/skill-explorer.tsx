@@ -13,6 +13,7 @@ import {
   Tabs,
   TabsList,
   TabsTrigger,
+  TabsPanels,
   TabsContent,
 } from "@/components/ui/cubby-ui/tabs";
 import {
@@ -58,11 +59,12 @@ export function SkillExplorer({ onSearchActiveChange }: SkillExplorerProps) {
           <TabsTrigger value="browse">Browse by Stack</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="search" className="mt-6" keepMounted>
+        <TabsPanels className="mt-6">
+        <TabsContent value="search" keepMounted>
           <SkillSearch onSearchActiveChange={onSearchActiveChange} />
         </TabsContent>
 
-        <TabsContent value="browse" className="mt-6" keepMounted>
+        <TabsContent value="browse" keepMounted>
           <div ref={selectorRef}>
             <RepoUrlInput onTechnologiesDetected={handleRepoDetected} />
             <Collapsible open={pickerOpen} onOpenChange={setPickerOpen}>
@@ -108,6 +110,7 @@ export function SkillExplorer({ onSearchActiveChange }: SkillExplorerProps) {
             <SkillResults selectedTechnologies={selected} />
           </section>
         </TabsContent>
+        </TabsPanels>
       </Tabs>
 
       <BundleBar />
