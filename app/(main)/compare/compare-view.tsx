@@ -13,6 +13,7 @@ import {
   Tabs,
   TabsList,
   TabsTrigger,
+  TabsPanels,
   TabsContent,
 } from "@/components/ui/cubby-ui/tabs";
 import { TECHNOLOGIES } from "@/lib/technologies";
@@ -196,14 +197,16 @@ export function CompareView() {
               </TabsTrigger>
             ))}
           </TabsList>
-          {refs.slice(0, 3).map((ref) => (
-            <TabsContent
-              key={`${ref.source}:${ref.skillId}`}
-              value={`${ref.source}:${ref.skillId}`}
-            >
-              <CompareColumn source={ref.source} skillId={ref.skillId} />
-            </TabsContent>
-          ))}
+          <TabsPanels className="mt-4">
+            {refs.slice(0, 3).map((ref) => (
+              <TabsContent
+                key={`${ref.source}:${ref.skillId}`}
+                value={`${ref.source}:${ref.skillId}`}
+              >
+                <CompareColumn source={ref.source} skillId={ref.skillId} />
+              </TabsContent>
+            ))}
+          </TabsPanels>
         </Tabs>
       </div>
     </>
