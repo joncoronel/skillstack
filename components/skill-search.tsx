@@ -8,6 +8,8 @@ import { searchQueryParser } from "@/lib/search-params";
 import { Input } from "@/components/ui/cubby-ui/input";
 import { SkillCard } from "@/components/skill-card";
 import { SkillDetailSheet } from "@/components/skill-detail-sheet";
+import { Skeleton } from "@/components/ui/cubby-ui/skeleton";
+import { cn } from "@/lib/utils";
 
 const MINISEARCH_OPTIONS = {
   fields: ["name"],
@@ -165,9 +167,26 @@ export function SkillSearch() {
       {query.trim() && (
         <div className="mt-4">
           {isLoading ? (
-            <p className="text-sm text-muted-foreground text-center py-8">
-              Loading search index…
-            </p>
+            <>
+              <Skeleton className="h-4 w-20 mb-3" />
+              <div className="grid">
+                {Array.from({ length: 16 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className={cn(
+                      "flex items-center gap-3 px-4 py-3 bg-card border dark:border-border/50",
+                      i === 0 ? "rounded-t-2xl" : "border-t-0",
+                      i === 15 ? "rounded-b-2xl" : "",
+                    )}
+                  >
+                    <Skeleton className="size-4 rounded-sm shrink-0" />
+                    <Skeleton className="h-5 w-28 rounded-sm" />
+                    <Skeleton className="h-5 w-16 rounded-sm" />
+                    <Skeleton className="ml-auto h-4 w-10 shrink-0 rounded-sm" />
+                  </div>
+                ))}
+              </div>
+            </>
           ) : results.length > 0 ? (
             <>
               <p className="text-xs text-muted-foreground mb-3">

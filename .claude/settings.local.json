@@ -15,7 +15,8 @@
       "Bash(pnpm lint:*)",
       "Bash(findstr:*)",
       "Bash(dir:*)",
-      "Bash(git mv:*)"
+      "Bash(git mv:*)",
+      "Bash(cat:*)"
     ],
     "additionalDirectories": [
       "c:\\Users\\jonny\\Documents\\Projects\\skillstack\\app\\api\\auth"

@@ -1,10 +1,7 @@
+import { connection } from "next/server";
 import { HomeContent } from "./home-content";
-import { Suspense } from "react";
 
-export default function Home() {
-  return (
-    <Suspense>
-      <HomeContent />
-    </Suspense>
-  );
+export default async function Home() {
+  await connection();
+  return <HomeContent />;
 }
