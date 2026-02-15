@@ -64,7 +64,7 @@ export function ExploreContent({ preloadedBundles }: ExploreContentProps) {
             <BundleCard
               key={bundle._id}
               name={bundle.name}
-              slug={bundle.slug}
+              urlId={bundle.urlId}
               skillCount={bundle.skillCount}
               createdAt={bundle.createdAt}
               creatorName={bundle.creatorName}

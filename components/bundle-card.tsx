@@ -14,7 +14,7 @@ import { timeAgo } from "@/lib/utils";
 
 interface BundleCardProps {
   name: string;
-  slug: string;
+  urlId: string;
   skillCount: number;
   createdAt: number;
   creatorName: string;
@@ -28,7 +28,7 @@ const techMap = new Map(TECHNOLOGIES.map((t) => [t.id, t.name]));
 
 export function BundleCard({
   name,
-  slug,
+  urlId,
   skillCount,
   createdAt,
   creatorName,
@@ -84,5 +84,5 @@ export function BundleCard({
     return content;
   }
 
-  return <Link href={`/stack/${slug}`}>{content}</Link>;
+  return <Link href={`/stack/${urlId}`}>{content}</Link>;
 }

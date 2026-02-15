@@ -14,7 +14,8 @@
       "Bash(gh search code:*)",
       "Bash(pnpm lint:*)",
       "Bash(findstr:*)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(git mv:*)"
     ],
     "additionalDirectories": [
       "c:\\Users\\jonny\\Documents\\Projects\\skillstack\\app\\api\\auth"

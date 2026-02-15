@@ -9,17 +9,17 @@ export default async function BundlePage({
   params,
   searchParams,
 }: {
-  params: Promise<{ slug: string }>;
+  params: Promise<{ id: string }>;
   searchParams: Promise<{ share?: string }>;
 }) {
-  const { slug } = await params;
+  const { id } = await params;
   const { share } = await searchParams;
   const token = await getAuthToken();
   const preloadedBundle = await preloadQuery(
-    api.bundles.getBySlug,
-    { slug, shareToken: share },
+    api.bundles.getByUrlId,
+    { urlId: id, shareToken: share },
     { token },
   );
 
-  return <BundleView preloadedBundle={preloadedBundle} slug={slug} shareToken={share} />;
+  return <BundleView preloadedBundle={preloadedBundle} urlId={id} shareToken={share} />;
 }

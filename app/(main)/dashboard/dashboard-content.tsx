@@ -81,7 +81,7 @@ export function DashboardContent({ preloadedBundles }: DashboardContentProps) {
           <BundleCard
             key={bundle._id}
             name={bundle.name}
-            slug={bundle.slug}
+            urlId={bundle.urlId}
             skillCount={bundle.skills.length}
             createdAt={bundle.createdAt}
             creatorName="You"
@@ -93,7 +93,7 @@ export function DashboardContent({ preloadedBundles }: DashboardContentProps) {
                   variant="outline"
                   size="xs"
                   nativeButton={false}
-                  render={<Link href={`/stack/${bundle.slug}`} />}
+                  render={<Link href={`/stack/${bundle.urlId}`} />}
                 >
                   View
                 </Button>

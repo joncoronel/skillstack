@@ -50,7 +50,7 @@ export function SaveBundleDialog({ open, onOpenChange }: SaveBundleDialogProps) 
       clearAll();
       setName("");
       onOpenChange(false);
-      router.push(`/stack/${result.slug}`);
+      router.push(`/stack/${result.urlId}`);
     } finally {
       setSaving(false);
     }

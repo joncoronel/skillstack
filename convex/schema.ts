@@ -56,7 +56,7 @@ export default defineSchema({
   bundles: defineTable({
     userId: v.id("users"),
     name: v.string(),
-    slug: v.string(),
+    urlId: v.string(),
     skills: v.array(
       v.object({
         source: v.string(),
@@ -69,6 +69,6 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_userId", ["userId"])
-    .index("by_slug", ["slug"])
+    .index("by_urlId", ["urlId"])
     .index("by_public_createdAt", ["isPublic", "createdAt"]),
 });

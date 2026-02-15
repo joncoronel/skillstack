@@ -29,8 +29,8 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Share01Icon, Loading03Icon } from "@hugeicons/core-free-icons";
 
 interface BundleViewProps {
-  preloadedBundle: Preloaded<typeof api.bundles.getBySlug>;
-  slug: string;
+  preloadedBundle: Preloaded<typeof api.bundles.getByUrlId>;
+  urlId: string;
   shareToken?: string;
 }
 
@@ -44,17 +44,17 @@ interface SkillInfo {
   updatedSinceAdded?: boolean;
 }
 
-export function BundleView({ preloadedBundle, slug, shareToken }: BundleViewProps) {
+export function BundleView({ preloadedBundle, urlId, shareToken }: BundleViewProps) {
   const bundle = usePreloadedQuery(preloadedBundle);
   const [activeSkill, setActiveSkill] = useState<SkillInfo | null>(null);
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
-  const queryArgs = { slug, shareToken };
+  const queryArgs = { urlId, shareToken };
   const updateVisibility = useMutation(
     api.bundles.updateBundleVisibility,
   ).withOptimisticUpdate((localStore, { isPublic }) => {
-    const current = localStore.getQuery(api.bundles.getBySlug, queryArgs);
+    const current = localStore.getQuery(api.bundles.getByUrlId, queryArgs);
     if (current !== undefined && current !== null) {
-      localStore.setQuery(api.bundles.getBySlug, queryArgs, {
+      localStore.setQuery(api.bundles.getByUrlId, queryArgs, {
         ...current,
         isPublic,
       });
@@ -64,9 +64,9 @@ export function BundleView({ preloadedBundle, slug, shareToken }: BundleViewProp
   const revokeShare = useMutation(
     api.bundles.revokeShareToken,
   ).withOptimisticUpdate((localStore) => {
-    const current = localStore.getQuery(api.bundles.getBySlug, queryArgs);
+    const current = localStore.getQuery(api.bundles.getByUrlId, queryArgs);
     if (current !== undefined && current !== null) {
-      localStore.setQuery(api.bundles.getBySlug, queryArgs, {
+      localStore.setQuery(api.bundles.getByUrlId, queryArgs, {
         ...current,
         shareToken: undefined,
       });
@@ -133,7 +133,7 @@ export function BundleView({ preloadedBundle, slug, shareToken }: BundleViewProp
             {!bundle.isPublic && (
               <SharePopover
                 bundleId={bundle._id}
-                slug={bundle.slug}
+                urlId={bundle.urlId}
                 shareToken={bundle.shareToken}
                 onGenerate={generateShare}
                 onRevoke={revokeShare}
@@ -203,13 +203,13 @@ export function BundleView({ preloadedBundle, slug, shareToken }: BundleViewProp
 
 function SharePopover({
   bundleId,
-  slug,
+  urlId,
   shareToken,
   onGenerate,
   onRevoke,
 }: {
   bundleId: Id<"bundles">;
-  slug: string;
+  urlId: string;
   shareToken?: string;
   onGenerate: (args: { bundleId: Id<"bundles"> }) => Promise<string>;
   onRevoke: (args: { bundleId: Id<"bundles"> }) => Promise<null>;
@@ -217,8 +217,8 @@ function SharePopover({
   const [generating, setGenerating] = useState(false);
   const shareUrl =
     typeof window !== "undefined"
-      ? `${window.location.origin}/stack/${slug}?share=${shareToken}`
-      : `/stack/${slug}?share=${shareToken}`;
+      ? `${window.location.origin}/stack/${urlId}?share=${shareToken}`
+      : `/stack/${urlId}?share=${shareToken}`;
 
   async function handleGenerate() {
     setGenerating(true);
@@ -297,7 +297,7 @@ interface RenameBundleDialogProps {
   onOpenChange: (open: boolean) => void;
   bundleId: Id<"bundles">;
   currentName: string;
-  queryArgs: { slug: string; shareToken?: string };
+  queryArgs: { urlId: string; shareToken?: string };
 }
 
 function RenameBundleDialog({
@@ -312,9 +312,9 @@ function RenameBundleDialog({
   const updateName = useMutation(
     api.bundles.updateBundleName,
   ).withOptimisticUpdate((localStore, { name: newName }) => {
-    const current = localStore.getQuery(api.bundles.getBySlug, queryArgs);
+    const current = localStore.getQuery(api.bundles.getByUrlId, queryArgs);
     if (current !== undefined && current !== null) {
-      localStore.setQuery(api.bundles.getBySlug, queryArgs, {
+      localStore.setQuery(api.bundles.getByUrlId, queryArgs, {
         ...current,
         name: newName.trim(),
       });

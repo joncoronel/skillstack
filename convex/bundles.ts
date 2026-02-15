@@ -3,29 +3,25 @@ import { v } from "convex/values";
 import { getCurrentUser, getCurrentUserOrThrow } from "./users";
 
 // ---------------------------------------------------------------------------
-// Slug helpers
+// URL ID helpers
 // ---------------------------------------------------------------------------
 
-function generateSlug(name: string): string {
-  return name
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .slice(0, 60);
+function generateUrlId(length = 10): string {
+  const chars =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  return Array.from({ length }, () =>
+    chars[Math.floor(Math.random() * chars.length)],
+  ).join("");
 }
 
-async function ensureUniqueSlug(ctx: QueryCtx, baseSlug: string) {
+async function ensureUniqueUrlId(ctx: QueryCtx): Promise<string> {
+  const id = generateUrlId();
   const existing = await ctx.db
     .query("bundles")
-    .withIndex("by_slug", (q) => q.eq("slug", baseSlug))
+    .withIndex("by_urlId", (q) => q.eq("urlId", id))
     .unique();
-
-  if (!existing) return baseSlug;
-
-  const suffix = Math.random().toString(36).slice(2, 6);
-  return `${baseSlug}-${suffix}`;
+  if (!existing) return id;
+  return ensureUniqueUrlId(ctx);
 }
 
 // ---------------------------------------------------------------------------
@@ -45,21 +41,19 @@ export const createBundle = mutation({
   },
   handler: async (ctx, { name, skills, isPublic }) => {
     const user = await getCurrentUserOrThrow(ctx);
-
-    const baseSlug = generateSlug(name);
-    const slug = await ensureUniqueSlug(ctx, baseSlug);
+    const urlId = await ensureUniqueUrlId(ctx);
 
     const now = Date.now();
     const bundleId = await ctx.db.insert("bundles", {
       userId: user._id,
       name,
-      slug,
+      urlId,
       skills: skills.map((s) => ({ ...s, addedAt: now })),
       isPublic,
       createdAt: now,
     });
 
-    return { bundleId, slug };
+    return { bundleId, urlId };
   },
 });
 
@@ -153,12 +147,12 @@ export const deleteBundle = mutation({
 // Queries
 // ---------------------------------------------------------------------------
 
-export const getBySlug = query({
-  args: { slug: v.string(), shareToken: v.optional(v.string()) },
-  handler: async (ctx, { slug, shareToken }) => {
+export const getByUrlId = query({
+  args: { urlId: v.string(), shareToken: v.optional(v.string()) },
+  handler: async (ctx, { urlId, shareToken }) => {
     const bundle = await ctx.db
       .query("bundles")
-      .withIndex("by_slug", (q) => q.eq("slug", slug))
+      .withIndex("by_urlId", (q) => q.eq("urlId", urlId))
       .unique();
 
     if (!bundle) return null;
@@ -166,7 +160,6 @@ export const getBySlug = query({
     const currentUser = await getCurrentUser(ctx);
     const isOwner = currentUser !== null && currentUser._id === bundle.userId;
 
-    // Access control for private bundles
     if (!bundle.isPublic) {
       const hasValidToken =
         shareToken !== undefined &&
@@ -209,13 +202,12 @@ export const getBySlug = query({
     return {
       _id: bundle._id,
       name: bundle.name,
-      slug: bundle.slug,
+      urlId: bundle.urlId,
       isPublic: bundle.isPublic,
       createdAt: bundle.createdAt,
       skills: skillsWithData,
       creatorName: creator?.name ?? "Anonymous",
       isOwner,
-      // Only expose shareToken to the owner
       shareToken: isOwner ? bundle.shareToken : undefined,
     };
   },
@@ -264,7 +256,7 @@ export const listPublic = query({
         return {
           _id: bundle._id,
           name: bundle.name,
-          slug: bundle.slug,
+          urlId: bundle.urlId,
           skillCount: bundle.skills.length,
           createdAt: bundle.createdAt,
           creatorName: creator?.name ?? "Anonymous",
@@ -275,3 +267,4 @@ export const listPublic = query({
     );
   },
 });
+
