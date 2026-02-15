@@ -1,6 +1,7 @@
 "use client";
 
 import { useId } from "react";
+import Link from "next/link";
 import {
   Card,
   CardHeader,
@@ -86,7 +87,14 @@ export function SkillCard({
                 {name}
               </button>
             ) : (
-              name
+              <Link
+                href={`/${source}/${skillId}`}
+                className="hover:underline text-left"
+                onClick={(e) => e.stopPropagation()}
+                prefetch={false}
+              >
+                {name}
+              </Link>
             )}
           </span>
           <span className="text-sm text-muted-foreground">{source}</span>
@@ -108,7 +116,7 @@ export function SkillCard({
             "has-data-checked:border-primary/40 dark:has-data-checked:border-primary/40 has-data-checked:bg-primary/5",
             "[&:has(+_label_[data-checked])]:border-b-primary/40 dark:[&:has(+_label_[data-checked])]:border-b-primary/40",
             "hover:bg-muted/50",
-            className
+            className,
           )}
         >
           {rowInner}
@@ -147,7 +155,13 @@ export function SkillCard({
                 {name}
               </button>
             ) : (
-              name
+              <Link
+                href={`/${source}/${skillId}`}
+                className="hover:underline text-left"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {name}
+              </Link>
             )}
           </CardTitle>
         </div>
@@ -200,7 +214,7 @@ export function SkillCard({
           "cursor-pointer transition-colors",
           "has-data-checked:border-primary/40 dark:has-data-checked:border-primary/40 has-data-checked:bg-primary/5",
           "hover:bg-muted/50",
-          className
+          className,
         )}
       >
         {cardInner}

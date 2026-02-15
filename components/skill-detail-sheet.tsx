@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { convexQuery } from "@convex-dev/react-query";
 import Markdown from "react-markdown";
@@ -15,7 +16,7 @@ import {
   SheetDescription,
 } from "@/components/ui/cubby-ui/sheet";
 import { Badge } from "@/components/ui/cubby-ui/badge";
-import { Button } from "@/components/ui/cubby-ui/button";
+import { Button, buttonVariants } from "@/components/ui/cubby-ui/button";
 import { Skeleton } from "@/components/ui/cubby-ui/skeleton";
 import { TECHNOLOGIES } from "@/lib/technologies";
 import { useBundleSelection } from "@/lib/bundle-selection-context";
@@ -133,6 +134,12 @@ export function SkillDetailSheet({
               )}
             </SheetBody>
             <SheetFooter>
+              <Link
+                href={`/${shownSkill.source}/${shownSkill.skillId}`}
+                className={buttonVariants({ variant: "outline", size: "sm" })}
+              >
+                View full page
+              </Link>
               {selection && (
                 <Button
                   variant={isSelected ? "outline" : "primary"}
