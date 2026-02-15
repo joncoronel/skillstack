@@ -1,8 +1,10 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useQueryState } from "nuqs";
 import { ChevronDownIcon } from "lucide-react";
 import { BundleSelectionProvider } from "@/lib/bundle-selection-context";
+import { techParser, tabParser, type TabValue } from "@/lib/search-params";
 import { TechnologySelector } from "@/components/technology-selector";
 import { RepoUrlInput } from "@/components/repo-url-input";
 import { SkillResults } from "@/components/skill-results";
@@ -22,12 +24,9 @@ import {
   CollapsibleContent,
 } from "@/components/ui/cubby-ui/collapsible";
 
-interface SkillExplorerProps {
-  onSearchActiveChange?: (active: boolean) => void;
-}
-
-export function SkillExplorer({ onSearchActiveChange }: SkillExplorerProps) {
-  const [selected, setSelected] = useState<string[]>([]);
+export function SkillExplorer() {
+  const [selected, setSelected] = useQueryState("tech", techParser);
+  const [tab, setTab] = useQueryState("tab", tabParser);
   const [pickerOpen, setPickerOpen] = useState(true);
   const selectorRef = useRef<HTMLDivElement>(null);
 
@@ -53,7 +52,7 @@ export function SkillExplorer({ onSearchActiveChange }: SkillExplorerProps) {
 
   return (
     <BundleSelectionProvider>
-      <Tabs defaultValue="browse">
+      <Tabs value={tab} onValueChange={(value) => setTab(value as TabValue)}>
         <TabsList variant="underline">
           <TabsTrigger value="search">Search</TabsTrigger>
           <TabsTrigger value="browse">Browse by Stack</TabsTrigger>
@@ -61,13 +60,13 @@ export function SkillExplorer({ onSearchActiveChange }: SkillExplorerProps) {
 
         <TabsPanels className="mt-6">
           <TabsContent value="search" keepMounted>
-            <SkillSearch onSearchActiveChange={onSearchActiveChange} />
+            <SkillSearch />
           </TabsContent>
 
           <TabsContent value="browse" keepMounted>
             <div ref={selectorRef}>
               <RepoUrlInput onTechnologiesDetected={handleRepoDetected} />
-              <Collapsible open={pickerOpen} onOpenChange={setPickerOpen}>
+              <Collapsible>
                 <div className="relative mt-5">
                   <div className="absolute inset-0 flex items-center">
                     <div className="w-full border-t" />

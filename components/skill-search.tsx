@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useQueryState } from "nuqs";
 import MiniSearch, { type SearchResult } from "minisearch";
 import { SearchIcon, XIcon, LoaderIcon } from "lucide-react";
+import { searchQueryParser } from "@/lib/search-params";
 import { Input } from "@/components/ui/cubby-ui/input";
 import { SkillCard } from "@/components/skill-card";
 import { SkillDetailSheet } from "@/components/skill-detail-sheet";
@@ -19,6 +21,14 @@ const MINISEARCH_OPTIONS = {
   ],
 };
 
+function fetchSearchIndex(): Promise<MiniSearch> {
+  return fetch("/api/skill-summaries")
+    .then((r) => r.json())
+    .then((data) =>
+      MiniSearch.loadJSON(JSON.stringify(data), MINISEARCH_OPTIONS),
+    );
+}
+
 type SkillResult = SearchResult & {
   source: string;
   skillId: string;
@@ -28,16 +38,14 @@ type SkillResult = SearchResult & {
   technologies: string[];
 };
 
-interface SkillSearchProps {
-  onSearchActiveChange?: (active: boolean) => void;
-}
-
-export function SkillSearch({ onSearchActiveChange }: SkillSearchProps) {
-  const [query, setQuery] = useState("");
+export function SkillSearch() {
+  const [query, setQuery] = useQueryState("q", searchQueryParser);
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [activeSkill, setActiveSkill] = useState<SkillResult | null>(null);
   const [searchIndex, setSearchIndex] = useState<MiniSearch | null>(null);
-  const [indexLoading, setIndexLoading] = useState(false);
+  const [indexLoading, setIndexLoading] = useState(
+    () => query.trim().length > 0,
+  );
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Debounce query by 300ms
@@ -47,21 +55,22 @@ export function SkillSearch({ onSearchActiveChange }: SkillSearchProps) {
     return () => clearTimeout(id);
   }, [query]);
 
-  // Lazy-load search index on first focus
-  const handleFocus = useCallback(() => {
+  // Load search index on focus
+  const loadIndex = useCallback(() => {
     if (searchIndex || indexLoading) return;
     setIndexLoading(true);
-    fetch("/api/skill-summaries")
-      .then((r) => r.json())
-      .then((data) => {
-        const index = MiniSearch.loadJSON(
-          JSON.stringify(data),
-          MINISEARCH_OPTIONS,
-        );
-        setSearchIndex(index);
-      })
+    fetchSearchIndex()
+      .then(setSearchIndex)
       .finally(() => setIndexLoading(false));
   }, [searchIndex, indexLoading]);
+
+  // Eagerly load index if page loads with a query already in the URL
+  useEffect(() => {
+    if (!query.trim()) return;
+    fetchSearchIndex()
+      .then(setSearchIndex)
+      .finally(() => setIndexLoading(false));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Blend relevance with popularity (normalized weighted)
   // RELEVANCE_WEIGHT: 1 = pure relevance, 0 = pure popularity
@@ -133,11 +142,9 @@ export function SkillSearch({ onSearchActiveChange }: SkillSearchProps) {
           placeholder="Search skills by name…"
           value={query}
           onChange={(e) => {
-            const value = e.target.value;
-            setQuery(value);
-            onSearchActiveChange?.(value.trim().length > 0);
+            setQuery(e.target.value);
           }}
-          onFocus={handleFocus}
+          onFocus={loadIndex}
           className="pl-9 pr-9"
         />
         {query ? (
@@ -145,7 +152,6 @@ export function SkillSearch({ onSearchActiveChange }: SkillSearchProps) {
             type="button"
             onClick={() => {
               setQuery("");
-              onSearchActiveChange?.(false);
             }}
             className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
           >

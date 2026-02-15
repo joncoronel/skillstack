@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
+import { useQueryState } from "nuqs";
 import Link from "next/link";
 import { usePreloadedQuery, type Preloaded } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { sortParser } from "@/lib/search-params";
 import { BundleCard } from "@/components/bundle-card";
 import { Button } from "@/components/ui/cubby-ui/button";
-
-type SortMode = "recent" | "popular";
 
 interface ExploreContentProps {
   preloadedBundles: Preloaded<typeof api.bundles.listPublic>;
@@ -15,7 +15,7 @@ interface ExploreContentProps {
 
 export function ExploreContent({ preloadedBundles }: ExploreContentProps) {
   const bundles = usePreloadedQuery(preloadedBundles);
-  const [sort, setSort] = useState<SortMode>("recent");
+  const [sort, setSort] = useQueryState("sort", sortParser);
 
   const sorted = useMemo(() => {
     if (sort === "popular") {
