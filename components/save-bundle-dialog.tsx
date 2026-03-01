@@ -22,7 +22,10 @@ interface SaveBundleDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-export function SaveBundleDialog({ open, onOpenChange }: SaveBundleDialogProps) {
+export function SaveBundleDialog({
+  open,
+  onOpenChange,
+}: SaveBundleDialogProps) {
   const selection = useBundleSelection();
   const createBundle = useMutation(api.bundles.createBundle);
   const router = useRouter();
@@ -58,9 +61,9 @@ export function SaveBundleDialog({ open, onOpenChange }: SaveBundleDialogProps) 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent variant="inset">
         <DialogHeader>
-          <DialogTitle>Save bundle</DialogTitle>
+          <DialogTitle className="font-display">Save bundle</DialogTitle>
         </DialogHeader>
         <DialogBody>
           <div className="space-y-4">
@@ -82,10 +85,7 @@ export function SaveBundleDialog({ open, onOpenChange }: SaveBundleDialogProps) 
               />
             </div>
             <div className="flex items-center justify-between">
-              <label
-                htmlFor="bundle-public"
-                className="text-sm font-medium"
-              >
+              <label htmlFor="bundle-public" className="text-sm font-medium">
                 Public bundle
               </label>
               <Switch

@@ -44,7 +44,11 @@ interface SkillInfo {
   updatedSinceAdded?: boolean;
 }
 
-export function BundleView({ preloadedBundle, urlId, shareToken }: BundleViewProps) {
+export function BundleView({
+  preloadedBundle,
+  urlId,
+  shareToken,
+}: BundleViewProps) {
   const bundle = usePreloadedQuery(preloadedBundle);
   const [activeSkill, setActiveSkill] = useState<SkillInfo | null>(null);
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
@@ -97,7 +101,9 @@ export function BundleView({ preloadedBundle, urlId, shareToken }: BundleViewPro
   return (
     <main className="mx-auto max-w-5xl px-4 pt-12 pb-20">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">{bundle.name}</h1>
+        <h1 className="font-display text-3xl font-bold tracking-tight">
+          {bundle.name}
+        </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           by {bundle.creatorName} &middot; {bundle.skills.length} skill
           {bundle.skills.length !== 1 ? "s" : ""}
@@ -144,7 +150,7 @@ export function BundleView({ preloadedBundle, urlId, shareToken }: BundleViewPro
       </div>
 
       {updatedCount > 0 && (
-        <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:border-blue-800/50 dark:bg-blue-950/30 dark:text-blue-300">
+        <div className="mb-6 rounded-lg border border-info-border bg-info px-4 py-3 text-sm text-info-foreground">
           {updatedCount} skill{updatedCount !== 1 ? "s have" : " has"} been
           updated since you saved this bundle. Re-run the install commands to
           get the latest versions.
@@ -231,12 +237,15 @@ function SharePopover({
 
   return (
     <Popover>
-      <PopoverTrigger
-        render={<Button variant="outline" size="sm" />}
-      >
+      <PopoverTrigger render={<Button variant="outline" size="sm" />}>
         Share
       </PopoverTrigger>
-      <PopoverContent side="bottom" align="start" sideOffset={8} className="w-72">
+      <PopoverContent
+        side="bottom"
+        align="start"
+        sideOffset={8}
+        className="w-72"
+      >
         <div className="flex flex-col gap-2">
           {shareToken ? (
             <>
@@ -343,7 +352,7 @@ function RenameBundleDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent variant="inset">
         <DialogHeader>
           <DialogTitle>Rename bundle</DialogTitle>
         </DialogHeader>

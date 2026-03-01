@@ -138,6 +138,7 @@ function CompareColumn({ source, skillId }: SkillRef) {
               source: skill.source,
               skillId: skill.skillId,
               name: skill.name,
+              technologies: skill.technologies,
             })
           }
         >

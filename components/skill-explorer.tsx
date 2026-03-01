@@ -55,7 +55,7 @@ export function SkillExplorer() {
       <Tabs value={tab} onValueChange={(value) => setTab(value as TabValue)}>
         <TabsList variant="underline">
           <TabsTrigger value="search">Search</TabsTrigger>
-          <TabsTrigger value="browse">Browse by Stack</TabsTrigger>
+          <TabsTrigger value="browse">Build Your Stack</TabsTrigger>
         </TabsList>
 
         <TabsPanels className="mt-6">

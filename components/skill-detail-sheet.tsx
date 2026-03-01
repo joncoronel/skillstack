@@ -77,7 +77,7 @@ export function SkillDetailSheet({
         {shownSkill && (
           <>
             <SheetHeader>
-              <SheetTitle>{shownSkill.name}</SheetTitle>
+              <SheetTitle className="font-display">{shownSkill.name}</SheetTitle>
               <SheetDescription>
                 <span className="tabular-nums">
                   {formatInstalls(shownSkill.installs)} installs
@@ -149,6 +149,7 @@ export function SkillDetailSheet({
                       source: shownSkill.source,
                       skillId: shownSkill.skillId,
                       name: shownSkill.name,
+                      technologies: shownSkill.technologies,
                     })
                   }
                 >

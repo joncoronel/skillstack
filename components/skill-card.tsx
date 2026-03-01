@@ -67,7 +67,8 @@ export function SkillCard({
             id={checkboxId}
             checked={selected}
             onCheckedChange={() => {
-              if (selection) selection.toggleSkill({ source, skillId, name });
+              if (selection)
+                selection.toggleSkill({ source, skillId, name, technologies });
             }}
             className="shrink-0"
           />
@@ -99,7 +100,7 @@ export function SkillCard({
           </span>
           <span className="text-sm text-muted-foreground">{source}</span>
         </div>
-        <span className="ml-auto text-xs tabular-nums text-muted-foreground shrink-0">
+        <span className="ml-auto text-xs font-mono tabular-nums text-muted-foreground shrink-0">
           {formatInstalls(installs)}
         </span>
       </div>
@@ -113,9 +114,9 @@ export function SkillCard({
           className={cn(
             "text-card-foreground flex flex-col bg-card rounded-2xl border dark:border-border/50 py-3",
             "cursor-pointer transition-colors",
-            "has-data-checked:border-primary/40 dark:has-data-checked:border-primary/40 has-data-checked:bg-primary/5",
-            "[&:has(+_label_[data-checked])]:border-b-primary/40 dark:[&:has(+_label_[data-checked])]:border-b-primary/40",
-            "hover:bg-muted/50",
+            "has-data-checked:border-primary/30 dark:has-data-checked:border-primary/30 has-data-checked:bg-primary/8",
+            "[&:has(+_label_[data-checked])]:border-b-primary/30 dark:[&:has(+_label_[data-checked])]:border-b-primary/30",
+            "hover:border-border/20",
             className,
           )}
         >
@@ -136,12 +137,18 @@ export function SkillCard({
               id={checkboxId}
               checked={selected}
               onCheckedChange={() => {
-                if (selection) selection.toggleSkill({ source, skillId, name });
+                if (selection)
+                  selection.toggleSkill({
+                    source,
+                    skillId,
+                    name,
+                    technologies,
+                  });
               }}
               className="shrink-0"
             />
           )}
-          <CardTitle className="text-sm leading-snug [text-box:trim-both_cap_alphabetic]">
+          <CardTitle className="text-sm leading-snug flex items-center">
             {onViewDetail ? (
               <button
                 type="button"
@@ -150,7 +157,7 @@ export function SkillCard({
                   e.stopPropagation();
                   onViewDetail();
                 }}
-                className="hover:underline text-left"
+                className="hover:underline text-left [text-box:trim-both_cap_alphabetic]"
               >
                 {name}
               </button>
@@ -172,7 +179,7 @@ export function SkillCard({
                 Updated
               </Badge>
             )}
-            <span className="text-xs tabular-nums text-muted-foreground">
+            <span className="text-xs font-mono tabular-nums text-muted-foreground">
               {formatInstalls(installs)} installs
             </span>
           </div>
@@ -212,8 +219,8 @@ export function SkillCard({
         className={cn(
           "text-card-foreground flex flex-col bg-card gap-3 rounded-2xl border dark:border-border/50 py-4",
           "cursor-pointer transition-colors",
-          "has-data-checked:border-primary/40 dark:has-data-checked:border-primary/40 has-data-checked:bg-primary/5",
-          "hover:bg-muted/50",
+          "has-data-checked:border-primary/30 dark:has-data-checked:border-primary/30 has-data-checked:bg-primary/8",
+          "hover:border-border/20",
           className,
         )}
       >
@@ -222,5 +229,5 @@ export function SkillCard({
     );
   }
 
-  return <Card className="gap-3 py-4">{cardInner}</Card>;
+  return <Card className={cn("gap-3 py-4", className)}>{cardInner}</Card>;
 }

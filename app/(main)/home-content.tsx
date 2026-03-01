@@ -25,8 +25,11 @@ export function HomeContent() {
       >
         <div ref={ref} className={cn("max-sm:duration-0 ")}>
           <section className="mx-auto max-w-5xl px-4 pt-16 pb-10 text-center">
-            <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
-              Build your AI skill stack
+            <h1 className="font-display text-4xl font-bold tracking-tight sm:text-5xl">
+              Build your{" "}
+              <mark className="bg-primary/10 text-primary rounded px-1">
+                AI skill stack
+              </mark>
             </h1>
             <p className="mx-auto mt-4 max-w-2xl text-lg text-muted-foreground">
               Discover, compare, and bundle skills for AI coding assistants like

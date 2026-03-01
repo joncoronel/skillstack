@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__paper__get_basic_info",
+      "mcp__paper__get_font_family_info",
+      "mcp__paper__create_artboard",
+      "mcp__paper__write_html",
+      "mcp__paper__get_screenshot"
+    ]
+  }
+}

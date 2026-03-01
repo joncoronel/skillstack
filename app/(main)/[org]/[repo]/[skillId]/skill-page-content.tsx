@@ -43,7 +43,7 @@ export function SkillPageContent({ skill, content }: SkillPageContentProps) {
       </nav>
 
       {/* Header */}
-      <h1 className="text-3xl font-bold tracking-tight mb-3">{skill.name}</h1>
+      <h1 className="font-display text-3xl font-bold tracking-tight mb-3">{skill.name}</h1>
 
       <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
         <span className="tabular-nums">
@@ -62,7 +62,7 @@ export function SkillPageContent({ skill, content }: SkillPageContentProps) {
 
       {/* Technologies */}
       {skill.technologies.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mb-8">
+        <div className="flex flex-wrap gap-1.5 mb-4">
           {skill.technologies.map((techId) => (
             <Badge
               key={techId}

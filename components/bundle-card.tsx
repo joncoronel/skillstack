@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import {
   Card,
@@ -37,7 +39,7 @@ export function BundleCard({
   actions,
 }: BundleCardProps) {
   const content = (
-    <Card className="gap-3 py-4 transition-colors hover:bg-muted/50">
+    <Card className="gap-3 py-4 transition-colors hover:border-border/20">
       <CardHeader className="gap-1">
         <CardTitle className="text-sm leading-snug">{name}</CardTitle>
         <CardAction>
@@ -47,7 +49,7 @@ export function BundleCard({
                 Private
               </Badge>
             )}
-            <span className="text-xs tabular-nums text-muted-foreground">
+            <span className="text-xs font-mono tabular-nums text-muted-foreground">
               {skillCount} skill{skillCount !== 1 ? "s" : ""}
             </span>
           </div>

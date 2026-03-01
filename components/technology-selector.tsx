@@ -45,11 +45,7 @@ export function TechnologySelector({
                     size="sm"
                     pressed={isSelected}
                     onPressedChange={() => onToggle(tech.id)}
-                    className={cn(
-                      "rounded-full px-4 text-sm",
-                      isSelected &&
-                        "bg-primary/10 border-primary/40 text-primary data-[pressed]:bg-primary/15 data-[pressed]:text-primary",
-                    )}
+                    className={cn("rounded-full px-4 text-sm")}
                   >
                     {tech.name}
                   </Toggle>
