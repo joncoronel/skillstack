@@ -1,28 +1,40 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { NextResponse, type NextRequest } from "next/server";
 
-const isPublicRoute = createRouteMatcher([
-  "/",
-  "/sign-in(.*)",
-  "/sign-up(.*)",
-  "/stack/(.*)",
-  "/explore",
-  "/:org/:repo/:skillId", // Skill detail pages
-]);
+const publicPaths = ["/", "/explore"];
 
-const isAuthRoute = createRouteMatcher(["/sign-in(.*)", "/sign-up(.*)"]);
+function isPublicRoute(pathname: string): boolean {
+  if (publicPaths.includes(pathname)) return true;
+  if (pathname.startsWith("/sign-in")) return true;
+  if (pathname.startsWith("/sign-up")) return true;
+  if (pathname.startsWith("/stack/")) return true;
+  if (pathname.startsWith("/api/auth/")) return true;
+  // Skill detail pages: /:org/:repo/:skillId (3 segments)
+  const segments = pathname.split("/").filter(Boolean);
+  if (segments.length === 3) return true;
+  return false;
+}
 
-export default clerkMiddleware(async (auth, request) => {
-  const { userId } = await auth();
+function isAuthRoute(pathname: string): boolean {
+  return pathname.startsWith("/sign-in") || pathname.startsWith("/sign-up");
+}
+
+export default function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+  const sessionCookie = request.cookies.get("better-auth.session_token");
+  const isLoggedIn = !!sessionCookie;
 
   // Redirect signed-in users away from auth pages
-  if (isAuthRoute(request) && userId) {
-    return Response.redirect(new URL("/", request.url));
+  if (isAuthRoute(pathname) && isLoggedIn) {
+    return NextResponse.redirect(new URL("/", request.url));
   }
 
-  if (!isPublicRoute(request)) {
-    await auth.protect();
+  // Protect non-public routes
+  if (!isPublicRoute(pathname) && !isLoggedIn) {
+    return NextResponse.redirect(new URL("/sign-in", request.url));
   }
-});
+
+  return NextResponse.next();
+}
 
 export const config = {
   matcher: [

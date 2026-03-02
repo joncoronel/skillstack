@@ -45,9 +45,11 @@ export const createBundle = mutation({
 
     const now = Date.now();
     const bundleId = await ctx.db.insert("bundles", {
-      userId: user._id,
+      userId: user.userId,
       name,
       urlId,
+      creatorName: user.name,
+      creatorImage: user.image,
       skills: skills.map((s) => ({ ...s, addedAt: now })),
       isPublic,
       createdAt: now,
@@ -66,7 +68,7 @@ export const updateBundleVisibility = mutation({
     const user = await getCurrentUserOrThrow(ctx);
     const bundle = await ctx.db.get(bundleId);
 
-    if (!bundle || bundle.userId !== user._id) {
+    if (!bundle || bundle.userId !== user.userId) {
       throw new Error("Bundle not found or unauthorized");
     }
 
@@ -83,7 +85,7 @@ export const updateBundleName = mutation({
     const user = await getCurrentUserOrThrow(ctx);
     const bundle = await ctx.db.get(bundleId);
 
-    if (!bundle || bundle.userId !== user._id) {
+    if (!bundle || bundle.userId !== user.userId) {
       throw new Error("Bundle not found or unauthorized");
     }
 
@@ -102,7 +104,7 @@ export const generateShareToken = mutation({
     const user = await getCurrentUserOrThrow(ctx);
     const bundle = await ctx.db.get(bundleId);
 
-    if (!bundle || bundle.userId !== user._id) {
+    if (!bundle || bundle.userId !== user.userId) {
       throw new Error("Bundle not found or unauthorized");
     }
 
@@ -121,7 +123,7 @@ export const revokeShareToken = mutation({
     const user = await getCurrentUserOrThrow(ctx);
     const bundle = await ctx.db.get(bundleId);
 
-    if (!bundle || bundle.userId !== user._id) {
+    if (!bundle || bundle.userId !== user.userId) {
       throw new Error("Bundle not found or unauthorized");
     }
 
@@ -135,7 +137,7 @@ export const deleteBundle = mutation({
     const user = await getCurrentUserOrThrow(ctx);
     const bundle = await ctx.db.get(bundleId);
 
-    if (!bundle || bundle.userId !== user._id) {
+    if (!bundle || bundle.userId !== user.userId) {
       throw new Error("Bundle not found or unauthorized");
     }
 
@@ -158,7 +160,8 @@ export const getByUrlId = query({
     if (!bundle) return null;
 
     const currentUser = await getCurrentUser(ctx);
-    const isOwner = currentUser !== null && currentUser._id === bundle.userId;
+    const isOwner =
+      currentUser !== null && currentUser.userId === bundle.userId;
 
     if (!bundle.isPublic) {
       const hasValidToken =
@@ -197,8 +200,6 @@ export const getByUrlId = query({
       }),
     );
 
-    const creator = await ctx.db.get(bundle.userId);
-
     return {
       _id: bundle._id,
       name: bundle.name,
@@ -206,7 +207,7 @@ export const getByUrlId = query({
       isPublic: bundle.isPublic,
       createdAt: bundle.createdAt,
       skills: skillsWithData,
-      creatorName: creator?.name ?? "Anonymous",
+      creatorName: bundle.creatorName ?? "Anonymous",
       isOwner,
       shareToken: isOwner ? bundle.shareToken : undefined,
     };
@@ -221,7 +222,7 @@ export const listByUser = query({
 
     return await ctx.db
       .query("bundles")
-      .withIndex("by_userId", (q) => q.eq("userId", user._id))
+      .withIndex("by_userId", (q) => q.eq("userId", user.userId))
       .order("desc")
       .collect();
   },
@@ -238,8 +239,6 @@ export const listPublic = query({
 
     return Promise.all(
       bundles.map(async (bundle) => {
-        const creator = await ctx.db.get(bundle.userId);
-
         const techSet = new Set<string>();
         for (const s of bundle.skills) {
           const skill = await ctx.db
@@ -259,8 +258,8 @@ export const listPublic = query({
           urlId: bundle.urlId,
           skillCount: bundle.skills.length,
           createdAt: bundle.createdAt,
-          creatorName: creator?.name ?? "Anonymous",
-          creatorImage: creator?.image,
+          creatorName: bundle.creatorName ?? "Anonymous",
+          creatorImage: bundle.creatorImage,
           technologies: Array.from(techSet),
         };
       }),

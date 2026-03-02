@@ -110,14 +110,14 @@ export default {
 } satisfies AuthConfig;
 ```
 
-**`convex/auth.ts`** -- Convex auth component + user query
+**`convex/auth.ts`** -- Convex auth component + auth helpers + user query
 
 ```ts
 import { createClient, type GenericCtx } from "@convex-dev/better-auth";
 import { convex } from "@convex-dev/better-auth/plugins";
 import { components } from "./_generated/api";
 import { DataModel } from "./_generated/dataModel";
-import { query } from "./_generated/server";
+import { QueryCtx, MutationCtx, query } from "./_generated/server";
 import { betterAuth } from "better-auth/minimal";
 import authConfig from "./auth.config";
 
@@ -134,15 +134,31 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
   });
 };
 
-// Reusable query to get the current user in any Convex function
+// Get the authenticated user's ID from the JWT identity directly.
+// This avoids 2 unnecessary DB queries per call that authComponent.getAuthUser does.
+// Returns null if not authenticated.
+export async function getAuthUserId(
+  ctx: QueryCtx | MutationCtx,
+): Promise<string | null> {
+  const identity = await ctx.auth.getUserIdentity();
+  return identity?.subject ?? null;
+}
+
+// Same as getAuthUserId but throws if not authenticated.
+export async function requireAuthUserId(
+  ctx: QueryCtx | MutationCtx,
+): Promise<string> {
+  const userId = await getAuthUserId(ctx);
+  if (!userId) throw new Error("Not authenticated");
+  return userId;
+}
+
+// Get the current user identity, returning null if not authenticated
 export const getCurrentUser = query({
   args: {},
   handler: async (ctx) => {
-    try {
-      return await authComponent.getAuthUser(ctx);
-    } catch {
-      return null;
-    }
+    const identity = await ctx.auth.getUserIdentity();
+    return identity ?? null;
   },
 });
 ```
@@ -168,12 +184,14 @@ export const { GET, POST } = handler;
 
 ### Auth protection patterns
 
-| Where             | How                                             | Behavior                    |
-| ----------------- | ----------------------------------------------- | --------------------------- |
-| Server components | `isAuthenticated()` + `redirect()`              | Redirect to sign-in page    |
-| Convex queries    | `authComponent.getAuthUser(ctx)` with try/catch | Return `null` / empty array |
-| Convex mutations  | `authComponent.getAuthUser(ctx)` + throw        | Block execution             |
-| Layout components | Async RSC that checks auth before rendering     | Redirect in layout          |
+| Where             | How                                         | Behavior                    |
+| ----------------- | ------------------------------------------- | --------------------------- |
+| Server components | `isAuthenticated()` + `redirect()`          | Redirect to sign-in page    |
+| Convex queries    | `getAuthUserId(ctx)` + null check           | Return `null` / empty array |
+| Convex mutations  | `requireAuthUserId(ctx)`                    | Throws if not authenticated |
+| Layout components | Async RSC that checks auth before rendering | Redirect in layout          |
+
+> **Why `getAuthUserId` instead of `authComponent.getAuthUser`?** The `getAuthUser` method runs 2 component subqueries (session lookup + user lookup) that are never cached by the Convex runtime. `getAuthUserId` reads the user ID directly from the JWT identity — zero DB queries, same security. Use `getAuthUserId` for all queries/mutations that only need the user ID. Only use `authComponent.getAuthUser` if you need the full user document (name, email, etc.) inside a Convex function.
 
 ---
 
@@ -210,15 +228,100 @@ export default function RootLayout({ children }) {
 
 **`app/ConvexClientProvider.tsx`**
 
+> **Why not `ConvexBetterAuthProvider`?** The official provider ignores the `initialToken` prop and makes 3 redundant API requests (`get-session`, `token`, `token`) on every page load (~600ms wasted). We use `ConvexProviderWithAuth` — the same primitive that Clerk and Auth0 integrations use — with a custom auth hook that serves the server-provided JWT from memory and only fetches a new token when the JWT actually expires.
+
 ```tsx
 "use client";
 
-import { ReactNode } from "react";
-import { ConvexReactClient } from "convex/react";
-import { authClient } from "@/lib/auth-client";
-import { ConvexBetterAuthProvider } from "@convex-dev/better-auth/react";
+import {
+  ReactNode,
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useRef,
+} from "react";
+import { ConvexReactClient, ConvexProviderWithAuth } from "convex/react";
 
 const convex = new ConvexReactClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+
+// Context to pass the server-provided token to the auth hook
+const InitialTokenContext = createContext<string | null | undefined>(null);
+
+// Decode JWT exp claim without a library
+function getTokenExpiry(token: string): number | null {
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return payload.exp ? payload.exp * 1000 : null; // convert to ms
+  } catch {
+    return null;
+  }
+}
+
+// Custom auth hook that uses the server-provided token immediately,
+// only fetching from the API when Convex requests a refresh (token expired).
+function useBetterAuth() {
+  const initialToken = useContext(InitialTokenContext);
+  const tokenRef = useRef(initialToken);
+
+  // The provider fires forceRefreshToken:true once on mount (harmless) — we skip it.
+  // Any subsequent forceRefreshToken:true means Convex actually rejected the token.
+  const handledMountForceRefreshRef = useRef(false);
+
+  const fetchAccessToken = useCallback(
+    async ({ forceRefreshToken }: { forceRefreshToken: boolean }) => {
+      const currentToken = tokenRef.current;
+
+      if (currentToken) {
+        const expiry = getTokenExpiry(currentToken);
+        const isValid = expiry && Date.now() < expiry - 10_000;
+
+        if (isValid) {
+          if (!forceRefreshToken) {
+            return currentToken;
+          }
+          // First forceRefresh call = mount, serve from cache.
+          // Subsequent forceRefresh = real rejection, fall through to fetch.
+          if (!handledMountForceRefreshRef.current) {
+            handledMountForceRefreshRef.current = true;
+            return currentToken;
+          }
+        }
+
+        // Token still valid but no expiry claim — trust it unless force-refreshed
+        if (!expiry && !forceRefreshToken) {
+          return currentToken;
+        }
+      }
+
+      // Token is missing or expired — fetch a fresh one
+      try {
+        const response = await fetch("/api/auth/convex/token");
+        if (!response.ok) {
+          tokenRef.current = null;
+          return null;
+        }
+        const data = await response.json();
+        const newToken = data?.token ?? null;
+        tokenRef.current = newToken;
+        return newToken;
+      } catch {
+        tokenRef.current = null;
+        return null;
+      }
+    },
+    [],
+  );
+
+  return useMemo(
+    () => ({
+      isLoading: false,
+      isAuthenticated: !!initialToken,
+      fetchAccessToken,
+    }),
+    [initialToken, fetchAccessToken],
+  );
+}
 
 export function ConvexClientProvider({
   children,
@@ -228,13 +331,11 @@ export function ConvexClientProvider({
   initialToken?: string | null;
 }) {
   return (
-    <ConvexBetterAuthProvider
-      client={convex}
-      authClient={authClient}
-      initialToken={initialToken}
-    >
-      {children}
-    </ConvexBetterAuthProvider>
+    <InitialTokenContext.Provider value={initialToken}>
+      <ConvexProviderWithAuth client={convex} useAuth={useBetterAuth}>
+        {children}
+      </ConvexProviderWithAuth>
+    </InitialTokenContext.Provider>
   );
 }
 ```
@@ -340,11 +441,11 @@ import { preloadAuthQuery } from "./auth-server";
 import { api } from "@/convex/_generated/api";
 
 export const getCachedUser = cache(() =>
-  preloadAuthQuery(api.auth.getCurrentUser)
+  preloadAuthQuery(api.auth.getCurrentUser),
 );
 
 export const getCachedSettings = cache(() =>
-  preloadAuthQuery(api.users.getSettings)
+  preloadAuthQuery(api.users.getSettings),
 );
 
 // Add more as needed for data shared across layout + page
@@ -372,15 +473,33 @@ items: defineTable({
 
 ```ts
 // convex/items.ts
+import { getAuthUserId, requireAuthUserId } from "./auth";
+
+// Query: return empty if not authenticated
 export const list = query({
   handler: async (ctx) => {
-    const user = await authComponent.getAuthUser(ctx);
-    if (!user) return [];
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return [];
 
     return ctx.db
       .query("items")
-      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
+  },
+});
+
+// Mutation: throw if not authenticated
+export const remove = mutation({
+  args: { id: v.id("items") },
+  handler: async (ctx, args) => {
+    const userId = await requireAuthUserId(ctx);
+
+    const item = await ctx.db.get(args.id);
+    if (!item || item.userId !== userId) {
+      throw new Error("Item not found");
+    }
+
+    await ctx.db.delete(args.id);
   },
 });
 ```
@@ -481,7 +600,7 @@ This was verified with debug logging — `useConvexAuth()` returns `{ isLoading:
 Use standard `usePreloadedQuery` from `convex/react`. This works because:
 
 - **Server-side auth is already enforced** — `isAuthenticated()` + `redirect()` in RSCs
-- **`initialToken` provides the token immediately** — `ConvexBetterAuthProvider` receives it from the root layout
+- **`initialToken` provides the token immediately** — our custom provider serves it from memory via `useBetterAuth`
 - **`usePreloadedQuery` hydrates synchronously** — no `undefined` gap, seamless transition to live subscription
 - **Reactive updates still work** — Convex's WebSocket subscription activates after hydration
 
@@ -511,9 +630,10 @@ What happens when a user visits an authenticated page:
       └─ Client component hydrates with preloaded data
 
 4. Client hydration
-   └─ ConvexBetterAuthProvider initializes with server token (no re-fetch)
+   └─ Custom useBetterAuth hook serves server token from memory (0 network requests)
    └─ usePreloadedQuery() hydrates from server data synchronously
    └─ Convex subscribes for real-time updates via WebSocket
+   └─ Token refresh only happens when JWT actually expires
 ```
 
 ---
@@ -531,14 +651,14 @@ lib/
 convex/
   convex.config.ts        # Registers the Better Auth component
   auth.config.ts          # Registers Better Auth as Convex auth provider
-  auth.ts                 # Auth component, createAuth, getCurrentUser query
+  auth.ts                 # Auth component, createAuth, getAuthUserId, getCurrentUser
   http.ts                 # Registers auth HTTP routes
 
 app/
   api/auth/[...all]/
     route.ts              # Catch-all forwarding to Better Auth handler
   layout.tsx              # Root layout with token hydration + Suspense
-  ConvexClientProvider.tsx # Client-side Convex + Better Auth provider
+  ConvexClientProvider.tsx # Custom Convex + Better Auth provider (uses ConvexProviderWithAuth)
   (dashboard)/
     layout.tsx            # Static shell + Suspense header
     page.tsx              # Page with preloading + Suspense

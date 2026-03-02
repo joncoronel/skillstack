@@ -2,13 +2,6 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export default defineSchema({
-  users: defineTable({
-    name: v.string(),
-    email: v.optional(v.string()),
-    image: v.optional(v.string()),
-    externalId: v.string(),
-  }).index("byExternalId", ["externalId"]),
-
   skills: defineTable({
     source: v.string(),
     skillId: v.string(),
@@ -54,9 +47,11 @@ export default defineSchema({
   }).index("by_repo", ["repo"]),
 
   bundles: defineTable({
-    userId: v.id("users"),
+    userId: v.string(),
     name: v.string(),
     urlId: v.string(),
+    creatorName: v.optional(v.string()),
+    creatorImage: v.optional(v.string()),
     skills: v.array(
       v.object({
         source: v.string(),

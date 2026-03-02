@@ -20,7 +20,7 @@ Both `pnpm dev` and `npx convex dev` must be running during local development.
 
 - **Framework:** Next.js 16 (App Router) with React 19
 - **Backend:** Convex (database, serverless functions, cron jobs)
-- **Auth:** Clerk (JWT-based, synced to Convex via webhooks)
+- **Auth:** Better Auth + `@convex-dev/better-auth` (JWT-based, Convex as database)
 - **Styling:** Tailwind CSS v4 with OKLch color system
 - **Package manager:** pnpm
 - **UI components:** Custom library in `components/ui/cubby-ui/` built on Radix UI and Base UI primitives. Component docs available at https://www.cubby-ui.dev/llms.txt
@@ -31,20 +31,21 @@ Both `pnpm dev` and `npx convex dev` must be running during local development.
 
 ### Frontend → Backend Connection
 
-ClerkProvider wraps ConvexProviderWithClerk in the root layout (`app/layout.tsx`). Components use Convex's `useQuery`/`useMutation` hooks with the generated `api` object for real-time data.
+`ConvexProviderWithAuth` wraps the app with a custom `useBetterAuth` hook in the root layout (`app/layout.tsx`). Server-side token is fetched via `getToken()` and passed as `initialToken` for instant hydration. Components use Convex's `useQuery`/`useMutation` hooks with the generated `api` object for real-time data.
 
 ### Convex Backend (`convex/`)
 
-- **schema.ts** — Three tables: `users`, `skills`, `bundles`
-- **skills.ts** — Skill sync pipeline (fetches from skills.sh API), technology auto-tagging via `tagSkill()`, and query functions (`listByTechnologies`, `list`, `getBySourceAndSkillId`)
-- **users.ts** — User CRUD synced from Clerk. Helpers: `getCurrentUser()`, `getCurrentUserOrThrow()`
+- **schema.ts** — Tables: `users`, `skills`, `bundles`, `skillSummaries`, `skillTechnologies`, `githubTreeCache`
+- **auth.ts** — Better Auth component (`authComponent`), `createAuth`, `getAuthUserId`, `requireAuthUserId`
+- **auth.config.ts** — Better Auth provider configuration via `getAuthConfigProvider()`
+- **http.ts** — Better Auth HTTP routes via `authComponent.registerRoutes()`
+- **users.ts** — `getCurrentUser()`, `getCurrentUserOrThrow()`, `ensureUser` mutation. Users linked by `externalId` (Better Auth user ID)
+- **skills.ts** — Skill sync pipeline (fetches from skills.sh API), technology auto-tagging via `tagSkill()`, and query functions
 - **crons.ts** — Daily skill sync at 06:00 UTC
-- **http.ts** — Clerk webhook handler (user create/update/delete) validated with Svix
-- **auth.config.ts** — Clerk JWT issuer configuration
 
 ### Auth Flow
 
-Clerk handles authentication. The middleware (`proxy.ts`) protects non-public routes. Public routes: `/`, `/sign-in`, `/sign-up`, `/stack/*`, `/explore`. Clerk webhooks sync user data to the Convex `users` table.
+Better Auth handles authentication with email/password. The middleware (`proxy.ts`) protects non-public routes using session cookie checks. Public routes: `/`, `/sign-in`, `/sign-up`, `/stack/*`, `/explore`. Server helpers in `lib/auth-server.ts` provide `isAuthenticated`, `preloadAuthQuery`, `getToken`, etc. Auth API requests are proxied through `app/api/auth/[...all]/route.ts` to Convex.
 
 ### Technology Tagging
 
@@ -54,7 +55,7 @@ Two-tier system: `convex/skills.ts` has `tagSkill()` for backend auto-tagging du
 
 1. Skills sync: Cron → `syncSkills` action → skills.sh API → batch upsert with auto-tagging
 2. Discovery: User selects technologies → `useQuery(api.skills.listByTechnologies)` → filtered/sorted results
-3. User sync: Clerk event → HTTP webhook → Svix validation → Convex user upsert/delete
+3. Auth: Better Auth sign-in/sign-up → JWT issued → `ensureUser` mutation creates/updates user doc in Convex
 
 ## Conventions
 

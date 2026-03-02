@@ -1,14 +1,12 @@
-import { preloadQuery } from "convex/nextjs";
+import { redirect } from "next/navigation";
+import { preloadAuthQuery, isAuthenticated } from "@/lib/auth-server";
 import { api } from "@/convex/_generated/api";
-import { getAuthToken } from "@/lib/auth";
 import { DashboardContent } from "./dashboard-content";
 
 export async function DashboardBundles() {
-  const token = await getAuthToken();
-  const preloadedBundles = await preloadQuery(
-    api.bundles.listByUser,
-    {},
-    { token },
-  );
+  const hasAuth = await isAuthenticated();
+  if (!hasAuth) redirect("/sign-in");
+
+  const preloadedBundles = await preloadAuthQuery(api.bundles.listByUser, {});
   return <DashboardContent preloadedBundles={preloadedBundles} />;
 }

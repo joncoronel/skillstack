@@ -1,12 +1,37 @@
-"use client";
-
+import { Suspense } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { ClerkLoaded, ClerkLoading, useAuth, UserButton } from "@clerk/nextjs";
-import { Button } from "@/components/ui/cubby-ui/button";
+import { isAuthenticated } from "@/lib/auth-server";
 import { Skeleton } from "@/components/ui/cubby-ui/skeleton";
 import { ThemeSwitcher } from "@/components/theme-switcher";
-import { cn } from "@/lib/utils";
+import { NavLink } from "./nav-link";
+import { SignOutButton } from "./sign-out-button";
+import { Button } from "@/components/ui/cubby-ui/button";
+
+async function AuthenticatedNav() {
+  const hasAuth = await isAuthenticated();
+  if (!hasAuth) return null;
+
+  return <NavLink href="/dashboard">Dashboard</NavLink>;
+}
+
+async function AuthButton() {
+  const hasAuth = await isAuthenticated();
+
+  if (hasAuth) {
+    return <SignOutButton />;
+  }
+
+  return (
+    <Button
+      nativeButton={false}
+      variant="primary"
+      size="sm"
+      render={<Link href="/sign-in" />}
+    >
+      Sign in
+    </Button>
+  );
+}
 
 export function AppHeader() {
   return (
@@ -22,65 +47,18 @@ export function AppHeader() {
           </Link>
           <nav className="flex items-center gap-1">
             <NavLink href="/explore">Explore</NavLink>
-            <ClerkLoaded>
-              <AuthNav />
-            </ClerkLoaded>
+            <Suspense fallback={null}>
+              <AuthenticatedNav />
+            </Suspense>
           </nav>
         </div>
         <div className="flex items-center gap-3">
           <ThemeSwitcher />
-          <ClerkLoading>
-            <Skeleton className="h-8 w-16 rounded-md" />
-          </ClerkLoading>
-          <ClerkLoaded>
+          <Suspense fallback={<Skeleton className="h-8 w-16 rounded-md" />}>
             <AuthButton />
-          </ClerkLoaded>
+          </Suspense>
         </div>
       </div>
     </header>
-  );
-}
-
-function NavLink({
-  href,
-  children,
-}: {
-  href: string;
-  children: React.ReactNode;
-}) {
-  const pathname = usePathname();
-  const isActive = pathname === href;
-
-  return (
-    <Button
-      nativeButton={false}
-      variant="ghost"
-      size="sm"
-      render={<Link href={href} />}
-      className={cn(isActive && "text-foreground font-medium")}
-    >
-      {children}
-    </Button>
-  );
-}
-
-function AuthNav() {
-  const { isSignedIn } = useAuth();
-  if (!isSignedIn) return null;
-  return <NavLink href="/dashboard">Dashboard</NavLink>;
-}
-
-function AuthButton() {
-  const { isSignedIn } = useAuth();
-  if (isSignedIn) return <UserButton />;
-  return (
-    <Button
-      nativeButton={false}
-      variant="primary"
-      size="sm"
-      render={<Link href="/sign-in" />}
-    >
-      Sign in
-    </Button>
   );
 }

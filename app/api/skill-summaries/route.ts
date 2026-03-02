@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
+import { cacheLife } from "next/cache";
 import { fetchQuery } from "convex/nextjs";
 import type { PaginationResult } from "convex/server";
 import { api } from "@/convex/_generated/api";
 import MiniSearch from "minisearch";
 
-export const dynamic = "force-static";
-export const revalidate = 86400; // 24 hours
+async function getSearchIndex() {
+  "use cache";
+  cacheLife({ revalidate: 86400, expire: 604800 });
 
-export async function GET() {
   const skills: Array<Record<string, unknown>> = [];
   let cursor: string | null = null;
   let isDone = false;
@@ -35,5 +36,10 @@ export async function GET() {
 
   miniSearch.addAll(skills.map((s, i) => ({ ...s, id: i })));
 
-  return NextResponse.json(JSON.parse(JSON.stringify(miniSearch)));
+  return JSON.parse(JSON.stringify(miniSearch)) as Record<string, unknown>;
+}
+
+export async function GET() {
+  const index = await getSearchIndex();
+  return NextResponse.json(index);
 }
