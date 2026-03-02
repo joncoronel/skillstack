@@ -8,7 +8,6 @@ import { Sheet, SheetContent } from "@/components/ui/cubby-ui/sheet";
 import { useBundleSelection } from "@/lib/bundle-selection-context";
 import { generateAllCommandsText } from "@/lib/install-commands";
 import { SaveBundleDialog } from "@/components/save-bundle-dialog";
-
 export function BundleBar() {
   const selection = useBundleSelection();
   const { isSignedIn } = useAuth();

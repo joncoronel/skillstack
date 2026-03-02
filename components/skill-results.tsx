@@ -113,6 +113,7 @@ export function SkillResults({ selectedTechnologies }: SkillResultsProps) {
         ))}
       </div>
     );
+
   }
 
   const { groups } = displayResult;
@@ -148,13 +149,20 @@ export function SkillResults({ selectedTechnologies }: SkillResultsProps) {
         {groups.map(({ technology, skills, hasMore }) => {
           if (skills.length === 0) return null;
 
+          // Offset so "show more" batches animate from 0 instead of their absolute index
+          const animOffset = (techLimits[technology] ?? PAGE_SIZE) - PAGE_SIZE;
+
           return (
             <Collapsible key={technology} defaultOpen>
               <section>
                 <CollapsibleTrigger className="border-none bg-transparent shadow-none ring-0 py-1 hover:bg-transparent hover:opacity-80">
-                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                  <h3 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                    <span
+                      className="inline-block size-1.5 rounded-full shrink-0 bg-primary"
+                      aria-hidden="true"
+                    />
                     {techNameMap.get(technology) ?? technology}
-                    <span className="ml-2 text-xs font-normal">
+                    <span className="text-xs font-normal">
                       ({skills.length})
                     </span>
                   </h3>
@@ -162,18 +170,23 @@ export function SkillResults({ selectedTechnologies }: SkillResultsProps) {
                 </CollapsibleTrigger>
                 <CollapsibleContent className="max-sm:duration-0">
                   <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    {skills.map((skill) => (
-                      <SkillCard
+                    {skills.map((skill, i) => (
+                      <div
                         key={`${skill.source}/${skill.skillId}`}
-                        name={skill.name}
-                        source={skill.source}
-                        skillId={skill.skillId}
-                        description={skill.description}
-                        installs={skill.installs}
-                        technologies={skill.technologies}
-                        selectable
-                        onViewDetail={() => setActiveSkill(skill)}
-                      />
+                        className="animate-in fade-in slide-in-from-bottom-1 fill-mode-[both]"
+                        style={{ animationDelay: `${Math.max(0, i - animOffset) * 15}ms`, animationDuration: "100ms" }}
+                      >
+                        <SkillCard
+                          name={skill.name}
+                          source={skill.source}
+                          skillId={skill.skillId}
+                          description={skill.description}
+                          installs={skill.installs}
+                          technologies={skill.technologies}
+                          selectable
+                          onViewDetail={() => setActiveSkill(skill)}
+                        />
+                      </div>
                     ))}
                   </div>
                   {hasMore && (

@@ -61,7 +61,7 @@ export function StickyTechBar({
                   <button
                     key={id}
                     onClick={() => onRemove(id)}
-                    className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
+                    className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-full border bg-secondary text-secondary-foreground px-2.5 py-0.5 text-xs font-medium transition-colors hover:opacity-80"
                   >
                     {techNameMap.get(id) ?? id}
                     <XIcon className="size-3" />

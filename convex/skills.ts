@@ -121,7 +121,7 @@ function tagResultsToIds(results: TagResult[]): string[] {
 // Sync actions
 // ---------------------------------------------------------------------------
 
-const BATCH_SIZE = 100;
+const BATCH_SIZE = 20;
 const MIN_INSTALLS = 50;
 
 export const syncSkills = internalAction({
@@ -304,13 +304,13 @@ export const upsertSkillsBatch = internalMutation({
       const technologies = tagResultsToIds(tagResults);
 
       let skillDocId;
+      const tagsChanged = existing
+        ? JSON.stringify(existing.technologies.slice().sort()) !==
+          JSON.stringify(technologies.slice().sort())
+        : false;
 
       if (existing) {
         skillDocId = existing._id;
-
-        const tagsChanged =
-          JSON.stringify(existing.technologies.slice().sort()) !==
-          JSON.stringify(technologies.slice().sort());
 
         await ctx.db.patch(existing._id, {
           installs: skill.installs,
@@ -347,14 +347,23 @@ export const upsertSkillsBatch = internalMutation({
         );
       }
 
-      await upsertSkillSummary(ctx, {
-        source: skill.source,
-        skillId: skill.skillId,
-        name: skill.name,
-        description: existing?.description,
-        installs: skill.installs,
-        technologies,
-      });
+      // Only update the summary when something actually changed
+      const summaryChanged =
+        !existing ||
+        existing.name !== skill.name ||
+        existing.installs !== skill.installs ||
+        tagsChanged;
+
+      if (summaryChanged) {
+        await upsertSkillSummary(ctx, {
+          source: skill.source,
+          skillId: skill.skillId,
+          name: skill.name,
+          description: existing?.description,
+          installs: skill.installs,
+          technologies,
+        });
+      }
     }
   },
 });
@@ -1091,10 +1100,9 @@ export const listSkillSummaries = query({
 });
 
 export const listAllSkillSummaries = query({
-  args: {},
-  handler: async (ctx) => {
-    const summaries = await ctx.db.query("skillSummaries").collect();
-    return summaries.sort((a, b) => b.installs - a.installs);
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, { paginationOpts }) => {
+    return ctx.db.query("skillSummaries").paginate(paginationOpts);
   },
 });
 

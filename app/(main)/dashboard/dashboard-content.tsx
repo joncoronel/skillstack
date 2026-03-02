@@ -77,48 +77,53 @@ export function DashboardContent({ preloadedBundles }: DashboardContentProps) {
   return (
     <>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {bundles.map((bundle) => (
-          <BundleCard
+        {bundles.map((bundle, i) => (
+          <div
             key={bundle._id}
-            name={bundle.name}
-            urlId={bundle.urlId}
-            skillCount={bundle.skills.length}
-            createdAt={bundle.createdAt}
-            creatorName="You"
-            technologies={[]}
-            isPublic={bundle.isPublic}
-            actions={
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="xs"
-                  nativeButton={false}
-                  render={<Link href={`/stack/${bundle.urlId}`} />}
-                >
-                  View
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  onClick={() =>
-                    updateVisibility({
-                      bundleId: bundle._id,
-                      isPublic: !bundle.isPublic,
-                    })
-                  }
-                >
-                  {bundle.isPublic ? "Make private" : "Make public"}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  onClick={() => setDeletingId(bundle._id)}
-                >
-                  Delete
-                </Button>
-              </div>
-            }
-          />
+            className="animate-in fade-in slide-in-from-bottom-2 fill-mode-[both]"
+            style={{ animationDelay: `${i * 30}ms`, animationDuration: "150ms" }}
+          >
+            <BundleCard
+              name={bundle.name}
+              urlId={bundle.urlId}
+              skillCount={bundle.skills.length}
+              createdAt={bundle.createdAt}
+              creatorName="You"
+              technologies={[]}
+              isPublic={bundle.isPublic}
+              actions={
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    nativeButton={false}
+                    render={<Link href={`/stack/${bundle.urlId}`} />}
+                  >
+                    View
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    onClick={() =>
+                      updateVisibility({
+                        bundleId: bundle._id,
+                        isPublic: !bundle.isPublic,
+                      })
+                    }
+                  >
+                    {bundle.isPublic ? "Make private" : "Make public"}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    onClick={() => setDeletingId(bundle._id)}
+                  >
+                    Delete
+                  </Button>
+                </div>
+              }
+            />
+          </div>
         ))}
       </div>
 
