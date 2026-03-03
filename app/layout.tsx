@@ -34,14 +34,20 @@ async function ConvexProviderWithToken({
 }: {
   children: React.ReactNode;
 }) {
-  // Fast path: skip the expensive HTTP call to Convex site URL when signed out.
-  // getToken() always makes a network request when there's no cached JWT cookie,
-  // even if the user has no session. Checking the session cookie first avoids this.
   const cookieStore = await cookies();
   const hasSession = cookieStore.has("better-auth.session_token");
-  const token = hasSession ? await getToken() : null;
+  const hasJwt = cookieStore.has("better-auth.convex_jwt");
+  // Only call getToken() when the JWT cookie exists — it returns instantly from
+  // the cookie value with no network call. When the JWT cookie is missing (expired),
+  // skip it: getToken() would make a slow HTTP call to Convex AND the resulting
+  // cookie would only reach the Next.js server, not the browser. Instead, pass
+  // hasSession=true so the client fetches via /api/auth/convex/token, which goes
+  // through the Next.js proxy and properly sets the cookie in the browser.
+  const token = hasSession && hasJwt ? await getToken() : null;
   return (
-    <ConvexClientProvider initialToken={token}>{children}</ConvexClientProvider>
+    <ConvexClientProvider initialToken={token} hasSession={hasSession}>
+      {children}
+    </ConvexClientProvider>
   );
 }
 

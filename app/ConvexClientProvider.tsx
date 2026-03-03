@@ -30,6 +30,8 @@ convexQueryClient.connect(queryClient);
 
 // Context to pass the server-provided token to the auth hook
 const InitialTokenContext = createContext<string | null | undefined>(null);
+// Whether the server confirmed an active session (even if the JWT cookie expired)
+const HasSessionContext = createContext(false);
 
 // Decode JWT exp claim without a library
 function getTokenExpiry(token: string): number | null {
@@ -45,6 +47,7 @@ function getTokenExpiry(token: string): number | null {
 // only fetching from the API when Convex requests a refresh (token expired).
 function useBetterAuth() {
   const initialToken = useContext(InitialTokenContext);
+  const hasSession = useContext(HasSessionContext);
   const tokenRef = useRef(initialToken);
 
   // The provider fires forceRefreshToken:true once on mount (harmless) — we skip it.
@@ -99,27 +102,33 @@ function useBetterAuth() {
   return useMemo(
     () => ({
       isLoading: false,
-      isAuthenticated: !!initialToken,
+      // True if we have a token, or if the server confirmed a session exists
+      // (JWT expired but session still active — fetchAccessToken will get a fresh one)
+      isAuthenticated: !!initialToken || hasSession,
       fetchAccessToken,
     }),
-    [initialToken, fetchAccessToken],
+    [initialToken, hasSession, fetchAccessToken],
   );
 }
 
 export function ConvexClientProvider({
   children,
   initialToken,
+  hasSession = false,
 }: {
   children: ReactNode;
   initialToken?: string | null;
+  hasSession?: boolean;
 }) {
   return (
-    <InitialTokenContext.Provider value={initialToken}>
-      <ConvexProviderWithAuth client={convex} useAuth={useBetterAuth}>
-        <QueryClientProvider client={queryClient}>
-          {children}
-        </QueryClientProvider>
-      </ConvexProviderWithAuth>
-    </InitialTokenContext.Provider>
+    <HasSessionContext.Provider value={hasSession}>
+      <InitialTokenContext.Provider value={initialToken}>
+        <ConvexProviderWithAuth client={convex} useAuth={useBetterAuth}>
+          <QueryClientProvider client={queryClient}>
+            {children}
+          </QueryClientProvider>
+        </ConvexProviderWithAuth>
+      </InitialTokenContext.Provider>
+    </HasSessionContext.Provider>
   );
 }
