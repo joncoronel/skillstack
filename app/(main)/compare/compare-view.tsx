@@ -96,7 +96,7 @@ function CompareColumn({ source, skillId }: SkillRef) {
         </p>
         {skill.technologies.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-2">
-            {skill.technologies.map((techId) => (
+            {skill.technologies.map((techId: string) => (
               <Badge
                 key={techId}
                 variant="secondary"
@@ -175,7 +175,12 @@ export function CompareView() {
   return (
     <>
       {/* Desktop: side-by-side columns */}
-      <div className="hidden md:grid md:gap-6" style={{ gridTemplateColumns: `repeat(${Math.min(refs.length, 3)}, 1fr)` }}>
+      <div
+        className="hidden md:grid md:gap-6"
+        style={{
+          gridTemplateColumns: `repeat(${Math.min(refs.length, 3)}, 1fr)`,
+        }}
+      >
         {refs.slice(0, 3).map((ref) => (
           <CompareColumn
             key={`${ref.source}:${ref.skillId}`}

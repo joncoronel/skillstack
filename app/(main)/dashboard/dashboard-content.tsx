@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePreloadedQuery, useMutation, type Preloaded } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import type { Id } from "@/convex/_generated/dataModel";
+import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { BundleCard } from "@/components/bundle-card";
 import { Button } from "@/components/ui/cubby-ui/button";
 import {
@@ -22,11 +22,11 @@ interface DashboardContentProps {
 }
 
 export function DashboardContent({ preloadedBundles }: DashboardContentProps) {
-  const bundles = usePreloadedQuery(preloadedBundles);
+  const bundles: Doc<"bundles">[] = usePreloadedQuery(preloadedBundles);
   const deleteBundle = useMutation(
     api.bundles.deleteBundle,
   ).withOptimisticUpdate((localStore, { bundleId }) => {
-    const current = localStore.getQuery(api.bundles.listByUser, {});
+    const current = localStore.getQuery(api.bundles.listByUser, {}) as Doc<"bundles">[] | undefined;
     if (current !== undefined) {
       localStore.setQuery(
         api.bundles.listByUser,
@@ -38,7 +38,7 @@ export function DashboardContent({ preloadedBundles }: DashboardContentProps) {
   const updateVisibility = useMutation(
     api.bundles.updateBundleVisibility,
   ).withOptimisticUpdate((localStore, { bundleId, isPublic }) => {
-    const current = localStore.getQuery(api.bundles.listByUser, {});
+    const current = localStore.getQuery(api.bundles.listByUser, {}) as Doc<"bundles">[] | undefined;
     if (current !== undefined) {
       localStore.setQuery(
         api.bundles.listByUser,

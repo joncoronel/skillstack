@@ -3,19 +3,26 @@
 import { useMemo } from "react";
 import { useQueryState } from "nuqs";
 import Link from "next/link";
-import { usePreloadedQuery, type Preloaded } from "convex/react";
-import { api } from "@/convex/_generated/api";
 import { sortParser } from "@/lib/search-params";
 import { BundleCard } from "@/components/bundle-card";
 import { Button } from "@/components/ui/cubby-ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/cubby-ui/tabs";
 
-interface ExploreContentProps {
-  preloadedBundles: Preloaded<typeof api.bundles.listPublic>;
+interface PublicBundle {
+  _id: string;
+  name: string;
+  urlId: string;
+  skillCount: number;
+  createdAt: number;
+  creatorName: string;
+  technologies: string[];
 }
 
-export function ExploreContent({ preloadedBundles }: ExploreContentProps) {
-  const bundles = usePreloadedQuery(preloadedBundles);
+interface ExploreContentProps {
+  bundles: PublicBundle[];
+}
+
+export function ExploreContent({ bundles }: ExploreContentProps) {
   const [sort, setSort] = useQueryState("sort", sortParser);
 
   const sorted = useMemo(() => {

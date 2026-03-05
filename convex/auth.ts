@@ -1,26 +1,28 @@
-import { createClient, type GenericCtx } from "@convex-dev/better-auth";
-import { convex } from "@convex-dev/better-auth/plugins";
-import { components } from "./_generated/api";
-import { DataModel } from "./_generated/dataModel";
-import { QueryCtx, MutationCtx } from "./_generated/server";
-import { betterAuth } from "better-auth/minimal";
+import { convex } from "better-convex/auth";
 import authConfig from "./auth.config";
+import { defineAuth } from "./generated/auth";
+import type { QueryCtx, MutationCtx } from "./_generated/server";
 
-const siteUrl = process.env.SITE_URL!;
-
-export const authComponent = createClient<DataModel>(components.betterAuth);
-
-export const createAuth = (ctx: GenericCtx<DataModel>) => {
-  return betterAuth({
-    baseURL: siteUrl,
-    database: authComponent.adapter(ctx),
+export default defineAuth(() => {
+  return {
+    baseURL: process.env.SITE_URL!,
     emailAndPassword: { enabled: true, requireEmailVerification: false },
-    plugins: [convex({ authConfig })],
-  });
-};
+    plugins: [
+      convex({
+        authConfig,
+        jwks: process.env.JWKS,
+      }),
+    ],
+    session: {
+      expiresIn: 60 * 60 * 24 * 30, // 30 days
+      updateAge: 60 * 60 * 24 * 15, // 15 days
+    },
+    trustedOrigins: [process.env.SITE_URL ?? "http://localhost:3000"],
+  };
+});
 
 // Get the authenticated user's ID from the JWT identity directly.
-// This avoids 2 unnecessary DB queries per call that authComponent.getAuthUser does.
+// This avoids unnecessary DB queries per call.
 // Returns null if not authenticated.
 export async function getAuthUserId(
   ctx: QueryCtx | MutationCtx,

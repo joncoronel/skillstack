@@ -1,16 +1,11 @@
 "use client";
 
-import {
-  ReactNode,
-  createContext,
-  useCallback,
-  useContext,
-  useMemo,
-  useRef,
-} from "react";
-import { ConvexReactClient, ConvexProviderWithAuth } from "convex/react";
+import { ReactNode } from "react";
+import { ConvexReactClient } from "convex/react";
+import { ConvexAuthProvider } from "better-convex/auth/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ConvexQueryClient } from "@convex-dev/react-query";
+import { authClient } from "@/lib/auth-client";
 
 if (!process.env.NEXT_PUBLIC_CONVEX_URL) {
   throw new Error("Missing NEXT_PUBLIC_CONVEX_URL in your .env file");
@@ -28,107 +23,22 @@ const queryClient = new QueryClient({
 });
 convexQueryClient.connect(queryClient);
 
-// Context to pass the server-provided token to the auth hook
-const InitialTokenContext = createContext<string | null | undefined>(null);
-// Whether the server confirmed an active session (even if the JWT cookie expired)
-const HasSessionContext = createContext(false);
-
-// Decode JWT exp claim without a library
-function getTokenExpiry(token: string): number | null {
-  try {
-    const payload = JSON.parse(atob(token.split(".")[1]));
-    return payload.exp ? payload.exp * 1000 : null;
-  } catch {
-    return null;
-  }
-}
-
-// Custom auth hook that uses the server-provided token immediately,
-// only fetching from the API when Convex requests a refresh (token expired).
-function useBetterAuth() {
-  const initialToken = useContext(InitialTokenContext);
-  const hasSession = useContext(HasSessionContext);
-  const tokenRef = useRef(initialToken);
-
-  // The provider fires forceRefreshToken:true once on mount (harmless) — we skip it.
-  // Any subsequent forceRefreshToken:true means Convex actually rejected the token.
-  const handledMountForceRefreshRef = useRef(false);
-
-  const fetchAccessToken = useCallback(
-    async ({ forceRefreshToken }: { forceRefreshToken: boolean }) => {
-      const currentToken = tokenRef.current;
-
-      if (currentToken) {
-        const expiry = getTokenExpiry(currentToken);
-        const isValid = expiry && Date.now() < expiry - 10_000;
-
-        if (isValid) {
-          if (!forceRefreshToken) {
-            return currentToken;
-          }
-          // First forceRefresh call = mount, serve from cache.
-          // Subsequent forceRefresh = real rejection, fall through to fetch.
-          if (!handledMountForceRefreshRef.current) {
-            handledMountForceRefreshRef.current = true;
-            return currentToken;
-          }
-        }
-
-        // Token still valid but no expiry claim — trust it unless force-refreshed
-        if (!expiry && !forceRefreshToken) {
-          return currentToken;
-        }
-      }
-
-      // Token is missing or expired — fetch a fresh one
-      try {
-        const response = await fetch("/api/auth/convex/token");
-        if (!response.ok) {
-          tokenRef.current = null;
-          return null;
-        }
-        const data = await response.json();
-        const newToken = data?.token ?? null;
-        tokenRef.current = newToken;
-        return newToken;
-      } catch {
-        tokenRef.current = null;
-        return null;
-      }
-    },
-    [],
-  );
-
-  return useMemo(
-    () => ({
-      isLoading: false,
-      // True if we have a token, or if the server confirmed a session exists
-      // (JWT expired but session still active — fetchAccessToken will get a fresh one)
-      isAuthenticated: !!initialToken || hasSession,
-      fetchAccessToken,
-    }),
-    [initialToken, hasSession, fetchAccessToken],
-  );
-}
-
 export function ConvexClientProvider({
   children,
   initialToken,
-  hasSession = false,
 }: {
   children: ReactNode;
   initialToken?: string | null;
-  hasSession?: boolean;
 }) {
   return (
-    <HasSessionContext.Provider value={hasSession}>
-      <InitialTokenContext.Provider value={initialToken}>
-        <ConvexProviderWithAuth client={convex} useAuth={useBetterAuth}>
-          <QueryClientProvider client={queryClient}>
-            {children}
-          </QueryClientProvider>
-        </ConvexProviderWithAuth>
-      </InitialTokenContext.Provider>
-    </HasSessionContext.Provider>
+    <ConvexAuthProvider
+      client={convex}
+      authClient={authClient}
+      initialToken={initialToken ?? undefined}
+    >
+      <QueryClientProvider client={queryClient}>
+        {children}
+      </QueryClientProvider>
+    </ConvexAuthProvider>
   );
 }

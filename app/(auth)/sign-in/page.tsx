@@ -29,7 +29,7 @@ export default function SignInPage() {
         setLoading(false);
         return;
       }
-
+      setLoading(false);
       router.push("/");
     } catch {
       setError("Something went wrong. Please try again.");
@@ -79,9 +79,7 @@ export default function SignInPage() {
           />
         </div>
 
-        {error && (
-          <p className="text-sm text-destructive">{error}</p>
-        )}
+        {error && <p className="text-sm text-destructive">{error}</p>}
 
         <Button
           type="submit"

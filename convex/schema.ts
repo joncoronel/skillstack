@@ -1,7 +1,10 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { tables as authTables } from "./authSchema";
 
 export default defineSchema({
+  ...authTables,
+
   skills: defineTable({
     source: v.string(),
     skillId: v.string(),

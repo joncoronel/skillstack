@@ -1,13 +1,13 @@
 import { cacheLife } from "next/cache";
-import { preloadQuery } from "convex/nextjs";
+import { fetchQuery } from "convex/nextjs";
 import { api } from "@/convex/_generated/api";
 import { ExploreContent } from "./explore-content";
 
 export async function ExploreBundles() {
   "use cache";
   cacheLife("minutes");
-  const preloadedBundles = await preloadQuery(api.bundles.listPublic, {
+  const bundles = await fetchQuery(api.bundles.listPublic, {
     limit: 30,
   });
-  return <ExploreContent preloadedBundles={preloadedBundles} />;
+  return <ExploreContent bundles={bundles} />;
 }

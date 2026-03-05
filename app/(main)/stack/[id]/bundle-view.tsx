@@ -96,7 +96,7 @@ export function BundleView({
     );
   }
 
-  const updatedCount = bundle.skills.filter((s) => s.updatedSinceAdded).length;
+  const updatedCount = bundle.skills.filter((s: SkillInfo) => s.updatedSinceAdded).length;
 
   return (
     <main className="mx-auto max-w-5xl px-4 pt-12 pb-20">
@@ -166,7 +166,7 @@ export function BundleView({
           Skills in this bundle
         </h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {bundle.skills.map((skill) => (
+          {bundle.skills.map((skill: SkillInfo) => (
             <SkillCard
               key={`${skill.source}/${skill.skillId}`}
               name={skill.name}

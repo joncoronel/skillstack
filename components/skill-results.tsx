@@ -116,9 +116,9 @@ export function SkillResults({ selectedTechnologies }: SkillResultsProps) {
 
   }
 
-  const { groups } = displayResult;
+  const { groups } = displayResult as GroupResult;
   const loadedTechs = new Set(groups.map((g) => g.technology));
-  const totalSkills = groups.reduce((sum, g) => sum + g.skills.length, 0);
+  const totalSkills = groups.reduce((sum: number, g) => sum + g.skills.length, 0);
 
   // Technologies in the selection that aren't in the display yet (still loading)
   const pendingTechs = selectedTechnologies.filter(
@@ -146,7 +146,7 @@ export function SkillResults({ selectedTechnologies }: SkillResultsProps) {
   return (
     <>
       <div className="space-y-8">
-        {groups.map(({ technology, skills, hasMore }) => {
+        {groups.map(({ technology, skills, hasMore }: GroupResult["groups"][number]) => {
           if (skills.length === 0) return null;
 
           // Offset so "show more" batches animate from 0 instead of their absolute index

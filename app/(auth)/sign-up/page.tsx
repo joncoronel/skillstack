@@ -32,6 +32,7 @@ export default function SignUpPage() {
         return;
       }
 
+      setLoading(false);
       router.push("/");
     } catch {
       setError("Something went wrong. Please try again.");
@@ -97,9 +98,7 @@ export default function SignUpPage() {
           />
         </div>
 
-        {error && (
-          <p className="text-sm text-destructive">{error}</p>
-        )}
+        {error && <p className="text-sm text-destructive">{error}</p>}
 
         <Button
           type="submit"
