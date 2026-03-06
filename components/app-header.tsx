@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ClerkLoaded, ClerkLoading, useAuth, UserButton } from "@clerk/nextjs";
+import { ClerkLoaded, ClerkLoading, useAuth } from "@clerk/nextjs";
+import { UserMenu } from "@/components/auth/user-menu";
 import { Button } from "@/components/ui/cubby-ui/button";
 import { Skeleton } from "@/components/ui/cubby-ui/skeleton";
 import { ThemeSwitcher } from "@/components/theme-switcher";
@@ -72,7 +73,7 @@ function AuthNav() {
 
 function AuthButton() {
   const { isSignedIn } = useAuth();
-  if (isSignedIn) return <UserButton />;
+  if (isSignedIn) return <UserMenu />;
   return (
     <Button
       nativeButton={false}

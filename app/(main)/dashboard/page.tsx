@@ -1,8 +1,10 @@
 import { Suspense } from "react";
 import { Skeleton } from "@/components/ui/cubby-ui/skeleton";
 import { DashboardBundles } from "./dashboard-bundles";
+import { verifySession } from "@/lib/auth";
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  await verifySession();
   return (
     <main className="mx-auto max-w-5xl px-4 pt-12 pb-20">
       <div className="mb-8">
