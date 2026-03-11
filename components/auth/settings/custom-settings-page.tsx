@@ -1,6 +1,7 @@
 "use client";
 
-import * as React from "react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { UserIcon, SecurityLockIcon } from "@hugeicons/core-free-icons";
 import {
   Tabs,
   TabsList,
@@ -10,9 +11,7 @@ import {
 } from "@/components/ui/cubby-ui/tabs";
 import { ReverificationProvider } from "./reverification-provider";
 import { ProfileTab } from "./profile-tab";
-import { SecurityTab } from "./security-tab";
-import { SessionsTab, SessionsSkeleton, type BackendSession } from "./sessions-tab";
-import { DangerZone } from "./danger-zone";
+import { SecurityTab, type BackendSession } from "./security-tab";
 
 export type { BackendSession };
 
@@ -23,30 +22,26 @@ export function CustomSettingsPage({
 }) {
   return (
     <ReverificationProvider>
-      <div className="flex flex-col gap-8">
-        <Tabs defaultValue="profile">
-          <TabsList variant="underline">
-            <TabsTrigger value="profile">Profile</TabsTrigger>
-            <TabsTrigger value="security">Security</TabsTrigger>
-            <TabsTrigger value="sessions">Sessions</TabsTrigger>
-          </TabsList>
-          <TabsPanels>
-            <TabsContent value="profile">
-              <ProfileTab />
-            </TabsContent>
-            <TabsContent value="security">
-              <SecurityTab />
-            </TabsContent>
-            <TabsContent value="sessions">
-              <React.Suspense fallback={<SessionsSkeleton />}>
-                <SessionsTab sessionsPromise={sessionsPromise} />
-              </React.Suspense>
-            </TabsContent>
-          </TabsPanels>
-        </Tabs>
-
-        <DangerZone />
-      </div>
+      <Tabs defaultValue="profile" className="gap-8">
+        <TabsList variant="underline">
+          <TabsTrigger value="profile">
+            <HugeiconsIcon icon={UserIcon} data-icon="inline-start" />
+            Profile
+          </TabsTrigger>
+          <TabsTrigger value="security">
+            <HugeiconsIcon icon={SecurityLockIcon} data-icon="inline-start" />
+            Security
+          </TabsTrigger>
+        </TabsList>
+        <TabsPanels>
+          <TabsContent value="profile">
+            <ProfileTab />
+          </TabsContent>
+          <TabsContent value="security">
+            <SecurityTab sessionsPromise={sessionsPromise} />
+          </TabsContent>
+        </TabsPanels>
+      </Tabs>
     </ReverificationProvider>
   );
 }

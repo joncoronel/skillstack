@@ -21,6 +21,7 @@ import { Separator } from "@/components/ui/cubby-ui/separator";
 import { Skeleton } from "@/components/ui/cubby-ui/skeleton";
 import { Crossfade } from "@/components/ui/cubby-ui/crossfade";
 import { EmailSection } from "./email-section";
+import { ConnectedAccountsSection } from "./connected-accounts-section";
 
 function ProfileSkeleton() {
   return (
@@ -109,6 +110,7 @@ export function ProfileTab() {
   };
 
   return (
+    <div className="flex flex-col gap-6">
     <Card>
       <CardHeader>
         <CardTitle>Profile</CardTitle>
@@ -223,5 +225,8 @@ export function ProfileTab() {
         <EmailSection />
       </CardContent>
     </Card>
+
+    <ConnectedAccountsSection />
+    </div>
   );
 }
