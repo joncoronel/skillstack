@@ -709,6 +709,34 @@ function SecuritySkeleton() {
 
 function SecurityTab() {
   const { isLoaded, user } = useUser();
+  const [reverification, setReverification] =
+    React.useState<PasswordReverificationState>();
+
+  const onNeedsReverification = React.useCallback(
+    ({ complete, cancel }: { complete: () => void; cancel: () => void }) => {
+      setReverification({ complete, cancel, inProgress: true });
+    },
+    [],
+  );
+
+  const connectAccount = useReverification(
+    (strategy: string) =>
+      user?.createExternalAccount({
+        strategy: strategy as Parameters<
+          typeof user.createExternalAccount
+        >[0]["strategy"],
+        redirectUrl: "/settings/custom",
+      }),
+    { onNeedsReverification },
+  );
+
+  const disconnectAccount = useReverification(
+    (accountId: string) => {
+      const account = user?.externalAccounts?.find((a) => a.id === accountId);
+      return account?.destroy();
+    },
+    { onNeedsReverification },
+  );
 
   if (!isLoaded || !user) return <SecuritySkeleton />;
 
@@ -716,30 +744,25 @@ function SecurityTab() {
   const connectedAccounts = user.externalAccounts ?? [];
 
   const handleDisconnect = async (accountId: string) => {
-    const account = connectedAccounts.find((a) => a.id === accountId);
-    if (!account) return;
     try {
-      await account.destroy();
+      await disconnectAccount(accountId);
       await user.reload();
     } catch (err) {
+      if (isReverificationCancelledError(err)) return;
       console.error("Failed to disconnect account:", err);
     }
   };
 
   const handleConnect = async (strategy: string) => {
     try {
-      const res = await user.createExternalAccount({
-        strategy: strategy as Parameters<
-          typeof user.createExternalAccount
-        >[0]["strategy"],
-        redirectUrl: "/settings/custom",
-      });
+      const res = await connectAccount(strategy);
       const redirectUrl =
         res?.verification?.externalVerificationRedirectURL?.href;
       if (redirectUrl) {
         globalThis.location.assign(redirectUrl);
       }
     } catch (err) {
+      if (isReverificationCancelledError(err)) return;
       console.error("Failed to connect account:", err);
     }
   };
@@ -754,6 +777,18 @@ function SecurityTab() {
 
   return (
     <div className="flex flex-col gap-6">
+      <ReverificationDialog
+        open={reverification?.inProgress ?? false}
+        email={user.primaryEmailAddress?.emailAddress ?? ""}
+        onComplete={() => {
+          reverification?.complete();
+          setReverification(undefined);
+        }}
+        onCancel={() => {
+          reverification?.cancel();
+          setReverification(undefined);
+        }}
+      />
       <PasswordSection hasPassword={hasPassword} />
 
       <Card>
@@ -1017,7 +1052,6 @@ type PasswordReverificationState = {
 function PasswordSection({ hasPassword }: { hasPassword: boolean }) {
   const { user } = useUser();
   const [editing, setEditing] = React.useState(false);
-  const [currentPassword, setCurrentPassword] = React.useState("");
   const [newPassword, setNewPassword] = React.useState("");
   const [confirmPassword, setConfirmPassword] = React.useState("");
   const [signOutOthers, setSignOutOthers] = React.useState(true);
@@ -1041,7 +1075,6 @@ function PasswordSection({ hasPassword }: { hasPassword: boolean }) {
 
   const resetForm = () => {
     setEditing(false);
-    setCurrentPassword("");
     setNewPassword("");
     setConfirmPassword("");
     setSignOutOthers(true);
@@ -1060,7 +1093,6 @@ function PasswordSection({ hasPassword }: { hasPassword: boolean }) {
     setSuccess(false);
     try {
       await updatePassword({
-        ...(hasPassword ? { currentPassword } : {}),
         newPassword,
         signOutOfOtherSessions: signOutOthers,
       });
@@ -1121,18 +1153,6 @@ function PasswordSection({ hasPassword }: { hasPassword: boolean }) {
             onSubmit={handleSubmit}
             className="flex flex-col gap-4 max-w-sm"
           >
-            {hasPassword && (
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="currentPassword">Current password</Label>
-                <Input
-                  id="currentPassword"
-                  type="password"
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  required
-                />
-              </div>
-            )}
             <div className="flex flex-col gap-2">
               <Label htmlFor="newPassword">New password</Label>
               <Input
