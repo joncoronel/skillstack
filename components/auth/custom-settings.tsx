@@ -1,8 +1,17 @@
 "use client";
 
 import * as React from "react";
-import { useUser, useClerk } from "@clerk/nextjs";
-import { isClerkAPIResponseError } from "@clerk/nextjs/errors";
+import {
+  useUser,
+  useClerk,
+  useSession,
+  useReverification,
+} from "@clerk/nextjs";
+import {
+  isClerkAPIResponseError,
+  isReverificationCancelledError,
+} from "@clerk/nextjs/errors";
+import { MoreHorizontalIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { revokeSession } from "@/app/(main)/settings/custom/actions";
 import {
@@ -40,6 +49,26 @@ import {
   AlertDialogClose,
 } from "@/components/ui/cubby-ui/alert-dialog";
 import { Checkbox } from "@/components/ui/cubby-ui/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/cubby-ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogBody,
+  DialogFooter,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/cubby-ui/dialog";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/cubby-ui/input-otp";
 import { Skeleton } from "@/components/ui/cubby-ui/skeleton";
 import { useAnimatedHeight } from "@/hooks/cubby-ui/use-animated-height";
 import { cn } from "@/lib/utils";
@@ -321,49 +350,121 @@ function EmailSection() {
       NonNullable<ReturnType<typeof useUser>["user"]>["emailAddresses"][number]
     >();
   const [error, setError] = React.useState("");
+  const [resendCountdown, setResendCountdown] = React.useState(0);
+  const [reverification, setReverification] =
+    React.useState<PasswordReverificationState>();
+
+  const startResendTimer = React.useCallback(() => {
+    setResendCountdown(RESEND_COOLDOWN);
+    const interval = setInterval(() => {
+      setResendCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return interval;
+  }, []);
+
+  const onNeedsReverification = React.useCallback(
+    ({ complete, cancel }: { complete: () => void; cancel: () => void }) => {
+      setReverification({ complete, cancel, inProgress: true });
+    },
+    [],
+  );
+
+  const createEmail = useReverification(
+    (emailAddr: string) => user?.createEmailAddress({ email: emailAddr }),
+    { onNeedsReverification },
+  );
+
+  const destroyEmail = useReverification(
+    (emailId: string) => {
+      const email = user?.emailAddresses.find((e) => e.id === emailId);
+      return email?.destroy();
+    },
+    { onNeedsReverification },
+  );
 
   if (!user) return null;
 
-  const handleAddEmail = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const resetForm = () => {
+    setAdding(false);
+    setVerifying(false);
+    setNewEmail("");
+    setCode("");
+    setError("");
+    setEmailObj(undefined);
+    setResendCountdown(0);
+  };
+
+  const handleAddEmail = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     setError("");
     try {
-      const res = await user.createEmailAddress({ email: newEmail });
+      const res = await createEmail(newEmail);
+      if (!res) return;
       await user.reload();
       const emailAddress = user.emailAddresses.find((a) => a.id === res.id);
       setEmailObj(emailAddress);
       await emailAddress?.prepareVerification({ strategy: "email_code" });
       setVerifying(true);
+      startResendTimer();
     } catch (err) {
+      if (isReverificationCancelledError(err)) return;
       setError(getClerkErrorMessage(err, "Failed to add email"));
     }
   };
 
-  const handleVerify = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleVerify = async (verifyCode?: string) => {
     setError("");
+    const codeToUse = verifyCode ?? code;
     try {
-      const result = await emailObj?.attemptVerification({ code });
+      const result = await emailObj?.attemptVerification({ code: codeToUse });
       if (result?.verification.status === "verified") {
         await user.reload();
-        setAdding(false);
-        setVerifying(false);
-        setNewEmail("");
-        setCode("");
-        setEmailObj(undefined);
+        resetForm();
       }
     } catch (err) {
       setError(getClerkErrorMessage(err, "Invalid code"));
     }
   };
 
-  const handleRemoveEmail = async (emailId: string) => {
-    const email = user.emailAddresses.find((e) => e.id === emailId);
-    if (!email) return;
+  const handleResendEmail = async () => {
+    if (resendCountdown > 0 || !emailObj) return;
     try {
-      await email.destroy();
+      await emailObj.prepareVerification({ strategy: "email_code" });
+      startResendTimer();
+      setCode("");
+      setError("");
+    } catch (err) {
+      setError(getClerkErrorMessage(err, "Failed to resend code"));
+    }
+  };
+
+  const handleStartVerify = async (emailId: string) => {
+    const emailAddress = user.emailAddresses.find((e) => e.id === emailId);
+    if (!emailAddress) return;
+    try {
+      setEmailObj(emailAddress);
+      setNewEmail(emailAddress.emailAddress);
+      await emailAddress.prepareVerification({ strategy: "email_code" });
+      setAdding(true);
+      setVerifying(true);
+      startResendTimer();
+    } catch (err) {
+      setError(getClerkErrorMessage(err, "Failed to start verification"));
+    }
+  };
+
+  const handleRemoveEmail = async (emailId: string) => {
+    try {
+      await destroyEmail(emailId);
       await user.reload();
     } catch (err) {
+      if (isReverificationCancelledError(err)) return;
       console.error("Failed to remove email:", err);
     }
   };
@@ -379,40 +480,71 @@ function EmailSection() {
 
   return (
     <div className="flex flex-col gap-3">
+      <ReverificationDialog
+        open={reverification?.inProgress ?? false}
+        email={user.primaryEmailAddress?.emailAddress ?? ""}
+        onComplete={() => {
+          reverification?.complete();
+          setReverification(undefined);
+        }}
+        onCancel={() => {
+          reverification?.cancel();
+          setReverification(undefined);
+        }}
+      />
       <Label>Email addresses</Label>
-      {user.emailAddresses.map((email) => (
-        <div
-          key={email.id}
-          className="flex items-center justify-between rounded-lg border p-3"
-        >
-          <div className="flex items-center gap-2">
-            <span className="text-sm">{email.emailAddress}</span>
-            {email.id === user.primaryEmailAddressId && (
-              <Badge variant="secondary">Primary</Badge>
+      {user.emailAddresses.map((email) => {
+        const isPrimary = email.id === user.primaryEmailAddressId;
+        const isVerified = email.verification?.status === "verified";
+        return (
+          <div
+            key={email.id}
+            className="flex items-center justify-between rounded-lg border p-3"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-sm">{email.emailAddress}</span>
+              {isPrimary && <Badge variant="secondary">Primary</Badge>}
+              {!isVerified && (
+                <Badge variant="outline">Unverified</Badge>
+              )}
+            </div>
+            {!isPrimary && (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button variant="ghost" size="sm" className="size-8 p-0" />
+                  }
+                >
+                  <MoreHorizontalIcon className="size-4" />
+                  <span className="sr-only">Actions</span>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {!isVerified && (
+                    <DropdownMenuItem
+                      onClick={() => handleStartVerify(email.id)}
+                    >
+                      Verify
+                    </DropdownMenuItem>
+                  )}
+                  {isVerified && (
+                    <DropdownMenuItem
+                      onClick={() => handleSetPrimary(email.id)}
+                    >
+                      Set primary
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem
+                    className="text-destructive"
+                    onClick={() => handleRemoveEmail(email.id)}
+                  >
+                    Remove email
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </div>
-          <div className="flex gap-2">
-            {email.id !== user.primaryEmailAddressId && (
-              <>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleSetPrimary(email.id)}
-                >
-                  Set primary
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleRemoveEmail(email.id)}
-                >
-                  Remove
-                </Button>
-              </>
-            )}
-          </div>
-        </div>
-      ))}
+        );
+      })}
 
       <Crossfade active={adding}>
         {/* Button */}
@@ -425,10 +557,12 @@ function EmailSection() {
           + Add email address
         </Button>
 
-        {/* Add / Verify forms */}
+        {/* Add email form */}
         <Card className="bg-background" variant="inset">
           <CardHeader>
-            <CardTitle>Add email address</CardTitle>
+            <CardTitle>
+              {verifying ? "Verify email address" : "Add email address"}
+            </CardTitle>
             <CardDescription>
               {verifying
                 ? `Enter the code sent to ${newEmail}`
@@ -448,38 +582,77 @@ function EmailSection() {
                     onChange={(e) => setNewEmail(e.target.value)}
                     required
                   />
+                  {process.env.NODE_ENV === "development" && (
+                    <p className="text-muted-foreground text-xs">
+                      Dev mode: use{" "}
+                      <code className="bg-muted rounded px-1 py-0.5">
+                        +clerk_test
+                      </code>{" "}
+                      emails (e.g. name+clerk_test@example.com). Code:{" "}
+                      <code className="bg-muted rounded px-1 py-0.5">
+                        424242
+                      </code>
+                    </p>
+                  )}
                 </div>
                 {error && <p className="text-sm text-destructive">{error}</p>}
               </form>
             ) : (
-              <form onSubmit={handleVerify} className="flex flex-col gap-3">
-                <div className="flex flex-col gap-2">
-                  <Label htmlFor="verifyCode">Verification code</Label>
-                  <Input
-                    id="verifyCode"
-                    type="text"
-                    placeholder="Enter code"
-                    value={code}
-                    onChange={(e) => setCode(e.target.value)}
-                    required
-                  />
-                </div>
+              <div className="flex flex-col items-center gap-4">
+                <InputOTP
+                  maxLength={6}
+                  value={code}
+                  onChange={setCode}
+                  onComplete={handleVerify}
+                  autoFocus
+                >
+                  <InputOTPGroup>
+                    <InputOTPSlot index={0} />
+                  </InputOTPGroup>
+                  <InputOTPGroup>
+                    <InputOTPSlot index={1} />
+                  </InputOTPGroup>
+                  <InputOTPGroup>
+                    <InputOTPSlot index={2} />
+                  </InputOTPGroup>
+                  <InputOTPGroup>
+                    <InputOTPSlot index={3} />
+                  </InputOTPGroup>
+                  <InputOTPGroup>
+                    <InputOTPSlot index={4} />
+                  </InputOTPGroup>
+                  <InputOTPGroup>
+                    <InputOTPSlot index={5} />
+                  </InputOTPGroup>
+                </InputOTP>
+                <button
+                  type="button"
+                  className={cn(
+                    "text-muted-foreground text-sm",
+                    resendCountdown > 0
+                      ? "cursor-default"
+                      : "hover:text-foreground cursor-pointer underline underline-offset-2",
+                  )}
+                  onClick={handleResendEmail}
+                  disabled={resendCountdown > 0}
+                >
+                  {resendCountdown > 0
+                    ? `Didn\u2019t receive a code? Resend (${resendCountdown})`
+                    : "Didn\u2019t receive a code? Resend"}
+                </button>
+                {process.env.NODE_ENV === "development" && (
+                  <p className="text-muted-foreground text-xs">
+                    Dev mode: code is{" "}
+                    <code className="bg-muted rounded px-1 py-0.5">
+                      424242
+                    </code>
+                  </p>
+                )}
                 {error && <p className="text-sm text-destructive">{error}</p>}
-              </form>
+              </div>
             )}
             <div className="flex justify-end gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setVerifying(false);
-                  setAdding(false);
-                  setNewEmail("");
-                  setCode("");
-                  setError("");
-                  setEmailObj(undefined);
-                }}
-              >
+              <Button variant="ghost" size="sm" onClick={resetForm}>
                 Cancel
               </Button>
               {!verifying ? (
@@ -487,7 +660,11 @@ function EmailSection() {
                   Add
                 </Button>
               ) : (
-                <Button size="sm" onClick={handleVerify}>
+                <Button
+                  size="sm"
+                  onClick={() => handleVerify()}
+                  disabled={code.length < 6}
+                >
                   Verify
                 </Button>
               )}
@@ -640,6 +817,203 @@ function SecurityTab() {
   );
 }
 
+const RESEND_COOLDOWN = 30;
+
+function ReverificationDialog({
+  open,
+  email,
+  onComplete,
+  onCancel,
+}: {
+  open: boolean;
+  email: string;
+  onComplete: () => void;
+  onCancel: () => void;
+}) {
+  const { session } = useSession();
+  const [code, setCode] = React.useState("");
+  const [error, setError] = React.useState("");
+  const [ready, setReady] = React.useState(false);
+  const [emailAddressId, setEmailAddressId] = React.useState("");
+  const [resendCountdown, setResendCountdown] = React.useState(0);
+  const startedRef = React.useRef(false);
+
+  const startResendTimer = React.useCallback(() => {
+    setResendCountdown(RESEND_COOLDOWN);
+    const interval = setInterval(() => {
+      setResendCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return interval;
+  }, []);
+
+  React.useEffect(() => {
+    if (!open || startedRef.current || !session) return;
+    startedRef.current = true;
+
+    (async () => {
+      try {
+        const res = await session.startVerification({ level: "first_factor" });
+
+        if (res.status === "complete") {
+          // Already verified — complete immediately
+          onComplete();
+          return;
+        }
+
+        if (res.status === "needs_first_factor") {
+          const emailFactor = res.supportedFirstFactors?.find(
+            (f) => f.strategy === "email_code",
+          );
+          if (emailFactor && "emailAddressId" in emailFactor) {
+            setEmailAddressId(emailFactor.emailAddressId);
+            await session.prepareFirstFactorVerification({
+              strategy: "email_code",
+              emailAddressId: emailFactor.emailAddressId,
+            });
+            setReady(true);
+            startResendTimer();
+          }
+        }
+      } catch (err) {
+        setError(getClerkErrorMessage(err, "Failed to start verification"));
+        setReady(true); // Show the UI so the error is visible
+      }
+    })();
+  }, [open, session, startResendTimer, onComplete]);
+
+  // Reset state when dialog closes
+  React.useEffect(() => {
+    if (!open) {
+      setCode("");
+      setError("");
+      setReady(false);
+      setEmailAddressId("");
+      setResendCountdown(0);
+      startedRef.current = false;
+    }
+  }, [open]);
+
+  const handleResend = async () => {
+    if (resendCountdown > 0 || !session || !emailAddressId) return;
+    try {
+      await session.prepareFirstFactorVerification({
+        strategy: "email_code",
+        emailAddressId,
+      });
+      startResendTimer();
+      setCode("");
+      setError("");
+    } catch (err) {
+      setError(getClerkErrorMessage(err, "Failed to resend code"));
+    }
+  };
+
+  const handleVerify = async () => {
+    setError("");
+    try {
+      await session?.attemptFirstFactorVerification({
+        strategy: "email_code",
+        code,
+      });
+      onComplete();
+    } catch (err) {
+      setError(getClerkErrorMessage(err, "Verification failed"));
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onCancel()}>
+      <DialogContent variant="inset">
+        <DialogHeader className="text-center">
+          <DialogTitle>Verification required</DialogTitle>
+          <DialogDescription>
+            Enter the code sent to your email to continue
+          </DialogDescription>
+          {email && (
+            <p className="text-sm font-medium">{email}</p>
+          )}
+        </DialogHeader>
+        <DialogBody className="flex flex-col items-center gap-4">
+          <InputOTP
+            maxLength={6}
+            value={code}
+            onChange={setCode}
+            onComplete={ready ? handleVerify : undefined}
+            autoFocus
+            disabled={!ready}
+          >
+            <InputOTPGroup>
+              <InputOTPSlot index={0} />
+            </InputOTPGroup>
+            <InputOTPGroup>
+              <InputOTPSlot index={1} />
+            </InputOTPGroup>
+            <InputOTPGroup>
+              <InputOTPSlot index={2} />
+            </InputOTPGroup>
+            <InputOTPGroup>
+              <InputOTPSlot index={3} />
+            </InputOTPGroup>
+            <InputOTPGroup>
+              <InputOTPSlot index={4} />
+            </InputOTPGroup>
+            <InputOTPGroup>
+              <InputOTPSlot index={5} />
+            </InputOTPGroup>
+          </InputOTP>
+          <button
+            type="button"
+            className={cn(
+              "text-muted-foreground text-sm",
+              resendCountdown > 0 || !ready
+                ? "cursor-default"
+                : "hover:text-foreground cursor-pointer underline underline-offset-2",
+            )}
+            onClick={handleResend}
+            disabled={resendCountdown > 0 || !ready}
+          >
+            {!ready
+              ? "Sending code\u2026"
+              : resendCountdown > 0
+                ? `Didn\u2019t receive a code? Resend (${resendCountdown})`
+                : "Didn\u2019t receive a code? Resend"}
+          </button>
+          {process.env.NODE_ENV === "development" && (
+            <p className="text-muted-foreground text-xs">
+              Dev mode: use{" "}
+              <code className="bg-muted rounded px-1 py-0.5">+clerk_test</code>{" "}
+              emails. Code:{" "}
+              <code className="bg-muted rounded px-1 py-0.5">424242</code>
+            </p>
+          )}
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </DialogBody>
+        <DialogFooter>
+          <Button
+            className="w-full"
+            onClick={handleVerify}
+            disabled={!ready || code.length < 6}
+          >
+            Continue
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+type PasswordReverificationState = {
+  complete: () => void;
+  cancel: () => void;
+  inProgress: boolean;
+};
+
 function PasswordSection({ hasPassword }: { hasPassword: boolean }) {
   const { user } = useUser();
   const [editing, setEditing] = React.useState(false);
@@ -650,6 +1024,18 @@ function PasswordSection({ hasPassword }: { hasPassword: boolean }) {
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState("");
   const [success, setSuccess] = React.useState(false);
+  const [reverification, setReverification] =
+    React.useState<PasswordReverificationState>();
+
+  const updatePassword = useReverification(
+    (params: Parameters<NonNullable<typeof user>["updatePassword"]>[0]) =>
+      user?.updatePassword(params),
+    {
+      onNeedsReverification: ({ complete, cancel }) => {
+        setReverification({ complete, cancel, inProgress: true });
+      },
+    },
+  );
 
   if (!user) return null;
 
@@ -660,6 +1046,7 @@ function PasswordSection({ hasPassword }: { hasPassword: boolean }) {
     setConfirmPassword("");
     setSignOutOthers(true);
     setError("");
+    setReverification(undefined);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -672,7 +1059,7 @@ function PasswordSection({ hasPassword }: { hasPassword: boolean }) {
     setError("");
     setSuccess(false);
     try {
-      await user.updatePassword({
+      await updatePassword({
         ...(hasPassword ? { currentPassword } : {}),
         newPassword,
         signOutOfOtherSessions: signOutOthers,
@@ -681,6 +1068,7 @@ function PasswordSection({ hasPassword }: { hasPassword: boolean }) {
       resetForm();
       setTimeout(() => setSuccess(false), 3000);
     } catch (err) {
+      if (isReverificationCancelledError(err)) return;
       setError(getClerkErrorMessage(err, "Failed to update password"));
     } finally {
       setSaving(false);
@@ -697,6 +1085,19 @@ function PasswordSection({ hasPassword }: { hasPassword: boolean }) {
             : "Set a password for email-based sign in"}
         </CardDescription>
       </CardHeader>
+      <ReverificationDialog
+        open={reverification?.inProgress ?? false}
+        email={user.primaryEmailAddress?.emailAddress ?? ""}
+        onComplete={() => {
+          reverification?.complete();
+          setReverification(undefined);
+        }}
+        onCancel={() => {
+          reverification?.cancel();
+          setReverification(undefined);
+          setSaving(false);
+        }}
+      />
       <CardContent>
         <Crossfade active={editing}>
           {/* Button */}
