@@ -4,13 +4,6 @@ import * as React from "react";
 import { useClerk } from "@clerk/nextjs";
 import { revokeSession } from "@/app/(main)/settings/custom/actions";
 import { Button } from "@/components/ui/cubby-ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/cubby-ui/card";
 import { Badge } from "@/components/ui/cubby-ui/badge";
 import { Skeleton } from "@/components/ui/cubby-ui/skeleton";
 
@@ -32,27 +25,21 @@ export interface BackendSession {
 
 export function SessionsSkeleton() {
   return (
-    <Card>
-      <CardHeader>
-        <Skeleton className="h-5 w-36" />
-        <Skeleton className="h-4 w-64" />
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        {[1, 2].map((i) => (
-          <div
-            key={i}
-            className="flex items-center justify-between rounded-lg border p-3"
-          >
-            <div className="flex flex-col gap-1.5">
-              <Skeleton className="h-4 w-32" />
-              <Skeleton className="h-3 w-48" />
-              <Skeleton className="h-3 w-40" />
-            </div>
-            <Skeleton className="h-8 w-16" />
+    <div className="flex flex-col gap-3">
+      {[1, 2].map((i) => (
+        <div
+          key={i}
+          className="flex items-center justify-between rounded-lg border p-3"
+        >
+          <div className="flex flex-col gap-1.5">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-3 w-48" />
+            <Skeleton className="h-3 w-40" />
           </div>
-        ))}
-      </CardContent>
-    </Card>
+          <Skeleton className="h-8 w-16" />
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -75,75 +62,67 @@ export function SessionsTab({
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Active sessions</CardTitle>
-        <CardDescription>
-          Devices where you&apos;re currently signed in
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        {sessions.length === 0 && (
-          <p className="text-sm text-muted-foreground">
-            No active sessions found.
-          </p>
-        )}
+    <div className="flex flex-col gap-3">
+      {sessions.length === 0 && (
+        <p className="text-sm text-muted-foreground">
+          No active sessions found.
+        </p>
+      )}
 
-        {sessions.map((session) => {
-          const isCurrent = session.id === currentSession?.id;
-          const activity = session.latestActivity;
-          const deviceLabel = activity?.deviceType || "Unknown device";
-          const browserLabel = activity?.browserName
-            ? `${activity.browserName} ${activity.browserVersion ?? ""}`.trim()
-            : null;
-          const locationParts = [activity?.city, activity?.country].filter(
-            Boolean,
-          );
-          const locationLabel =
-            locationParts.length > 0 ? locationParts.join(", ") : null;
+      {sessions.map((session) => {
+        const isCurrent = session.id === currentSession?.id;
+        const activity = session.latestActivity;
+        const deviceLabel = activity?.deviceType || "Unknown device";
+        const browserLabel = activity?.browserName
+          ? `${activity.browserName} ${activity.browserVersion ?? ""}`.trim()
+          : null;
+        const locationParts = [activity?.city, activity?.country].filter(
+          Boolean,
+        );
+        const locationLabel =
+          locationParts.length > 0 ? locationParts.join(", ") : null;
 
-          return (
-            <div
-              key={session.id}
-              className="flex items-center justify-between rounded-lg border p-3"
-            >
-              <div className="flex flex-col gap-0.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">{deviceLabel}</span>
-                  {isCurrent && <Badge variant="success">This device</Badge>}
-                </div>
-                {browserLabel && (
-                  <span className="text-xs text-muted-foreground">
-                    {browserLabel}
-                  </span>
-                )}
-                {(activity?.ipAddress || locationLabel) && (
-                  <span className="text-xs text-muted-foreground">
-                    {[activity?.ipAddress, locationLabel]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </span>
-                )}
-                <span className="text-xs text-muted-foreground">
-                  Last active:{" "}
-                  {session.lastActiveAt
-                    ? new Date(session.lastActiveAt).toLocaleString()
-                    : "Unknown"}
-                </span>
+        return (
+          <div
+            key={session.id}
+            className="flex items-center justify-between rounded-lg border p-3"
+          >
+            <div className="flex flex-col gap-0.5">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium">{deviceLabel}</span>
+                {isCurrent && <Badge variant="success">This device</Badge>}
               </div>
-              {!isCurrent && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleRevoke(session.id)}
-                >
-                  Revoke
-                </Button>
+              {browserLabel && (
+                <span className="text-xs text-muted-foreground">
+                  {browserLabel}
+                </span>
               )}
+              {(activity?.ipAddress || locationLabel) && (
+                <span className="text-xs text-muted-foreground">
+                  {[activity?.ipAddress, locationLabel]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </span>
+              )}
+              <span className="text-xs text-muted-foreground">
+                Last active:{" "}
+                {session.lastActiveAt
+                  ? new Date(session.lastActiveAt).toLocaleString()
+                  : "Unknown"}
+              </span>
             </div>
-          );
-        })}
-      </CardContent>
-    </Card>
+            {!isCurrent && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleRevoke(session.id)}
+              >
+                Revoke
+              </Button>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }

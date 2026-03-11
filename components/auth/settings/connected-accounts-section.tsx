@@ -4,13 +4,6 @@ import * as React from "react";
 import { useUser, useReverification } from "@clerk/nextjs";
 import { isReverificationCancelledError } from "@clerk/nextjs/errors";
 import { Button } from "@/components/ui/cubby-ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/cubby-ui/card";
 import { Separator } from "@/components/ui/cubby-ui/separator";
 import { useReverificationFlow } from "./reverification-provider";
 
@@ -76,62 +69,56 @@ export function ConnectedAccountsSection() {
   );
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Connected accounts</CardTitle>
-        <CardDescription>Manage your linked social accounts</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        {connectedAccounts.length === 0 && (
-          <p className="text-sm text-muted-foreground">
-            No connected accounts.
-          </p>
-        )}
+    <div className="flex flex-col gap-4">
+      {connectedAccounts.length === 0 && (
+        <p className="text-sm text-muted-foreground">
+          No connected accounts.
+        </p>
+      )}
 
-        {connectedAccounts.map((account) => (
-          <div
-            key={account.id}
-            className="flex items-center justify-between rounded-lg border p-3"
-          >
-            <div className="flex flex-col gap-0.5">
-              <span className="text-sm font-medium">
-                {capitalize(account.provider)}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                {account.emailAddress}
-              </span>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleDisconnect(account.id)}
-            >
-              Disconnect
-            </Button>
+      {connectedAccounts.map((account) => (
+        <div
+          key={account.id}
+          className="flex items-center justify-between rounded-lg border p-3"
+        >
+          <div className="flex flex-col gap-0.5">
+            <span className="text-sm font-medium">
+              {capitalize(account.provider)}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {account.emailAddress}
+            </span>
           </div>
-        ))}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleDisconnect(account.id)}
+          >
+            Disconnect
+          </Button>
+        </div>
+      ))}
 
-        {unconnectedProviders.length > 0 && (
-          <>
-            <Separator />
-            <div className="flex flex-col gap-2">
-              <p className="text-sm font-medium">Add a connection</p>
-              <div className="flex gap-2">
-                {unconnectedProviders.map((strategy) => (
-                  <Button
-                    key={strategy}
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleConnect(strategy)}
-                  >
-                    Connect {capitalize(strategy.replace("oauth_", ""))}
-                  </Button>
-                ))}
-              </div>
+      {unconnectedProviders.length > 0 && (
+        <>
+          <Separator />
+          <div className="flex flex-col gap-2">
+            <p className="text-sm font-medium">Add a connection</p>
+            <div className="flex gap-2">
+              {unconnectedProviders.map((strategy) => (
+                <Button
+                  key={strategy}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleConnect(strategy)}
+                >
+                  Connect {capitalize(strategy.replace("oauth_", ""))}
+                </Button>
+              ))}
             </div>
-          </>
-        )}
-      </CardContent>
-    </Card>
+          </div>
+        </>
+      )}
+    </div>
   );
 }

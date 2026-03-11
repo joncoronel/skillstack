@@ -7,14 +7,9 @@ import { MoreHorizontalIcon } from "lucide-react";
 import { Button } from "@/components/ui/cubby-ui/button";
 import { Input } from "@/components/ui/cubby-ui/input";
 import { Label } from "@/components/ui/cubby-ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/cubby-ui/card";
 import { Badge } from "@/components/ui/cubby-ui/badge";
+import { Card, CardContent } from "@/components/ui/cubby-ui/card";
+import { Separator } from "@/components/ui/cubby-ui/separator";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -28,7 +23,10 @@ import {
 } from "@/components/ui/cubby-ui/input-otp";
 import { Crossfade } from "@/components/ui/cubby-ui/crossfade";
 import { useResendTimer } from "@/hooks/use-resend-timer";
-import { useReverificationFlow, getClerkErrorMessage } from "./reverification-provider";
+import {
+  useReverificationFlow,
+  getClerkErrorMessage,
+} from "./reverification-provider";
 import { cn } from "@/lib/utils";
 
 export function EmailSection() {
@@ -42,7 +40,11 @@ export function EmailSection() {
       NonNullable<ReturnType<typeof useUser>["user"]>["emailAddresses"][number]
     >();
   const [error, setError] = React.useState("");
-  const { countdown: resendCountdown, startTimer: startResendTimer, resetTimer: resetResendTimer } = useResendTimer();
+  const {
+    countdown: resendCountdown,
+    startTimer: startResendTimer,
+    resetTimer: resetResendTimer,
+  } = useResendTimer();
 
   const onNeedsReverification = useReverificationFlow();
 
@@ -151,59 +153,61 @@ export function EmailSection() {
 
   return (
     <div className="flex flex-col gap-3">
-      <Label>Email addresses</Label>
-      {user.emailAddresses.map((email) => {
-        const isPrimary = email.id === user.primaryEmailAddressId;
-        const isVerified = email.verification?.status === "verified";
-        return (
-          <div
-            key={email.id}
-            className="flex items-center justify-between rounded-lg border p-3"
-          >
-            <div className="flex items-center gap-2">
-              <span className="text-sm">{email.emailAddress}</span>
-              {isPrimary && <Badge variant="secondary">Primary</Badge>}
-              {!isVerified && (
-                <Badge variant="outline">Unverified</Badge>
-              )}
-            </div>
-            {!isPrimary && (
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <Button variant="ghost" size="sm" className="size-8 p-0" />
-                  }
-                >
-                  <MoreHorizontalIcon className="size-4" />
-                  <span className="sr-only">Actions</span>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  {!isVerified && (
-                    <DropdownMenuItem
-                      onClick={() => handleStartVerify(email.id)}
+      <Card className="py-3">
+        <CardContent className="flex flex-col gap-3">
+          {user.emailAddresses.map((email) => {
+            const isPrimary = email.id === user.primaryEmailAddressId;
+            const isVerified = email.verification?.status === "verified";
+            return (
+              <div key={email.id} className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm">{email.emailAddress}</span>
+                  {isPrimary && <Badge variant="secondary">Primary</Badge>}
+                  {!isVerified && <Badge variant="outline">Unverified</Badge>}
+                </div>
+                {!isPrimary && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="size-8 p-0"
+                        />
+                      }
                     >
-                      Verify
-                    </DropdownMenuItem>
-                  )}
-                  {isVerified && (
-                    <DropdownMenuItem
-                      onClick={() => handleSetPrimary(email.id)}
-                    >
-                      Set primary
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuItem
-                    className="text-destructive"
-                    onClick={() => handleRemoveEmail(email.id)}
-                  >
-                    Remove email
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-          </div>
-        );
-      })}
+                      <MoreHorizontalIcon className="size-4" />
+                      <span className="sr-only">Actions</span>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      {!isVerified && (
+                        <DropdownMenuItem
+                          onClick={() => handleStartVerify(email.id)}
+                        >
+                          Verify
+                        </DropdownMenuItem>
+                      )}
+                      {isVerified && (
+                        <DropdownMenuItem
+                          onClick={() => handleSetPrimary(email.id)}
+                        >
+                          Set primary
+                        </DropdownMenuItem>
+                      )}
+                      <DropdownMenuItem
+                        className="text-destructive"
+                        onClick={() => handleRemoveEmail(email.id)}
+                      >
+                        Remove email
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
+            );
+          })}
+        </CardContent>
+      </Card>
 
       <Crossfade active={adding}>
         {/* Button */}
@@ -217,119 +221,114 @@ export function EmailSection() {
         </Button>
 
         {/* Add email form */}
-        <Card className="bg-background" variant="inset">
-          <CardHeader>
-            <CardTitle>
+        <div className="flex flex-col gap-4">
+          <Separator />
+          <div className="flex flex-col gap-1">
+            <h4 className="text-sm font-medium">
               {verifying ? "Verify email address" : "Add email address"}
-            </CardTitle>
-            <CardDescription>
+            </h4>
+            <p className="text-sm text-muted-foreground">
               {verifying
                 ? `Enter the code sent to ${newEmail}`
                 : "You\u2019ll need to verify this email address before it can be added to your account."}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            {!verifying ? (
-              <form onSubmit={handleAddEmail} className="flex flex-col gap-3">
-                <div className="flex flex-col gap-2">
-                  <Label htmlFor="addEmail">Email address</Label>
-                  <Input
-                    id="addEmail"
-                    type="email"
-                    placeholder="Enter your email address"
-                    value={newEmail}
-                    onChange={(e) => setNewEmail(e.target.value)}
-                    required
-                  />
-                  {process.env.NODE_ENV === "development" && (
-                    <p className="text-muted-foreground text-xs">
-                      Dev mode: use{" "}
-                      <code className="bg-muted rounded px-1 py-0.5">
-                        +clerk_test
-                      </code>{" "}
-                      emails (e.g. name+clerk_test@example.com). Code:{" "}
-                      <code className="bg-muted rounded px-1 py-0.5">
-                        424242
-                      </code>
-                    </p>
-                  )}
-                </div>
-                {error && <p className="text-sm text-destructive">{error}</p>}
-              </form>
-            ) : (
-              <div className="flex flex-col items-center gap-4">
-                <InputOTP
-                  maxLength={6}
-                  value={code}
-                  onChange={setCode}
-                  onComplete={handleVerify}
-                  autoFocus
-                >
-                  <InputOTPGroup>
-                    <InputOTPSlot index={0} />
-                  </InputOTPGroup>
-                  <InputOTPGroup>
-                    <InputOTPSlot index={1} />
-                  </InputOTPGroup>
-                  <InputOTPGroup>
-                    <InputOTPSlot index={2} />
-                  </InputOTPGroup>
-                  <InputOTPGroup>
-                    <InputOTPSlot index={3} />
-                  </InputOTPGroup>
-                  <InputOTPGroup>
-                    <InputOTPSlot index={4} />
-                  </InputOTPGroup>
-                  <InputOTPGroup>
-                    <InputOTPSlot index={5} />
-                  </InputOTPGroup>
-                </InputOTP>
-                <button
-                  type="button"
-                  className={cn(
-                    "text-muted-foreground text-sm",
-                    resendCountdown > 0
-                      ? "cursor-default"
-                      : "hover:text-foreground cursor-pointer underline underline-offset-2",
-                  )}
-                  onClick={handleResendEmail}
-                  disabled={resendCountdown > 0}
-                >
-                  {resendCountdown > 0
-                    ? `Didn\u2019t receive a code? Resend (${resendCountdown})`
-                    : "Didn\u2019t receive a code? Resend"}
-                </button>
+            </p>
+          </div>
+          {!verifying ? (
+            <form onSubmit={handleAddEmail} className="flex flex-col gap-3">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="addEmail">Email address</Label>
+                <Input
+                  id="addEmail"
+                  type="email"
+                  placeholder="Enter your email address"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  required
+                />
                 {process.env.NODE_ENV === "development" && (
                   <p className="text-muted-foreground text-xs">
-                    Dev mode: code is{" "}
+                    Dev mode: use{" "}
                     <code className="bg-muted rounded px-1 py-0.5">
-                      424242
-                    </code>
+                      +clerk_test
+                    </code>{" "}
+                    emails (e.g. name+clerk_test@example.com). Code:{" "}
+                    <code className="bg-muted rounded px-1 py-0.5">424242</code>
                   </p>
                 )}
-                {error && <p className="text-sm text-destructive">{error}</p>}
               </div>
-            )}
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" size="sm" onClick={resetForm}>
-                Cancel
-              </Button>
-              {!verifying ? (
-                <Button size="sm" onClick={handleAddEmail}>
-                  Add
-                </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  onClick={() => handleVerify()}
-                  disabled={code.length < 6}
-                >
-                  Verify
-                </Button>
+              {error && <p className="text-sm text-destructive">{error}</p>}
+            </form>
+          ) : (
+            <div className="flex flex-col items-center gap-4">
+              <InputOTP
+                maxLength={6}
+                value={code}
+                onChange={setCode}
+                onComplete={handleVerify}
+                autoFocus
+              >
+                <InputOTPGroup>
+                  <InputOTPSlot index={0} />
+                </InputOTPGroup>
+                <InputOTPGroup>
+                  <InputOTPSlot index={1} />
+                </InputOTPGroup>
+                <InputOTPGroup>
+                  <InputOTPSlot index={2} />
+                </InputOTPGroup>
+                <InputOTPGroup>
+                  <InputOTPSlot index={3} />
+                </InputOTPGroup>
+                <InputOTPGroup>
+                  <InputOTPSlot index={4} />
+                </InputOTPGroup>
+                <InputOTPGroup>
+                  <InputOTPSlot index={5} />
+                </InputOTPGroup>
+              </InputOTP>
+              <button
+                type="button"
+                className={cn(
+                  "text-muted-foreground text-sm",
+                  resendCountdown > 0
+                    ? "cursor-default"
+                    : "hover:text-foreground cursor-pointer underline underline-offset-2",
+                )}
+                onClick={handleResendEmail}
+                disabled={resendCountdown > 0}
+              >
+                {resendCountdown > 0
+                  ? `Didn\u2019t receive a code? Resend (${resendCountdown})`
+                  : "Didn\u2019t receive a code? Resend"}
+              </button>
+              {process.env.NODE_ENV === "development" && (
+                <p className="text-muted-foreground text-xs">
+                  Dev mode: code is{" "}
+                  <code className="bg-muted rounded px-1 py-0.5">424242</code>
+                </p>
               )}
+              {error && <p className="text-sm text-destructive">{error}</p>}
             </div>
-          </CardContent>
-        </Card>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={resetForm}>
+              Cancel
+            </Button>
+            {!verifying ? (
+              <Button size="sm" onClick={handleAddEmail}>
+                Add
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                onClick={() => handleVerify()}
+                disabled={code.length < 6}
+              >
+                Verify
+              </Button>
+            )}
+          </div>
+        </div>
       </Crossfade>
     </div>
   );

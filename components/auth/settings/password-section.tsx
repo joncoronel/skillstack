@@ -6,13 +6,6 @@ import { isReverificationCancelledError } from "@clerk/nextjs/errors";
 import { Button } from "@/components/ui/cubby-ui/button";
 import { Input } from "@/components/ui/cubby-ui/input";
 import { Label } from "@/components/ui/cubby-ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/cubby-ui/card";
 import { Checkbox } from "@/components/ui/cubby-ui/checkbox";
 import { Crossfade } from "@/components/ui/cubby-ui/crossfade";
 import { useReverificationFlow, getClerkErrorMessage } from "./reverification-provider";
@@ -71,93 +64,81 @@ export function PasswordSection({ hasPassword }: { hasPassword: boolean }) {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Password</CardTitle>
-        <CardDescription>
-          {hasPassword
-            ? "Change your account password"
-            : "Set a password for email-based sign in"}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Crossfade active={editing}>
-          {/* Button */}
-          <div className="flex items-center gap-3">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setEditing(true)}
-            >
-              {hasPassword ? "Change password" : "Set password"}
-            </Button>
-            {success && (
-              <span className="text-sm text-emerald-600 dark:text-emerald-400">
-                Password updated
-              </span>
-            )}
-          </div>
+    <Crossfade active={editing}>
+      {/* Button */}
+      <div className="flex items-center gap-3">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setEditing(true)}
+        >
+          {hasPassword ? "Change password" : "Set password"}
+        </Button>
+        {success && (
+          <span className="text-sm text-emerald-600 dark:text-emerald-400">
+            Password updated
+          </span>
+        )}
+      </div>
 
-          {/* Form */}
-          <form
-            onSubmit={handleSubmit}
-            className="flex flex-col gap-4 max-w-sm"
+      {/* Form */}
+      <form
+        onSubmit={handleSubmit}
+        className="flex flex-col gap-4 max-w-sm"
+      >
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="newPassword">New password</Label>
+          <Input
+            id="newPassword"
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            required
+          />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="confirmPassword">Confirm password</Label>
+          <Input
+            id="confirmPassword"
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            required
+          />
+        </div>
+        <label className="flex items-start gap-3">
+          <Checkbox
+            checked={signOutOthers}
+            onCheckedChange={(checked) =>
+              setSignOutOthers(checked === true)
+            }
+            className="mt-0.5"
+          />
+          <div className="flex flex-col">
+            <span className="text-sm font-medium">
+              Sign out of all other devices
+            </span>
+            <span className="text-xs text-muted-foreground">
+              It is recommended to sign out of all other devices which may
+              have used your old password.
+            </span>
+          </div>
+        </label>
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        <div className="flex gap-2">
+          <Button type="submit" size="sm" disabled={saving}>
+            {saving ? "Saving..." : "Save"}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={resetForm}
           >
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="newPassword">New password</Label>
-              <Input
-                id="newPassword"
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                required
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="confirmPassword">Confirm password</Label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-              />
-            </div>
-            <label className="flex items-start gap-3">
-              <Checkbox
-                checked={signOutOthers}
-                onCheckedChange={(checked) =>
-                  setSignOutOthers(checked === true)
-                }
-                className="mt-0.5"
-              />
-              <div className="flex flex-col">
-                <span className="text-sm font-medium">
-                  Sign out of all other devices
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  It is recommended to sign out of all other devices which may
-                  have used your old password.
-                </span>
-              </div>
-            </label>
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            <div className="flex gap-2">
-              <Button type="submit" size="sm" disabled={saving}>
-                {saving ? "Saving..." : "Save"}
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={resetForm}
-              >
-                Cancel
-              </Button>
-            </div>
-          </form>
-        </Crossfade>
-      </CardContent>
-    </Card>
+            Cancel
+          </Button>
+        </div>
+      </form>
+    </Crossfade>
   );
 }
