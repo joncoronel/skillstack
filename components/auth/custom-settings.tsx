@@ -41,6 +41,59 @@ import {
 } from "@/components/ui/cubby-ui/alert-dialog";
 import { Checkbox } from "@/components/ui/cubby-ui/checkbox";
 import { Skeleton } from "@/components/ui/cubby-ui/skeleton";
+import { useAnimatedHeight } from "@/hooks/cubby-ui/use-animated-height";
+import { cn } from "@/lib/utils";
+
+const CROSSFADE_CLASSES = cn(
+  "ease-out-cubic transition-[opacity,filter,transform,scale] duration-200",
+  "motion-reduce:transition-none",
+);
+
+function Crossfade({
+  active,
+  children,
+}: {
+  active: boolean;
+  children: [React.ReactNode, React.ReactNode];
+}) {
+  const { outerRef, innerRef } = useAnimatedHeight();
+  const [first, second] = children;
+
+  return (
+    <div
+      ref={outerRef}
+      className="transition-[height] duration-270 ease-[cubic-bezier(0.25,1,0.5,1)]"
+    >
+      <div ref={innerRef} className="grid">
+        <div
+          className={cn(
+            "[grid-area:1/1]",
+            CROSSFADE_CLASSES,
+            active
+              ? "contain-[size] pointer-events-none scale-97 opacity-0 blur-sm"
+              : "scale-100 opacity-100",
+          )}
+          aria-hidden={active}
+        >
+          {first}
+        </div>
+
+        <div
+          className={cn(
+            "[grid-area:1/1]",
+            CROSSFADE_CLASSES,
+            active
+              ? "scale-100 opacity-100"
+              : "contain-[size] pointer-events-none scale-97 opacity-0 blur-sm",
+          )}
+          aria-hidden={!active}
+        >
+          {second}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function getClerkErrorMessage(err: unknown, fallback: string): string {
   if (isClerkAPIResponseError(err)) {
@@ -148,29 +201,29 @@ function ProfileTab() {
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Avatar size="lg">
-              <AvatarImage
-                src={user.imageUrl}
-                alt={user.fullName ?? "Avatar"}
-              />
-              <AvatarFallback>{initials}</AvatarFallback>
-            </Avatar>
-            <div className="flex flex-col">
-              <span className="text-sm font-medium">
-                {user.fullName || "No name set"}
-              </span>
+        <Crossfade active={editing}>
+          {/* Read-only summary */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Avatar size="lg">
+                <AvatarImage
+                  src={user.imageUrl}
+                  alt={user.fullName ?? "Avatar"}
+                />
+                <AvatarFallback>{initials}</AvatarFallback>
+              </Avatar>
+              <div className="flex flex-col">
+                <span className="text-sm font-medium">
+                  {user.fullName || "No name set"}
+                </span>
+              </div>
             </div>
-          </div>
-          {!editing && (
             <Button variant="outline" size="sm" onClick={startEditing}>
               Update profile
             </Button>
-          )}
-        </div>
+          </div>
 
-        {editing && (
+          {/* Edit form */}
           <Card className="bg-background" variant="inset">
             <CardHeader>
               <CardTitle>Update profile</CardTitle>
@@ -233,7 +286,6 @@ function ProfileTab() {
                   />
                 </div>
               </div>
-
               <div className="flex justify-end gap-2">
                 <Button
                   variant="ghost"
@@ -248,7 +300,7 @@ function ProfileTab() {
               </div>
             </CardContent>
           </Card>
-        )}
+        </Crossfade>
 
         <Separator />
 
@@ -362,7 +414,8 @@ function EmailSection() {
         </div>
       ))}
 
-      {!adding ? (
+      <Crossfade active={adding}>
+        {/* Button */}
         <Button
           variant="outline"
           size="sm"
@@ -371,69 +424,77 @@ function EmailSection() {
         >
           + Add email address
         </Button>
-      ) : !verifying ? (
-        <form onSubmit={handleAddEmail} className="flex flex-col gap-2">
-          <Input
-            type="email"
-            placeholder="Enter email address"
-            value={newEmail}
-            onChange={(e) => setNewEmail(e.target.value)}
-            required
-          />
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <div className="flex gap-2">
-            <Button type="submit" size="sm">
-              Send code
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setAdding(false);
-                setNewEmail("");
-                setError("");
-              }}
-            >
-              Cancel
-            </Button>
-          </div>
-        </form>
-      ) : (
-        <form onSubmit={handleVerify} className="flex flex-col gap-2">
-          <p className="text-sm text-muted-foreground">
-            Enter the code sent to {newEmail}
-          </p>
-          <Input
-            type="text"
-            placeholder="Verification code"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            required
-          />
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <div className="flex gap-2">
-            <Button type="submit" size="sm">
-              Verify
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setVerifying(false);
-                setAdding(false);
-                setNewEmail("");
-                setCode("");
-                setError("");
-                setEmailObj(undefined);
-              }}
-            >
-              Cancel
-            </Button>
-          </div>
-        </form>
-      )}
+
+        {/* Add / Verify forms */}
+        <Card className="bg-background" variant="inset">
+          <CardHeader>
+            <CardTitle>Add email address</CardTitle>
+            <CardDescription>
+              {verifying
+                ? `Enter the code sent to ${newEmail}`
+                : "You\u2019ll need to verify this email address before it can be added to your account."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            {!verifying ? (
+              <form onSubmit={handleAddEmail} className="flex flex-col gap-3">
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="addEmail">Email address</Label>
+                  <Input
+                    id="addEmail"
+                    type="email"
+                    placeholder="Enter your email address"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    required
+                  />
+                </div>
+                {error && <p className="text-sm text-destructive">{error}</p>}
+              </form>
+            ) : (
+              <form onSubmit={handleVerify} className="flex flex-col gap-3">
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="verifyCode">Verification code</Label>
+                  <Input
+                    id="verifyCode"
+                    type="text"
+                    placeholder="Enter code"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    required
+                  />
+                </div>
+                {error && <p className="text-sm text-destructive">{error}</p>}
+              </form>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setVerifying(false);
+                  setAdding(false);
+                  setNewEmail("");
+                  setCode("");
+                  setError("");
+                  setEmailObj(undefined);
+                }}
+              >
+                Cancel
+              </Button>
+              {!verifying ? (
+                <Button size="sm" onClick={handleAddEmail}>
+                  Add
+                </Button>
+              ) : (
+                <Button size="sm" onClick={handleVerify}>
+                  Verify
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </Crossfade>
     </div>
   );
 }
@@ -637,7 +698,8 @@ function PasswordSection({ hasPassword }: { hasPassword: boolean }) {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {!editing ? (
+        <Crossfade active={editing}>
+          {/* Button */}
           <div className="flex items-center gap-3">
             <Button
               variant="outline"
@@ -652,7 +714,8 @@ function PasswordSection({ hasPassword }: { hasPassword: boolean }) {
               </span>
             )}
           </div>
-        ) : (
+
+          {/* Form */}
           <form
             onSubmit={handleSubmit}
             className="flex flex-col gap-4 max-w-sm"
@@ -722,7 +785,7 @@ function PasswordSection({ hasPassword }: { hasPassword: boolean }) {
               </Button>
             </div>
           </form>
-        )}
+        </Crossfade>
       </CardContent>
     </Card>
   );
