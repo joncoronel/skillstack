@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useUser, useClerk } from "@clerk/nextjs";
+import { isClerkAPIResponseError } from "@clerk/nextjs/errors";
 import { useRouter } from "next/navigation";
 import { revokeSession } from "@/app/(main)/settings/custom/actions";
 import {
@@ -38,7 +39,15 @@ import {
   AlertDialogDescription,
   AlertDialogClose,
 } from "@/components/ui/cubby-ui/alert-dialog";
+import { Checkbox } from "@/components/ui/cubby-ui/checkbox";
 import { Skeleton } from "@/components/ui/cubby-ui/skeleton";
+
+function getClerkErrorMessage(err: unknown, fallback: string): string {
+  if (isClerkAPIResponseError(err)) {
+    return err.errors[0]?.longMessage ?? fallback;
+  }
+  return fallback;
+}
 
 // ---------------------------------------------------------------------------
 // Profile Tab
@@ -80,10 +89,10 @@ function ProfileSkeleton() {
 
 function ProfileTab() {
   const { isLoaded, user } = useUser();
-  const [firstName, setFirstName] = React.useState(user?.firstName ?? "");
-  const [lastName, setLastName] = React.useState(user?.lastName ?? "");
+  const [editing, setEditing] = React.useState(false);
+  const [firstName, setFirstName] = React.useState("");
+  const [lastName, setLastName] = React.useState("");
   const [saving, setSaving] = React.useState(false);
-  const [saved, setSaved] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   if (!isLoaded || !user) return <ProfileSkeleton />;
@@ -94,13 +103,17 @@ function ProfileTab() {
       .join("")
       .toUpperCase() || "?";
 
+  const startEditing = () => {
+    setFirstName(user.firstName ?? "");
+    setLastName(user.lastName ?? "");
+    setEditing(true);
+  };
+
   const handleSave = async () => {
     setSaving(true);
-    setSaved(false);
     try {
       await user.update({ firstName, lastName });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      setEditing(false);
     } catch (err) {
       console.error("Failed to update profile:", err);
     } finally {
@@ -108,13 +121,21 @@ function ProfileTab() {
     }
   };
 
-  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
       await user.setProfileImage({ file });
     } catch (err) {
       console.error("Failed to update avatar:", err);
+    }
+  };
+
+  const handleAvatarRemove = async () => {
+    try {
+      await user.setProfileImage({ file: null });
+    } catch (err) {
+      console.error("Failed to remove avatar:", err);
     }
   };
 
@@ -127,71 +148,293 @@ function ProfileTab() {
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
-        <div className="flex items-center gap-4">
-          <Avatar size="lg">
-            <AvatarImage src={user.imageUrl} alt={user.fullName ?? "Avatar"} />
-            <AvatarFallback>{initials}</AvatarFallback>
-          </Avatar>
-          <div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              Change avatar
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Avatar size="lg">
+              <AvatarImage
+                src={user.imageUrl}
+                alt={user.fullName ?? "Avatar"}
+              />
+              <AvatarFallback>{initials}</AvatarFallback>
+            </Avatar>
+            <div className="flex flex-col">
+              <span className="text-sm font-medium">
+                {user.fullName || "No name set"}
+              </span>
+            </div>
+          </div>
+          {!editing && (
+            <Button variant="outline" size="sm" onClick={startEditing}>
+              Update profile
             </Button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handleAvatarChange}
-            />
-          </div>
-        </div>
-
-        <Separator />
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="firstName">First name</Label>
-            <Input
-              id="firstName"
-              value={firstName}
-              onChange={(e) => setFirstName(e.target.value)}
-            />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="lastName">Last name</Label>
-            <Input
-              id="lastName"
-              value={lastName}
-              onChange={(e) => setLastName(e.target.value)}
-            />
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? "Saving..." : "Save changes"}
-          </Button>
-          {saved && (
-            <span className="text-sm text-emerald-600 dark:text-emerald-400">
-              Saved
-            </span>
           )}
         </div>
 
+        {editing && (
+          <Card className="bg-background" variant="inset">
+            <CardHeader>
+              <CardTitle>Update profile</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              <div className="flex items-center gap-4">
+                <Avatar size="lg">
+                  <AvatarImage
+                    src={user.imageUrl}
+                    alt={user.fullName ?? "Avatar"}
+                  />
+                  <AvatarFallback>{initials}</AvatarFallback>
+                </Avatar>
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      Upload
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive"
+                      onClick={handleAvatarRemove}
+                    >
+                      Remove
+                    </Button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleAvatarUpload}
+                    />
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    Recommended size 1:1, up to 10MB.
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="firstName">First name</Label>
+                  <Input
+                    id="firstName"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="lastName">Last name</Label>
+                  <Input
+                    id="lastName"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setEditing(false)}
+                >
+                  Cancel
+                </Button>
+                <Button size="sm" onClick={handleSave} disabled={saving}>
+                  {saving ? "Saving..." : "Save"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <Separator />
 
-        <div className="flex flex-col gap-2">
-          <Label>Email</Label>
-          <p className="text-sm text-muted-foreground">
-            {user.primaryEmailAddress?.emailAddress}
-          </p>
-        </div>
+        <EmailSection />
       </CardContent>
     </Card>
+  );
+}
+
+function EmailSection() {
+  const { user } = useUser();
+  const [adding, setAdding] = React.useState(false);
+  const [newEmail, setNewEmail] = React.useState("");
+  const [code, setCode] = React.useState("");
+  const [verifying, setVerifying] = React.useState(false);
+  const [emailObj, setEmailObj] =
+    React.useState<
+      NonNullable<ReturnType<typeof useUser>["user"]>["emailAddresses"][number]
+    >();
+  const [error, setError] = React.useState("");
+
+  if (!user) return null;
+
+  const handleAddEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    try {
+      const res = await user.createEmailAddress({ email: newEmail });
+      await user.reload();
+      const emailAddress = user.emailAddresses.find((a) => a.id === res.id);
+      setEmailObj(emailAddress);
+      await emailAddress?.prepareVerification({ strategy: "email_code" });
+      setVerifying(true);
+    } catch (err) {
+      setError(getClerkErrorMessage(err, "Failed to add email"));
+    }
+  };
+
+  const handleVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    try {
+      const result = await emailObj?.attemptVerification({ code });
+      if (result?.verification.status === "verified") {
+        await user.reload();
+        setAdding(false);
+        setVerifying(false);
+        setNewEmail("");
+        setCode("");
+        setEmailObj(undefined);
+      }
+    } catch (err) {
+      setError(getClerkErrorMessage(err, "Invalid code"));
+    }
+  };
+
+  const handleRemoveEmail = async (emailId: string) => {
+    const email = user.emailAddresses.find((e) => e.id === emailId);
+    if (!email) return;
+    try {
+      await email.destroy();
+      await user.reload();
+    } catch (err) {
+      console.error("Failed to remove email:", err);
+    }
+  };
+
+  const handleSetPrimary = async (emailId: string) => {
+    try {
+      await user.update({ primaryEmailAddressId: emailId });
+      await user.reload();
+    } catch (err) {
+      console.error("Failed to set primary email:", err);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      <Label>Email addresses</Label>
+      {user.emailAddresses.map((email) => (
+        <div
+          key={email.id}
+          className="flex items-center justify-between rounded-lg border p-3"
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-sm">{email.emailAddress}</span>
+            {email.id === user.primaryEmailAddressId && (
+              <Badge variant="secondary">Primary</Badge>
+            )}
+          </div>
+          <div className="flex gap-2">
+            {email.id !== user.primaryEmailAddressId && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleSetPrimary(email.id)}
+                >
+                  Set primary
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleRemoveEmail(email.id)}
+                >
+                  Remove
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      ))}
+
+      {!adding ? (
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-fit"
+          onClick={() => setAdding(true)}
+        >
+          + Add email address
+        </Button>
+      ) : !verifying ? (
+        <form onSubmit={handleAddEmail} className="flex flex-col gap-2">
+          <Input
+            type="email"
+            placeholder="Enter email address"
+            value={newEmail}
+            onChange={(e) => setNewEmail(e.target.value)}
+            required
+          />
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <div className="flex gap-2">
+            <Button type="submit" size="sm">
+              Send code
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setAdding(false);
+                setNewEmail("");
+                setError("");
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+      ) : (
+        <form onSubmit={handleVerify} className="flex flex-col gap-2">
+          <p className="text-sm text-muted-foreground">
+            Enter the code sent to {newEmail}
+          </p>
+          <Input
+            type="text"
+            placeholder="Verification code"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            required
+          />
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <div className="flex gap-2">
+            <Button type="submit" size="sm">
+              Verify
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setVerifying(false);
+                setAdding(false);
+                setNewEmail("");
+                setCode("");
+                setError("");
+                setEmailObj(undefined);
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+      )}
+    </div>
   );
 }
 
@@ -210,7 +453,10 @@ function SecuritySkeleton() {
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {[1, 2].map((i) => (
-          <div key={i} className="flex items-center justify-between rounded-lg border p-3">
+          <div
+            key={i}
+            className="flex items-center justify-between rounded-lg border p-3"
+          >
             <div className="flex flex-col gap-1">
               <Skeleton className="h-4 w-20" />
               <Skeleton className="h-3 w-40" />
@@ -228,6 +474,7 @@ function SecurityTab() {
 
   if (!isLoaded || !user) return <SecuritySkeleton />;
 
+  const hasPassword = user.passwordEnabled;
   const connectedAccounts = user.externalAccounts ?? [];
 
   const handleDisconnect = async (accountId: string) => {
@@ -268,60 +515,213 @@ function SecurityTab() {
   );
 
   return (
+    <div className="flex flex-col gap-6">
+      <PasswordSection hasPassword={hasPassword} />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Connected accounts</CardTitle>
+          <CardDescription>Manage your linked social accounts</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          {connectedAccounts.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              No connected accounts.
+            </p>
+          )}
+
+          {connectedAccounts.map((account) => (
+            <div
+              key={account.id}
+              className="flex items-center justify-between rounded-lg border p-3"
+            >
+              <div className="flex flex-col gap-0.5">
+                <span className="text-sm font-medium">
+                  {capitalize(account.provider)}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {account.emailAddress}
+                </span>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleDisconnect(account.id)}
+              >
+                Disconnect
+              </Button>
+            </div>
+          ))}
+
+          {unconnectedProviders.length > 0 && (
+            <>
+              <Separator />
+              <div className="flex flex-col gap-2">
+                <p className="text-sm font-medium">Add a connection</p>
+                <div className="flex gap-2">
+                  {unconnectedProviders.map((strategy) => (
+                    <Button
+                      key={strategy}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleConnect(strategy)}
+                    >
+                      Connect {capitalize(strategy.replace("oauth_", ""))}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function PasswordSection({ hasPassword }: { hasPassword: boolean }) {
+  const { user } = useUser();
+  const [editing, setEditing] = React.useState(false);
+  const [currentPassword, setCurrentPassword] = React.useState("");
+  const [newPassword, setNewPassword] = React.useState("");
+  const [confirmPassword, setConfirmPassword] = React.useState("");
+  const [signOutOthers, setSignOutOthers] = React.useState(true);
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const [success, setSuccess] = React.useState(false);
+
+  if (!user) return null;
+
+  const resetForm = () => {
+    setEditing(false);
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setSignOutOthers(true);
+    setError("");
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword !== confirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    setSuccess(false);
+    try {
+      await user.updatePassword({
+        ...(hasPassword ? { currentPassword } : {}),
+        newPassword,
+        signOutOfOtherSessions: signOutOthers,
+      });
+      setSuccess(true);
+      resetForm();
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (err) {
+      setError(getClerkErrorMessage(err, "Failed to update password"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
     <Card>
       <CardHeader>
-        <CardTitle>Connected accounts</CardTitle>
-        <CardDescription>Manage your linked social accounts</CardDescription>
+        <CardTitle>Password</CardTitle>
+        <CardDescription>
+          {hasPassword
+            ? "Change your account password"
+            : "Set a password for email-based sign in"}
+        </CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        {connectedAccounts.length === 0 && (
-          <p className="text-sm text-muted-foreground">
-            No connected accounts.
-          </p>
-        )}
-
-        {connectedAccounts.map((account) => (
-          <div
-            key={account.id}
-            className="flex items-center justify-between rounded-lg border p-3"
-          >
-            <div className="flex flex-col gap-0.5">
-              <span className="text-sm font-medium">
-                {capitalize(account.provider)}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                {account.emailAddress}
-              </span>
-            </div>
+      <CardContent>
+        {!editing ? (
+          <div className="flex items-center gap-3">
             <Button
               variant="outline"
               size="sm"
-              onClick={() => handleDisconnect(account.id)}
+              onClick={() => setEditing(true)}
             >
-              Disconnect
+              {hasPassword ? "Change password" : "Set password"}
             </Button>
+            {success && (
+              <span className="text-sm text-emerald-600 dark:text-emerald-400">
+                Password updated
+              </span>
+            )}
           </div>
-        ))}
-
-        {unconnectedProviders.length > 0 && (
-          <>
-            <Separator />
-            <div className="flex flex-col gap-2">
-              <p className="text-sm font-medium">Add a connection</p>
-              <div className="flex gap-2">
-                {unconnectedProviders.map((strategy) => (
-                  <Button
-                    key={strategy}
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleConnect(strategy)}
-                  >
-                    Connect {capitalize(strategy.replace("oauth_", ""))}
-                  </Button>
-                ))}
+        ) : (
+          <form
+            onSubmit={handleSubmit}
+            className="flex flex-col gap-4 max-w-sm"
+          >
+            {hasPassword && (
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="currentPassword">Current password</Label>
+                <Input
+                  id="currentPassword"
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  required
+                />
               </div>
+            )}
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="newPassword">New password</Label>
+              <Input
+                id="newPassword"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                required
+              />
             </div>
-          </>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="confirmPassword">Confirm password</Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+              />
+            </div>
+            <label className="flex items-start gap-3">
+              <Checkbox
+                checked={signOutOthers}
+                onCheckedChange={(checked) =>
+                  setSignOutOthers(checked === true)
+                }
+                className="mt-0.5"
+              />
+              <div className="flex flex-col">
+                <span className="text-sm font-medium">
+                  Sign out of all other devices
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  It is recommended to sign out of all other devices which may
+                  have used your old password.
+                </span>
+              </div>
+            </label>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <div className="flex gap-2">
+              <Button type="submit" size="sm" disabled={saving}>
+                {saving ? "Saving..." : "Save"}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={resetForm}
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
         )}
       </CardContent>
     </Card>
