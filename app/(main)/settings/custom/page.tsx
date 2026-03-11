@@ -4,7 +4,7 @@ import { verifySession } from "@/lib/auth";
 import {
   CustomSettingsPage,
   type BackendSession,
-} from "@/components/auth/custom-settings";
+} from "@/components/auth/settings/custom-settings-page";
 
 export const metadata: Metadata = {
   title: "Account Settings",
