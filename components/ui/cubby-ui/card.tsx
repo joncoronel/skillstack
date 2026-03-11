@@ -16,7 +16,8 @@ const cardVariants = cva("text-card-foreground flex flex-col", {
 });
 
 export interface CardProps
-  extends React.HTMLAttributes<HTMLDivElement>,
+  extends
+    React.HTMLAttributes<HTMLDivElement>,
     VariantProps<typeof cardVariants> {}
 
 function Card({ className, variant = "default", ...props }: CardProps) {
@@ -49,10 +50,7 @@ function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-title"
-      className={cn(
-        "font-semibold [[data-variant=default]_&]:leading-none",
-        className,
-      )}
+      className={cn("font-semibold", className)}
       {...props}
     />
   );
