@@ -1,6 +1,7 @@
 "use client";
 
 import { useUser, useClerk } from "@clerk/nextjs";
+import Link from "next/link";
 import { getInitials } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/cubby-ui/avatar";
 import {
@@ -37,13 +38,13 @@ export function UserMenu() {
           </span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuLinkItem href="/dashboard">
+        <DropdownMenuLinkItem render={<Link href="/dashboard" />}>
           Dashboard
         </DropdownMenuLinkItem>
-        <DropdownMenuLinkItem href="/settings">
+        <DropdownMenuLinkItem render={<Link href="/settings" />}>
           Manage account
         </DropdownMenuLinkItem>
-        <DropdownMenuLinkItem href="/settings/custom">
+        <DropdownMenuLinkItem render={<Link href="/settings/custom" />}>
           Account settings
         </DropdownMenuLinkItem>
         <DropdownMenuSeparator />
