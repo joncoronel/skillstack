@@ -1,6 +1,7 @@
 "use client";
 
 import { useUser, useClerk } from "@clerk/nextjs";
+import { getInitials } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/cubby-ui/avatar";
 import {
   DropdownMenu,
@@ -18,10 +19,7 @@ export function UserMenu() {
 
   if (!user) return null;
 
-  const initials = [user.firstName?.[0], user.lastName?.[0]]
-    .filter(Boolean)
-    .join("")
-    .toUpperCase() || "?";
+  const initials = getInitials(user.firstName, user.lastName);
 
   return (
     <DropdownMenu>

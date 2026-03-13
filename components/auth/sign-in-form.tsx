@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/cubby-ui/card";
 import { Separator } from "@/components/ui/cubby-ui/separator";
 import { OAuthButtons } from "./oauth-buttons";
+import { getClerkErrorMessage } from "./settings/reverification-provider";
 
 export function SignInForm() {
   const { isLoaded, signIn, setActive } = useSignIn();
@@ -44,9 +45,8 @@ export function SignInForm() {
       } else {
         setError("Additional verification is required.");
       }
-    } catch (err: unknown) {
-      const clerkError = err as { errors?: { message: string }[] };
-      setError(clerkError.errors?.[0]?.message || "Sign in failed. Please try again.");
+    } catch (err) {
+      setError(getClerkErrorMessage(err, "Sign in failed. Please try again."));
     } finally {
       setLoading(false);
     }

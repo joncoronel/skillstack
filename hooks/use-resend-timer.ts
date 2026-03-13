@@ -4,22 +4,36 @@ const DEFAULT_COOLDOWN = 30;
 
 export function useResendTimer(cooldown = DEFAULT_COOLDOWN) {
   const [countdown, setCountdown] = React.useState(0);
+  const intervalRef = React.useRef<ReturnType<typeof setInterval>>(undefined);
+
+  const clearExistingInterval = React.useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = undefined;
+    }
+  }, []);
 
   const startTimer = React.useCallback(() => {
+    clearExistingInterval();
     setCountdown(cooldown);
-    const interval = setInterval(() => {
+    intervalRef.current = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
-          clearInterval(interval);
+          clearInterval(intervalRef.current);
+          intervalRef.current = undefined;
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
-    return interval;
-  }, [cooldown]);
+  }, [cooldown, clearExistingInterval]);
 
-  const resetTimer = React.useCallback(() => setCountdown(0), []);
+  const resetTimer = React.useCallback(() => {
+    clearExistingInterval();
+    setCountdown(0);
+  }, [clearExistingInterval]);
+
+  React.useEffect(() => clearExistingInterval, [clearExistingInterval]);
 
   return { countdown, startTimer, resetTimer };
 }

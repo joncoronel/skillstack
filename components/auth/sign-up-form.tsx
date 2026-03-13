@@ -21,6 +21,7 @@ import {
   InputOTPSlot,
 } from "@/components/ui/cubby-ui/input-otp";
 import { OAuthButtons } from "./oauth-buttons";
+import { getClerkErrorMessage } from "./settings/reverification-provider";
 
 export function SignUpForm() {
   const { isLoaded, signUp, setActive } = useSignUp();
@@ -50,9 +51,8 @@ export function SignUpForm() {
       });
 
       setVerifying(true);
-    } catch (err: unknown) {
-      const clerkError = err as { errors?: { message: string }[] };
-      setError(clerkError.errors?.[0]?.message || "Sign up failed. Please try again.");
+    } catch (err) {
+      setError(getClerkErrorMessage(err, "Sign up failed. Please try again."));
     } finally {
       setLoading(false);
     }
@@ -74,9 +74,8 @@ export function SignUpForm() {
       } else {
         setError("Verification incomplete. Please try again.");
       }
-    } catch (err: unknown) {
-      const clerkError = err as { errors?: { message: string }[] };
-      setError(clerkError.errors?.[0]?.message || "Verification failed. Please try again.");
+    } catch (err) {
+      setError(getClerkErrorMessage(err, "Verification failed. Please try again."));
     } finally {
       setLoading(false);
     }

@@ -16,6 +16,7 @@ import { Crossfade } from "@/components/ui/cubby-ui/crossfade";
 import { SettingsSection } from "./settings-section";
 import { EmailSection } from "./email-section";
 import { ConnectedAccountsSection } from "./connected-accounts-section";
+import { getInitials } from "@/lib/utils";
 
 function ProfileSkeleton() {
   return (
@@ -67,11 +68,7 @@ export function ProfileTab() {
 
   if (!isLoaded || !user) return <ProfileSkeleton />;
 
-  const initials =
-    [user.firstName?.[0], user.lastName?.[0]]
-      .filter(Boolean)
-      .join("")
-      .toUpperCase() || "?";
+  const initials = getInitials(user.firstName, user.lastName);
 
   const startEditing = () => {
     setFirstName(user.firstName ?? "");

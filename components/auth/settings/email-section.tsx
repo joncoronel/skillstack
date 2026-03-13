@@ -3,7 +3,8 @@
 import * as React from "react";
 import { useUser, useReverification } from "@clerk/nextjs";
 import { isReverificationCancelledError } from "@clerk/nextjs/errors";
-import { MoreHorizontalIcon } from "lucide-react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { MoreHorizontalIcon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/cubby-ui/button";
 import { Input } from "@/components/ui/cubby-ui/input";
 import { Label } from "@/components/ui/cubby-ui/label";
@@ -176,7 +177,7 @@ export function EmailSection() {
                         />
                       }
                     >
-                      <MoreHorizontalIcon className="size-4" />
+                      <HugeiconsIcon icon={MoreHorizontalIcon} size={16} />
                       <span className="sr-only">Actions</span>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
