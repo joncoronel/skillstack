@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useAuth } from "@clerk/nextjs";
+import { useConvexAuth } from "convex/react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/cubby-ui/button";
 import { Sheet, SheetContent } from "@/components/ui/cubby-ui/sheet";
@@ -10,7 +10,7 @@ import { generateAllCommandsText } from "@/lib/install-commands";
 import { SaveBundleDialog } from "@/components/save-bundle-dialog";
 export function BundleBar() {
   const selection = useBundleSelection();
-  const { isSignedIn } = useAuth();
+  const { isAuthenticated: isSignedIn } = useConvexAuth();
   const router = useRouter();
   const [copied, setCopied] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
