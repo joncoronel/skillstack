@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ClerkLoaded, ClerkLoading } from "@clerk/nextjs";
-import { useConvexAuth } from "convex/react";
+import { Authenticated, Unauthenticated, AuthLoading } from "convex/react";
 import { UserMenu } from "@/components/auth/user-menu";
 import { Button } from "@/components/ui/cubby-ui/button";
 import { Skeleton } from "@/components/ui/cubby-ui/skeleton";
@@ -24,19 +23,27 @@ export function AppHeader() {
           </Link>
           <nav className="flex items-center gap-1">
             <NavLink href="/explore">Explore</NavLink>
-            <ClerkLoaded>
-              <AuthNav />
-            </ClerkLoaded>
+            <NavLink href="/dashboard">Dashboard</NavLink>
           </nav>
         </div>
         <div className="flex items-center gap-3">
           <ThemeSwitcher />
-          <ClerkLoading>
+          <AuthLoading>
             <Skeleton className="h-8 w-16 rounded-md" />
-          </ClerkLoading>
-          <ClerkLoaded>
-            <AuthButton />
-          </ClerkLoaded>
+          </AuthLoading>
+          <Authenticated>
+            <UserMenu />
+          </Authenticated>
+          <Unauthenticated>
+            <Button
+              nativeButton={false}
+              variant="primary"
+              size="sm"
+              render={<Link href="/sign-in" />}
+            >
+              Sign in
+            </Button>
+          </Unauthenticated>
         </div>
       </div>
     </header>
@@ -62,27 +69,6 @@ function NavLink({
       className={cn(isActive && "text-foreground font-medium")}
     >
       {children}
-    </Button>
-  );
-}
-
-function AuthNav() {
-  const { isAuthenticated } = useConvexAuth();
-  if (!isAuthenticated) return null;
-  return <NavLink href="/dashboard">Dashboard</NavLink>;
-}
-
-function AuthButton() {
-  const { isAuthenticated } = useConvexAuth();
-  if (isAuthenticated) return <UserMenu />;
-  return (
-    <Button
-      nativeButton={false}
-      variant="primary"
-      size="sm"
-      render={<Link href="/sign-in" />}
-    >
-      Sign in
     </Button>
   );
 }
