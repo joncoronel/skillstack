@@ -64,7 +64,17 @@ export function ProfileTab() {
   const [firstName, setFirstName] = React.useState("");
   const [lastName, setLastName] = React.useState("");
   const [saving, setSaving] = React.useState(false);
+  const [pendingAvatarFile, setPendingAvatarFile] = React.useState<File | null>(null);
+  const [pendingAvatarRemove, setPendingAvatarRemove] = React.useState(false);
+  const [pendingAvatarPreview, setPendingAvatarPreview] = React.useState<string | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  // Clean up object URL on unmount or when preview changes
+  React.useEffect(() => {
+    return () => {
+      if (pendingAvatarPreview) URL.revokeObjectURL(pendingAvatarPreview);
+    };
+  }, [pendingAvatarPreview]);
 
   if (!isLoaded || !user) return <ProfileSkeleton />;
 
@@ -76,10 +86,23 @@ export function ProfileTab() {
     setEditing(true);
   };
 
+  const resetPendingAvatar = () => {
+    if (pendingAvatarPreview) URL.revokeObjectURL(pendingAvatarPreview);
+    setPendingAvatarFile(null);
+    setPendingAvatarRemove(false);
+    setPendingAvatarPreview(null);
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
       await user.update({ firstName, lastName });
+      if (pendingAvatarFile) {
+        await user.setProfileImage({ file: pendingAvatarFile });
+      } else if (pendingAvatarRemove) {
+        await user.setProfileImage({ file: null });
+      }
+      resetPendingAvatar();
       setEditing(false);
     } catch (err) {
       console.error("Failed to update profile:", err);
@@ -88,22 +111,18 @@ export function ProfileTab() {
     }
   };
 
-  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    try {
-      await user.setProfileImage({ file });
-    } catch (err) {
-      console.error("Failed to update avatar:", err);
-    }
+    if (pendingAvatarPreview) URL.revokeObjectURL(pendingAvatarPreview);
+    setPendingAvatarFile(file);
+    setPendingAvatarRemove(false);
+    setPendingAvatarPreview(URL.createObjectURL(file));
   };
 
-  const handleAvatarRemove = async () => {
-    try {
-      await user.setProfileImage({ file: null });
-    } catch (err) {
-      console.error("Failed to remove avatar:", err);
-    }
+  const handleAvatarRemove = () => {
+    resetPendingAvatar();
+    setPendingAvatarRemove(true);
   };
 
   return (
@@ -138,10 +157,12 @@ export function ProfileTab() {
           <div className="flex flex-col gap-4">
             <div className="flex items-center gap-4">
               <Avatar size="lg">
-                <AvatarImage
-                  src={user.imageUrl}
-                  alt={user.fullName ?? "Avatar"}
-                />
+                {!pendingAvatarRemove && (
+                  <AvatarImage
+                    src={pendingAvatarPreview ?? user.imageUrl}
+                    alt={user.fullName ?? "Avatar"}
+                  />
+                )}
                 <AvatarFallback>{initials}</AvatarFallback>
               </Avatar>
               <div className="flex flex-col gap-1">
@@ -197,7 +218,7 @@ export function ProfileTab() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setEditing(false)}
+                onClick={() => { resetPendingAvatar(); setEditing(false); }}
               >
                 Cancel
               </Button>
