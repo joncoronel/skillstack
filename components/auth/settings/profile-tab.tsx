@@ -67,6 +67,7 @@ export function ProfileTab() {
   const [pendingAvatarFile, setPendingAvatarFile] = React.useState<File | null>(null);
   const [pendingAvatarRemove, setPendingAvatarRemove] = React.useState(false);
   const [pendingAvatarPreview, setPendingAvatarPreview] = React.useState<string | null>(null);
+  const [avatarError, setAvatarError] = React.useState("");
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // Clean up object URL on unmount or when preview changes
@@ -91,6 +92,7 @@ export function ProfileTab() {
     setPendingAvatarFile(null);
     setPendingAvatarRemove(false);
     setPendingAvatarPreview(null);
+    setAvatarError("");
   };
 
   const handleSave = async () => {
@@ -114,6 +116,14 @@ export function ProfileTab() {
   const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+    if (file.size > MAX_SIZE) {
+      setAvatarError("File size must be under 10MB.");
+      return;
+    }
+    setAvatarError("");
+
     if (pendingAvatarPreview) URL.revokeObjectURL(pendingAvatarPreview);
     setPendingAvatarFile(file);
     setPendingAvatarRemove(false);
@@ -193,6 +203,9 @@ export function ProfileTab() {
                 <span className="text-xs text-muted-foreground">
                   Recommended size 1:1, up to 10MB.
                 </span>
+                {avatarError && (
+                  <span className="text-xs text-destructive">{avatarError}</span>
+                )}
               </div>
             </div>
 

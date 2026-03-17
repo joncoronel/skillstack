@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/cubby-ui/card";
 import { Separator } from "@/components/ui/cubby-ui/separator";
 import { OAuthButtons } from "./oauth-buttons";
-import { getClerkErrorMessage } from "./settings/reverification-provider";
+import { getClerkErrorMessage } from "@/lib/utils";
 
 export function SignInForm() {
   const { isLoaded, signIn, setActive } = useSignIn();

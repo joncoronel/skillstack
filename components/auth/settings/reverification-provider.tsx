@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { useUser, useSession } from "@clerk/nextjs";
-import { isClerkAPIResponseError } from "@clerk/nextjs/errors";
 import { Button } from "@/components/ui/cubby-ui/button";
 import {
   Dialog,
@@ -19,18 +18,7 @@ import {
   InputOTPSlot,
 } from "@/components/ui/cubby-ui/input-otp";
 import { useResendTimer } from "@/hooks/use-resend-timer";
-import { cn } from "@/lib/utils";
-
-// ---------------------------------------------------------------------------
-// Shared utility
-// ---------------------------------------------------------------------------
-
-export function getClerkErrorMessage(err: unknown, fallback: string): string {
-  if (isClerkAPIResponseError(err)) {
-    return err.errors[0]?.longMessage ?? fallback;
-  }
-  return fallback;
-}
+import { cn, getClerkErrorMessage } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
 // Reverification context

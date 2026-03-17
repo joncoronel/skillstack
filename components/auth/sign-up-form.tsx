@@ -21,7 +21,7 @@ import {
   InputOTPSlot,
 } from "@/components/ui/cubby-ui/input-otp";
 import { OAuthButtons } from "./oauth-buttons";
-import { getClerkErrorMessage } from "./settings/reverification-provider";
+import { getClerkErrorMessage } from "@/lib/utils";
 
 export function SignUpForm() {
   const { isLoaded, signUp, setActive } = useSignUp();
@@ -95,10 +95,20 @@ export function SignUpForm() {
             <InputOTP maxLength={6} value={code} onChange={setCode}>
               <InputOTPGroup>
                 <InputOTPSlot index={0} />
+              </InputOTPGroup>
+              <InputOTPGroup>
                 <InputOTPSlot index={1} />
+              </InputOTPGroup>
+              <InputOTPGroup>
                 <InputOTPSlot index={2} />
+              </InputOTPGroup>
+              <InputOTPGroup>
                 <InputOTPSlot index={3} />
+              </InputOTPGroup>
+              <InputOTPGroup>
                 <InputOTPSlot index={4} />
+              </InputOTPGroup>
+              <InputOTPGroup>
                 <InputOTPSlot index={5} />
               </InputOTPGroup>
             </InputOTP>

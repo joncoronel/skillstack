@@ -24,11 +24,8 @@ import {
 } from "@/components/ui/cubby-ui/input-otp";
 import { Crossfade } from "@/components/ui/cubby-ui/crossfade";
 import { useResendTimer } from "@/hooks/use-resend-timer";
-import {
-  useReverificationFlow,
-  getClerkErrorMessage,
-} from "./reverification-provider";
-import { cn } from "@/lib/utils";
+import { useReverificationFlow } from "./reverification-provider";
+import { cn, getClerkErrorMessage } from "@/lib/utils";
 
 export function EmailSection() {
   const { user } = useUser();
