@@ -69,45 +69,22 @@ export function AppHeader() {
             <ThemeSwitcher />
           </div>
 
-          {/* Desktop auth */}
-          <div className="max-sm:hidden">
-            <AuthLoading>
-              <Skeleton className="h-8 w-16 rounded-md" />
-            </AuthLoading>
-            <Authenticated>
-              <UserMenu />
-            </Authenticated>
-            <Unauthenticated>
-              <Button
-                nativeButton={false}
-                variant="primary"
-                size="sm"
-                render={<Link href="/sign-in" />}
-              >
-                Sign in
-              </Button>
-            </Unauthenticated>
-          </div>
-
-          {/* Mobile auth - avatar with dropdown or sign-in */}
-          <div className="sm:hidden">
-            <AuthLoading>
-              <Skeleton className="size-8 rounded-full" />
-            </AuthLoading>
-            <Authenticated>
-              <UserMenu />
-            </Authenticated>
-            <Unauthenticated>
-              <Button
-                nativeButton={false}
-                variant="primary"
-                size="sm"
-                render={<Link href="/sign-in" />}
-              >
-                Sign in
-              </Button>
-            </Unauthenticated>
-          </div>
+          <AuthLoading>
+            <Skeleton className="size-8 rounded-full sm:h-8 sm:w-16 sm:rounded-md" />
+          </AuthLoading>
+          <Authenticated>
+            <UserMenu />
+          </Authenticated>
+          <Unauthenticated>
+            <Button
+              nativeButton={false}
+              variant="primary"
+              size="sm"
+              render={<Link href="/sign-in" />}
+            >
+              Sign in
+            </Button>
+          </Unauthenticated>
         </div>
       </div>
 
