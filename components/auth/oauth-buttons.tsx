@@ -67,9 +67,9 @@ export function OAuthButtons({ mode }: OAuthButtonsProps) {
           key={provider.strategy}
           variant="outline"
           className="w-full"
+          leftSection={provider.icon}
           onClick={() => handleOAuth(provider.strategy)}
         >
-          {provider.icon}
           Continue with {provider.label}
         </Button>
       ))}
