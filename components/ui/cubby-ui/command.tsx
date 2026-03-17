@@ -3,7 +3,8 @@
 import * as React from "react";
 import { Autocomplete as AutocompleteBase } from "@base-ui/react/autocomplete";
 import { Dialog as BaseDialog } from "@base-ui/react/dialog";
-import { SearchIcon } from "lucide-react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Search01Icon } from "@hugeicons/core-free-icons";
 
 import {
   InputGroup,
@@ -145,7 +146,9 @@ function CommandInput({
         {...props}
       />
       <InputGroupAddon>
-        <SearchIcon
+        <HugeiconsIcon
+          icon={Search01Icon}
+          strokeWidth={2}
           className={cn(
             "size-4",
             loading && "animation-duration-400 animate-pulse",

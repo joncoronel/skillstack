@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/cubby-ui/popover";
 import { ForkBundleButton } from "@/components/explore/fork-bundle-button";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Share01Icon, Loading03Icon } from "@hugeicons/core-free-icons";
+import { Share01Icon, Loading03Icon, Edit01Icon, Cancel01Icon } from "@hugeicons/core-free-icons";
 
 interface BundleViewProps {
   preloadedBundle: Preloaded<typeof api.bundles.getByUrlId>;
@@ -162,6 +162,7 @@ export function BundleView({
               size="sm"
               onClick={() => setRenameDialogOpen(true)}
             >
+              <HugeiconsIcon icon={Edit01Icon} strokeWidth={2} className="size-3.5" />
               Rename
             </Button>
             <div className="flex items-center gap-2">
@@ -311,6 +312,7 @@ function SharePopover({
                   className="text-destructive"
                   onClick={() => onRevoke({ bundleId })}
                 >
+                  <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="size-3.5" />
                   Revoke
                 </Button>
               </div>

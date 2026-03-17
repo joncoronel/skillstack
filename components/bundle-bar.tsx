@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useConvexAuth } from "convex/react";
 import { useRouter } from "next/navigation";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Cancel01Icon, Copy01Icon, ArrowUpDownIcon, Download01Icon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/cubby-ui/button";
 import { Sheet, SheetContent } from "@/components/ui/cubby-ui/sheet";
 import { useBundleSelection } from "@/lib/bundle-selection-context";
@@ -49,6 +51,7 @@ export function BundleBar() {
                 {count} skill{count !== 1 ? "s" : ""} selected
               </span>
               <Button variant="ghost" size="xs" onClick={clearAll}>
+                <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="size-3.5" />
                 Clear
               </Button>
             </div>
@@ -57,6 +60,7 @@ export function BundleBar() {
 
             <div className="flex items-center gap-2 sm:gap-3">
               <Button variant="outline" size="sm" onClick={handleCopy}>
+                <HugeiconsIcon icon={Copy01Icon} strokeWidth={2} className="size-3.5" />
                 {copied ? "Copied!" : "Copy install"}
               </Button>
 
@@ -73,11 +77,13 @@ export function BundleBar() {
                     );
                   }}
                 >
+                  <HugeiconsIcon icon={ArrowUpDownIcon} strokeWidth={2} className="size-3.5" />
                   Compare
                 </Button>
               )}
 
               <Button variant="primary" size="sm" onClick={handleSave}>
+                <HugeiconsIcon icon={Download01Icon} strokeWidth={2} className="size-3.5" />
                 {isSignedIn ? "Save bundle" : "Sign in to save"}
               </Button>
             </div>

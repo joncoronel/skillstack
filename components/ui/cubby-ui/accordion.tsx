@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Accordion as BaseAccordion } from "@base-ui/react/accordion";
-import { ChevronDownIcon } from "lucide-react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
 import { cn } from "@/lib/utils";
 
 type AccordionVariant =
@@ -140,7 +141,9 @@ function AccordionTrigger({
 
     const indicatorIcon =
       indicatorType === "chevron" ? (
-        <ChevronDownIcon
+        <HugeiconsIcon
+          icon={ArrowDown01Icon}
+          strokeWidth={2}
           data-slot="accordion-indicator"
           className="text-muted-foreground ease-out-cubic size-4 shrink-0 transition-transform duration-200"
         />

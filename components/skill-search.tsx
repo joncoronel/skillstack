@@ -3,7 +3,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useQueryState } from "nuqs";
 import MiniSearch, { type SearchResult } from "minisearch";
-import { SearchIcon, XIcon, LoaderIcon } from "lucide-react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Search01Icon, Cancel01Icon, Loading03Icon } from "@hugeicons/core-free-icons";
 import { searchQueryParser } from "@/lib/search-params";
 import { Input } from "@/components/ui/cubby-ui/input";
 import { SkillCard } from "@/components/skill-card";
@@ -138,7 +139,7 @@ export function SkillSearch() {
   return (
     <div>
       <div className="relative">
-        <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
+        <HugeiconsIcon icon={Search01Icon} strokeWidth={2} className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
         <Input
           ref={inputRef}
           placeholder="Search skills by name…"
@@ -157,10 +158,10 @@ export function SkillSearch() {
             }}
             className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
           >
-            <XIcon className="size-4" />
+            <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="size-4" />
           </button>
         ) : isLoading ? (
-          <LoaderIcon className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground animate-spin" />
+          <HugeiconsIcon icon={Loading03Icon} strokeWidth={2} className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground animate-spin" />
         ) : null}
       </div>
 

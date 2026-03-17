@@ -3,6 +3,8 @@
 import * as React from "react";
 import { useUser, useClerk } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { DangerIcon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/cubby-ui/button";
 import {
   AlertDialog,
@@ -43,6 +45,7 @@ export function DangerZone() {
   return (
     <AlertDialog>
       <AlertDialogTrigger render={<Button variant="destructive" />}>
+        <HugeiconsIcon icon={DangerIcon} strokeWidth={2} className="size-4" />
         Delete account
       </AlertDialogTrigger>
       <AlertDialogContent>

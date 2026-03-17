@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { XIcon } from "lucide-react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Cancel01Icon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/cubby-ui/button";
 import { ScrollArea } from "@/components/ui/cubby-ui/scroll-area/scroll-area";
 import { TECHNOLOGIES } from "@/lib/technologies";
@@ -64,7 +65,7 @@ export function StickyTechBar({
                     className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-full border bg-secondary text-secondary-foreground px-2.5 py-0.5 text-xs font-medium transition-colors hover:opacity-80"
                   >
                     {techNameMap.get(id) ?? id}
-                    <XIcon className="size-3" />
+                    <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="size-3" />
                   </button>
                 ))}
               </div>

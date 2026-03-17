@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Input } from "@/components/ui/cubby-ui/input";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { FlashIcon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/cubby-ui/button";
 
 interface RepoUrlInputProps {
@@ -66,6 +68,7 @@ export function RepoUrlInput({ onTechnologiesDetected }: RepoUrlInputProps) {
           disabled={!url.trim() || loading}
           loading={loading}
         >
+          <HugeiconsIcon icon={FlashIcon} strokeWidth={2} className="size-3.5" />
           Detect
         </Button>
       </div>

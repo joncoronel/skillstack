@@ -6,6 +6,8 @@ import { Authenticated, Unauthenticated, AuthLoading } from "convex/react";
 import { UserMenu } from "@/components/auth/user-menu";
 import { Button } from "@/components/ui/cubby-ui/button";
 import { Skeleton } from "@/components/ui/cubby-ui/skeleton";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { CompassIcon, DashboardSquare01Icon } from "@hugeicons/core-free-icons";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { cn } from "@/lib/utils";
 
@@ -22,8 +24,14 @@ export function AppHeader() {
             <span className="ml-0.5 inline-block size-1.5 rounded-full bg-primary align-super" />
           </Link>
           <nav className="flex items-center gap-1">
-            <NavLink href="/explore">Explore</NavLink>
-            <NavLink href="/dashboard">Dashboard</NavLink>
+            <NavLink href="/explore">
+              <HugeiconsIcon icon={CompassIcon} strokeWidth={2} className="size-4" />
+              Explore
+            </NavLink>
+            <NavLink href="/dashboard">
+              <HugeiconsIcon icon={DashboardSquare01Icon} strokeWidth={2} className="size-4" />
+              Dashboard
+            </NavLink>
           </nav>
         </div>
         <div className="flex items-center gap-3">

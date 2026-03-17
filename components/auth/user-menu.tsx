@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useUser, useClerk } from "@clerk/nextjs";
 import Link from "next/link";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { DashboardSquare01Icon, UserIcon, Settings01Icon, Logout01Icon } from "@hugeicons/core-free-icons";
 import { getInitials } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/cubby-ui/avatar";
 import {
@@ -41,16 +43,20 @@ export function UserMenu() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuLinkItem render={<Link href="/dashboard" />} onClick={() => setOpen(false)}>
+          <HugeiconsIcon icon={DashboardSquare01Icon} strokeWidth={2} className="size-4" />
           Dashboard
         </DropdownMenuLinkItem>
         <DropdownMenuLinkItem render={<Link href="/settings" />} onClick={() => setOpen(false)}>
+          <HugeiconsIcon icon={UserIcon} strokeWidth={2} className="size-4" />
           Manage account
         </DropdownMenuLinkItem>
         <DropdownMenuLinkItem render={<Link href="/settings/custom" />} onClick={() => setOpen(false)}>
+          <HugeiconsIcon icon={Settings01Icon} strokeWidth={2} className="size-4" />
           Account settings
         </DropdownMenuLinkItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => { setOpen(false); signOut({ redirectUrl: "/sign-in" }); }}>
+          <HugeiconsIcon icon={Logout01Icon} strokeWidth={2} className="size-4" />
           Sign out
         </DropdownMenuItem>
       </DropdownMenuContent>

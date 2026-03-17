@@ -2,7 +2,8 @@
 
 import { useRef, useState } from "react";
 import { useQueryState } from "nuqs";
-import { ChevronDownIcon } from "lucide-react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
 import { BundleSelectionProvider } from "@/lib/bundle-selection-context";
 import { techParser, tabParser, type TabValue } from "@/lib/search-params";
 import { TechnologySelector } from "@/components/technology-selector";
@@ -82,7 +83,7 @@ export function SkillExplorer() {
                         )}
                       </span>
                       <span className="bg-background pr-1">
-                        <ChevronDownIcon className="size-3.5 text-muted-foreground transition-transform duration-200 group-data-[panel-open]/collapsible:rotate-180" />
+                        <HugeiconsIcon icon={ArrowDown01Icon} strokeWidth={2} className="size-3.5 text-muted-foreground transition-transform duration-200 group-data-[panel-open]/collapsible:rotate-180" />
                       </span>
                     </CollapsibleTrigger>
                   </div>

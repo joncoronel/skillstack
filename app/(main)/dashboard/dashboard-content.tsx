@@ -6,6 +6,8 @@ import { usePreloadedQuery, useMutation, type Preloaded } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { BundleCard } from "@/components/bundle-card";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { EyeIcon, LockIcon, Delete01Icon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/cubby-ui/button";
 import {
   AlertDialog,
@@ -100,6 +102,7 @@ export function DashboardContent({ preloadedBundles }: DashboardContentProps) {
                     nativeButton={false}
                     render={<Link href={`/stack/${bundle.urlId}`} />}
                   >
+                    <HugeiconsIcon icon={EyeIcon} strokeWidth={2} className="size-3.5" />
                     View
                   </Button>
                   <Button
@@ -112,6 +115,7 @@ export function DashboardContent({ preloadedBundles }: DashboardContentProps) {
                       })
                     }
                   >
+                    <HugeiconsIcon icon={LockIcon} strokeWidth={2} className="size-3.5" />
                     {bundle.isPublic ? "Make private" : "Make public"}
                   </Button>
                   <Button
@@ -119,6 +123,7 @@ export function DashboardContent({ preloadedBundles }: DashboardContentProps) {
                     size="xs"
                     onClick={() => setDeletingId(bundle._id)}
                   >
+                    <HugeiconsIcon icon={Delete01Icon} strokeWidth={2} className="size-3.5" />
                     Delete
                   </Button>
                 </div>

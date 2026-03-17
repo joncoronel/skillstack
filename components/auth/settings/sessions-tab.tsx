@@ -3,6 +3,8 @@
 import * as React from "react";
 import { useClerk } from "@clerk/nextjs";
 import { revokeSession } from "@/app/(main)/settings/custom/actions";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Cancel01Icon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/cubby-ui/button";
 import { Badge } from "@/components/ui/cubby-ui/badge";
 import { Skeleton } from "@/components/ui/cubby-ui/skeleton";
@@ -117,6 +119,7 @@ export function SessionsTab({
                 size="sm"
                 onClick={() => handleRevoke(session.id)}
               >
+                <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="size-3.5" />
                 Revoke
               </Button>
             )}

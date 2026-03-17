@@ -4,7 +4,8 @@ import * as React from "react";
 import { Collapsible as BaseCollapsible } from "@base-ui/react/collapsible";
 import { CheckboxGroup } from "@base-ui/react/checkbox-group";
 import { Checkbox } from "@/components/ui/cubby-ui/checkbox";
-import { ChevronRightIcon, Loader2Icon } from "lucide-react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { ArrowRight01Icon, Loading03Icon } from "@hugeicons/core-free-icons";
 import { mergeProps } from "@base-ui/react/merge-props";
 import { useRender } from "@base-ui/react/use-render";
 import { cn } from "@/lib/utils";
@@ -851,7 +852,9 @@ function TreeItemInternal<
                       className="pointer-events-auto cursor-pointer"
                     />
                   </span>
-                  <ChevronRightIcon
+                  <HugeiconsIcon
+                    icon={ArrowRight01Icon}
+                    strokeWidth={2}
                     aria-hidden="true"
                     className={cn(
                       "text-muted-foreground ease-out-cubic size-4 shrink-0 transition-transform duration-[325ms]",
@@ -888,7 +891,9 @@ function TreeItemInternal<
                   disabled={isDisabled}
                   tabIndex={isDisabled ? -1 : isTabbable ? 0 : -1}
                 >
-                  <ChevronRightIcon
+                  <HugeiconsIcon
+                    icon={ArrowRight01Icon}
+                    strokeWidth={2}
                     aria-hidden="true"
                     className={cn(
                       "text-muted-foreground ease-out-cubic size-4 shrink-0 transition-transform duration-[325ms]",
@@ -997,7 +1002,7 @@ function TreeItemIcon({
   // Show loading spinner if node is loading
   let displayIcon: React.ReactNode;
   if (isLoading) {
-    displayIcon = <Loader2Icon className="animate-spin" />;
+    displayIcon = <HugeiconsIcon icon={Loading03Icon} strokeWidth={2} className="animate-spin" />;
   } else {
     displayIcon =
       isExpanded && "iconOpen" in item && item.iconOpen

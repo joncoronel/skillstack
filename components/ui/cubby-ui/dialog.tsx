@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import { Dialog as BaseDialog } from "@base-ui/react/dialog";
-import { XIcon } from "lucide-react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Cancel01Icon } from "@hugeicons/core-free-icons";
 
 import { cn } from "@/lib/utils";
 import {
@@ -95,7 +96,7 @@ function DialogContent({
           {children}
           {showCloseButton && (
             <DialogClose className="focus-visible:outline-ring/50 absolute top-4 right-4 rounded-sm opacity-70 outline-0 outline-offset-0 outline-transparent transition-opacity outline-solid hover:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:pointer-events-none">
-              <XIcon className="h-4 w-4" />
+              <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="h-4 w-4" />
               <span className="sr-only">Close</span>
             </DialogClose>
           )}

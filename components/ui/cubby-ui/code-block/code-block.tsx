@@ -14,7 +14,8 @@ import { useRender } from "@base-ui/react/use-render";
 import { highlight } from "@/components/ui/cubby-ui/code-block/lib/shiki-shared";
 import { stripDiffMarker } from "@/components/ui/cubby-ui/code-block/lib/transformers/utils";
 import { cn } from "@/lib/utils";
-import { Terminal } from "lucide-react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { ComputerTerminal01Icon } from "@hugeicons/core-free-icons";
 import { CopyButton } from "@/components/ui/cubby-ui/copy-button/copy-button";
 import {
   SiTypescript,
@@ -51,6 +52,11 @@ function useCodeBlock() {
   return context;
 }
 
+// Wrapper for HugeIcons terminal icon to match the component signature
+const TerminalIconWrapper = ({ size, className }: { size: number; className: string }) => (
+  <HugeiconsIcon icon={ComputerTerminal01Icon} strokeWidth={2} className={className} style={{ width: size, height: size }} />
+);
+
 // Language icon mapping
 const LANGUAGE_ICONS: Record<
   string,
@@ -62,9 +68,9 @@ const LANGUAGE_ICONS: Record<
   javascript: SiJavascript,
   js: SiJavascript,
   jsx: SiJavascript,
-  bash: Terminal,
-  sh: Terminal,
-  shell: Terminal,
+  bash: TerminalIconWrapper,
+  sh: TerminalIconWrapper,
+  shell: TerminalIconWrapper,
   python: SiPython,
   py: SiPython,
 };

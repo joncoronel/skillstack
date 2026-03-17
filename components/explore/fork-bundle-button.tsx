@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useMutation, useConvexAuth } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { GitForkIcon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/cubby-ui/button";
 
 interface ForkBundleButtonProps {
@@ -44,6 +46,7 @@ export function ForkBundleButton({
       loading={forking}
       className={className}
     >
+      <HugeiconsIcon icon={GitForkIcon} strokeWidth={2} className="size-3.5" />
       Fork
     </Button>
   );

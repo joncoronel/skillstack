@@ -3,7 +3,8 @@
 import * as React from "react";
 import { Dialog as BaseSheet } from "@base-ui/react/dialog";
 import { cva, type VariantProps } from "class-variance-authority";
-import { XIcon } from "lucide-react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Cancel01Icon } from "@hugeicons/core-free-icons";
 
 import { cn } from "@/lib/utils";
 import {
@@ -173,7 +174,7 @@ function SheetContent({
           {children}
           {showCloseButton && (
             <SheetClose className="ring-offset-popover focus:ring-ring text-muted-foreground absolute top-5 right-5 rounded-lg opacity-50 transition-opacity duration-200 hover:opacity-100 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4">
-              <XIcon className="size-4" />
+              <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="size-4" />
               <span className="sr-only">Close</span>
             </SheetClose>
           )}

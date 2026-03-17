@@ -15,6 +15,8 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/cubby-ui/sheet";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { ArrowRight01Icon, PlusSignIcon, MinusSignIcon } from "@hugeicons/core-free-icons";
 import { Badge } from "@/components/ui/cubby-ui/badge";
 import { Button, buttonVariants } from "@/components/ui/cubby-ui/button";
 import { Skeleton } from "@/components/ui/cubby-ui/skeleton";
@@ -139,6 +141,7 @@ export function SkillDetailSheet({
                 className={buttonVariants({ variant: "outline", size: "sm" })}
               >
                 View full page
+                <HugeiconsIcon icon={ArrowRight01Icon} strokeWidth={2} className="size-3.5" />
               </Link>
               {selection && (
                 <Button
@@ -153,6 +156,7 @@ export function SkillDetailSheet({
                     })
                   }
                 >
+                  <HugeiconsIcon icon={isSelected ? MinusSignIcon : PlusSignIcon} strokeWidth={2} className="size-3.5" />
                   {isSelected ? "Remove from bundle" : "Add to bundle"}
                 </Button>
               )}

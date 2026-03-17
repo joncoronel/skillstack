@@ -7,6 +7,8 @@ import {
   AvatarImage,
   AvatarFallback,
 } from "@/components/ui/cubby-ui/avatar";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Upload01Icon, Cancel01Icon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/cubby-ui/button";
 import { Input } from "@/components/ui/cubby-ui/input";
 import { Label } from "@/components/ui/cubby-ui/label";
@@ -182,6 +184,7 @@ export function ProfileTab() {
                     size="sm"
                     onClick={() => fileInputRef.current?.click()}
                   >
+                    <HugeiconsIcon icon={Upload01Icon} strokeWidth={2} className="size-3.5" />
                     Upload
                   </Button>
                   <Button
@@ -190,6 +193,7 @@ export function ProfileTab() {
                     className="text-destructive"
                     onClick={handleAvatarRemove}
                   >
+                    <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="size-3.5" />
                     Remove
                   </Button>
                   <input

@@ -2,16 +2,17 @@
 
 import { Cropper as CropperPrimitive } from "@origin-space/image-cropper";
 import { forwardRef, useCallback, useRef, useState } from "react";
-import { 
-  ZoomIn, 
-  ZoomOut, 
-  RotateCcw, 
-  Download, 
-  Crop,
-  Square,
-  Smartphone,
-  Monitor
-} from "lucide-react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import {
+  ZoomInAreaIcon,
+  ZoomOutAreaIcon,
+  RotateLeft01Icon,
+  Download01Icon,
+  CropIcon,
+  Square01Icon,
+  SmartPhone01Icon,
+  ComputerIcon,
+} from "@hugeicons/core-free-icons";
 
 import { cn } from "@/lib/utils";
 
@@ -34,12 +35,22 @@ type AspectRatioPreset = {
   icon?: React.ComponentType<{ className?: string }>;
 };
 
+const SquareIconWrapper = ({ className }: { className?: string }) => (
+  <HugeiconsIcon icon={Square01Icon} strokeWidth={2} className={className} />
+);
+const SmartPhoneIconWrapper = ({ className }: { className?: string }) => (
+  <HugeiconsIcon icon={SmartPhone01Icon} strokeWidth={2} className={className} />
+);
+const ComputerIconWrapper = ({ className }: { className?: string }) => (
+  <HugeiconsIcon icon={ComputerIcon} strokeWidth={2} className={className} />
+);
+
 const ASPECT_RATIO_PRESETS: AspectRatioPreset[] = [
   { label: "Free", value: 0 },
-  { label: "Square", value: 1, icon: Square },
-  { label: "Portrait", value: 3/4, icon: Smartphone },
-  { label: "Landscape", value: 4/3, icon: Monitor },
-  { label: "Widescreen", value: 16/9, icon: Monitor },
+  { label: "Square", value: 1, icon: SquareIconWrapper },
+  { label: "Portrait", value: 3/4, icon: SmartPhoneIconWrapper },
+  { label: "Landscape", value: 4/3, icon: ComputerIconWrapper },
+  { label: "Widescreen", value: 16/9, icon: ComputerIconWrapper },
 ];
 
 const createCropCanvas = (image: HTMLImageElement, cropArea: Area, isCircular: boolean = false): HTMLCanvasElement => {
@@ -227,7 +238,7 @@ const CropperZoomControls = forwardRef<
         className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input/60 bg-background text-sm font-medium ring-offset-background transition-colors duration-200 hover:bg-accent/80 hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
         aria-label="Zoom out"
       >
-        <ZoomOut className="h-4 w-4" />
+        <HugeiconsIcon icon={ZoomOutAreaIcon} strokeWidth={2} className="h-4 w-4" />
       </button>
       
       <span className="min-w-[3rem] text-center text-sm text-muted-foreground">
@@ -241,7 +252,7 @@ const CropperZoomControls = forwardRef<
         className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input/60 bg-background text-sm font-medium ring-offset-background transition-colors duration-200 hover:bg-accent/80 hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
         aria-label="Zoom in"
       >
-        <ZoomIn className="h-4 w-4" />
+        <HugeiconsIcon icon={ZoomInAreaIcon} strokeWidth={2} className="h-4 w-4" />
       </button>
       
       {onReset && (
@@ -251,7 +262,7 @@ const CropperZoomControls = forwardRef<
           className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input/60 bg-background text-sm font-medium ring-offset-background transition-colors duration-200 hover:bg-accent/80 hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           aria-label="Reset zoom"
         >
-          <RotateCcw className="h-4 w-4" />
+          <HugeiconsIcon icon={RotateLeft01Icon} strokeWidth={2} className="h-4 w-4" />
         </button>
       )}
     </div>
@@ -367,7 +378,7 @@ const CropperActions = forwardRef<
         onClick={onDownload}
         className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-input/60 bg-background px-3 text-xs font-medium ring-offset-background transition-colors duration-200 hover:bg-accent/80 hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
       >
-        <Download className="h-3 w-3" />
+        <HugeiconsIcon icon={Download01Icon} strokeWidth={2} className="h-3 w-3" />
         {downloadLabel}
       </button>
     )}
@@ -377,7 +388,7 @@ const CropperActions = forwardRef<
         onClick={onExport}
         className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-input/60 bg-background px-3 text-xs font-medium ring-offset-background transition-colors duration-200 hover:bg-accent/80 hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
       >
-        <Crop className="h-3 w-3" />
+        <HugeiconsIcon icon={CropIcon} strokeWidth={2} className="h-3 w-3" />
         {exportLabel}
       </button>
     )}

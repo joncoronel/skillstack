@@ -7,6 +7,8 @@ import Link from "next/link";
 import Markdown from "react-markdown";
 import { api } from "@/convex/_generated/api";
 import { Badge } from "@/components/ui/cubby-ui/badge";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { ArrowLeft01Icon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/cubby-ui/button";
 import { Skeleton } from "@/components/ui/cubby-ui/skeleton";
 import {
@@ -166,6 +168,7 @@ export function CompareView() {
           nativeButton={false}
           render={<Link href="/" />}
         >
+          <HugeiconsIcon icon={ArrowLeft01Icon} strokeWidth={2} className="size-4" />
           Back to home
         </Button>
       </div>

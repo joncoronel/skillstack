@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { X, CheckIcon, ChevronDown } from "lucide-react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Cancel01Icon, Tick02Icon, ArrowDown01Icon } from "@hugeicons/core-free-icons";
 import { Label } from "@/components/ui/cubby-ui/label";
 import {
   ScrollArea,
@@ -112,7 +113,7 @@ function ComboboxTrigger({ className, ...props }: BaseCombobox.Trigger.Props) {
       )}
       {...props}
     >
-      <ChevronDown className="h-4 w-4" />
+      <HugeiconsIcon icon={ArrowDown01Icon} strokeWidth={2} className="h-4 w-4" />
     </BaseCombobox.Trigger>
   );
 }
@@ -143,7 +144,7 @@ function ComboboxClear({ className, ...props }: BaseCombobox.Clear.Props) {
       )}
       {...props}
     >
-      <X className="h-4 w-4" />
+      <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="h-4 w-4" />
     </BaseCombobox.Clear>
   );
 }
@@ -370,7 +371,7 @@ function ComboboxItem({
       {...props}
     >
       <div className="break-all">{children}</div>
-      <BaseCombobox.ItemIndicator render={<CheckIcon className="size-4" />} />
+      <BaseCombobox.ItemIndicator render={<HugeiconsIcon icon={Tick02Icon} strokeWidth={2} className="size-4" />} />
     </BaseCombobox.Item>
   );
 }

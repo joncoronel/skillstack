@@ -1,9 +1,6 @@
 import * as React from "react";
-import {
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  MoreHorizontalIcon,
-} from "lucide-react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { ArrowLeft01Icon, ArrowRight01Icon, MoreHorizontalIcon } from "@hugeicons/core-free-icons";
 
 import { cn } from "@/lib/utils";
 import { Button, buttonVariants } from "@/components/ui/cubby-ui/button";
@@ -81,7 +78,7 @@ function PaginationPrevious({
       className={cn("gap-1.5 px-3 sm:pe-4", className)}
       {...props}
     >
-      <ChevronLeftIcon size={16} />
+      <HugeiconsIcon icon={ArrowLeft01Icon} strokeWidth={2} className="size-4" />
       <span>Previous</span>
     </PaginationLink>
   );
@@ -99,7 +96,7 @@ function PaginationNext({
       {...props}
     >
       <span>Next</span>
-      <ChevronRightIcon size={16} />
+      <HugeiconsIcon icon={ArrowRight01Icon} strokeWidth={2} className="size-4" />
     </PaginationLink>
   );
 }
@@ -115,7 +112,7 @@ function PaginationEllipsis({
       className={cn("flex size-10 items-center justify-center", className)}
       {...props}
     >
-      <MoreHorizontalIcon size={16} />
+      <HugeiconsIcon icon={MoreHorizontalIcon} strokeWidth={2} className="size-4" />
       <span className="sr-only">More pages</span>
     </span>
   );

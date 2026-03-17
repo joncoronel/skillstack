@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { convexQuery } from "@convex-dev/react-query";
 import { api } from "@/convex/_generated/api";
-import { ChevronDownIcon } from "lucide-react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
 import { SkillCard } from "@/components/skill-card";
 import { SkillDetailSheet } from "@/components/skill-detail-sheet";
 import { Skeleton } from "@/components/ui/cubby-ui/skeleton";
@@ -166,7 +167,7 @@ export function SkillResults({ selectedTechnologies }: SkillResultsProps) {
                       ({skills.length})
                     </span>
                   </h3>
-                  <ChevronDownIcon className="size-4 text-muted-foreground transition-transform duration-200 group-data-[panel-open]/collapsible:rotate-180" />
+                  <HugeiconsIcon icon={ArrowDown01Icon} strokeWidth={2} className="size-4 text-muted-foreground transition-transform duration-200 group-data-[panel-open]/collapsible:rotate-180" />
                 </CollapsibleTrigger>
                 <CollapsibleContent className="max-sm:duration-0">
                   <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
