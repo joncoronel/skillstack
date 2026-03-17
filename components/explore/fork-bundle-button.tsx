@@ -45,8 +45,8 @@ export function ForkBundleButton({
       onClick={handleFork}
       loading={forking}
       className={className}
+      leftSection={<HugeiconsIcon icon={GitForkIcon} strokeWidth={2} className="size-3.5" />}
     >
-      <HugeiconsIcon icon={GitForkIcon} strokeWidth={2} className="size-3.5" />
       Fork
     </Button>
   );

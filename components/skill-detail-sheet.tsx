@@ -147,6 +147,7 @@ export function SkillDetailSheet({
                 <Button
                   variant={isSelected ? "outline" : "primary"}
                   size="sm"
+                  leftSection={<HugeiconsIcon icon={isSelected ? MinusSignIcon : PlusSignIcon} strokeWidth={2} className="size-3.5" />}
                   onClick={() =>
                     selection.toggleSkill({
                       source: shownSkill.source,
@@ -156,7 +157,6 @@ export function SkillDetailSheet({
                     })
                   }
                 >
-                  <HugeiconsIcon icon={isSelected ? MinusSignIcon : PlusSignIcon} strokeWidth={2} className="size-3.5" />
                   {isSelected ? "Remove from bundle" : "Add to bundle"}
                 </Button>
               )}

@@ -161,8 +161,8 @@ export function BundleView({
               variant="outline"
               size="sm"
               onClick={() => setRenameDialogOpen(true)}
+              leftSection={<HugeiconsIcon icon={Edit01Icon} strokeWidth={2} className="size-3.5" />}
             >
-              <HugeiconsIcon icon={Edit01Icon} strokeWidth={2} className="size-3.5" />
               Rename
             </Button>
             <div className="flex items-center gap-2">
@@ -311,8 +311,8 @@ function SharePopover({
                   size="xs"
                   className="text-destructive"
                   onClick={() => onRevoke({ bundleId })}
+                  leftSection={<HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="size-3.5" />}
                 >
-                  <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="size-3.5" />
                   Revoke
                 </Button>
               </div>

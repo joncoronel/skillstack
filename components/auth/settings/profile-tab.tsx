@@ -183,8 +183,8 @@ export function ProfileTab() {
                     variant="outline"
                     size="sm"
                     onClick={() => fileInputRef.current?.click()}
+                    leftSection={<HugeiconsIcon icon={Upload01Icon} strokeWidth={2} className="size-3.5" />}
                   >
-                    <HugeiconsIcon icon={Upload01Icon} strokeWidth={2} className="size-3.5" />
                     Upload
                   </Button>
                   <Button
@@ -192,8 +192,8 @@ export function ProfileTab() {
                     size="sm"
                     className="text-destructive"
                     onClick={handleAvatarRemove}
+                    leftSection={<HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="size-3.5" />}
                   >
-                    <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="size-3.5" />
                     Remove
                   </Button>
                   <input

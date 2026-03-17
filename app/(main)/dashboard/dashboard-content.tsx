@@ -101,8 +101,8 @@ export function DashboardContent({ preloadedBundles }: DashboardContentProps) {
                     size="xs"
                     nativeButton={false}
                     render={<Link href={`/stack/${bundle.urlId}`} />}
+                    leftSection={<HugeiconsIcon icon={EyeIcon} strokeWidth={2} className="size-3.5" />}
                   >
-                    <HugeiconsIcon icon={EyeIcon} strokeWidth={2} className="size-3.5" />
                     View
                   </Button>
                   <Button
@@ -114,16 +114,16 @@ export function DashboardContent({ preloadedBundles }: DashboardContentProps) {
                         isPublic: !bundle.isPublic,
                       })
                     }
+                    leftSection={<HugeiconsIcon icon={LockIcon} strokeWidth={2} className="size-3.5" />}
                   >
-                    <HugeiconsIcon icon={LockIcon} strokeWidth={2} className="size-3.5" />
                     {bundle.isPublic ? "Make private" : "Make public"}
                   </Button>
                   <Button
                     variant="ghost"
                     size="xs"
                     onClick={() => setDeletingId(bundle._id)}
+                    leftSection={<HugeiconsIcon icon={Delete01Icon} strokeWidth={2} className="size-3.5" />}
                   >
-                    <HugeiconsIcon icon={Delete01Icon} strokeWidth={2} className="size-3.5" />
                     Delete
                   </Button>
                 </div>

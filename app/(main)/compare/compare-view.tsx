@@ -167,8 +167,8 @@ export function CompareView() {
           className="mt-6"
           nativeButton={false}
           render={<Link href="/" />}
+          leftSection={<HugeiconsIcon icon={ArrowLeft01Icon} strokeWidth={2} className="size-4" />}
         >
-          <HugeiconsIcon icon={ArrowLeft01Icon} strokeWidth={2} className="size-4" />
           Back to home
         </Button>
       </div>

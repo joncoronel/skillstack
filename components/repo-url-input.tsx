@@ -67,8 +67,8 @@ export function RepoUrlInput({ onTechnologiesDetected }: RepoUrlInputProps) {
           onClick={handleDetect}
           disabled={!url.trim() || loading}
           loading={loading}
+          leftSection={<HugeiconsIcon icon={FlashIcon} strokeWidth={2} className="size-3.5" />}
         >
-          <HugeiconsIcon icon={FlashIcon} strokeWidth={2} className="size-3.5" />
           Detect
         </Button>
       </div>

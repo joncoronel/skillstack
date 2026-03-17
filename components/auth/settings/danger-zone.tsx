@@ -44,8 +44,7 @@ export function DangerZone() {
 
   return (
     <AlertDialog>
-      <AlertDialogTrigger render={<Button variant="destructive" />}>
-        <HugeiconsIcon icon={DangerIcon} strokeWidth={2} className="size-4" />
+      <AlertDialogTrigger render={<Button variant="destructive" leftSection={<HugeiconsIcon icon={DangerIcon} strokeWidth={2} className="size-4" />} />}>
         Delete account
       </AlertDialogTrigger>
       <AlertDialogContent>

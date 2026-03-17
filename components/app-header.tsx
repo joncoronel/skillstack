@@ -24,12 +24,10 @@ export function AppHeader() {
             <span className="ml-0.5 inline-block size-1.5 rounded-full bg-primary align-super" />
           </Link>
           <nav className="flex items-center gap-1">
-            <NavLink href="/explore">
-              <HugeiconsIcon icon={CompassIcon} strokeWidth={2} className="size-4" />
+            <NavLink href="/explore" icon={<HugeiconsIcon icon={CompassIcon} strokeWidth={2} className="size-4" />}>
               Explore
             </NavLink>
-            <NavLink href="/dashboard">
-              <HugeiconsIcon icon={DashboardSquare01Icon} strokeWidth={2} className="size-4" />
+            <NavLink href="/dashboard" icon={<HugeiconsIcon icon={DashboardSquare01Icon} strokeWidth={2} className="size-4" />}>
               Dashboard
             </NavLink>
           </nav>
@@ -61,9 +59,11 @@ export function AppHeader() {
 function NavLink({
   href,
   children,
+  icon,
 }: {
   href: string;
   children: React.ReactNode;
+  icon?: React.ReactNode;
 }) {
   const pathname = usePathname();
   const isActive = pathname === href;
@@ -75,6 +75,7 @@ function NavLink({
       size="sm"
       render={<Link href={href} />}
       className={cn(isActive && "text-foreground font-medium")}
+      leftSection={icon}
     >
       {children}
     </Button>
