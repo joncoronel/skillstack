@@ -217,7 +217,7 @@ export function SkillCard({
         htmlFor={checkboxId}
         data-variant="default"
         className={cn(
-          "text-card-foreground flex flex-col bg-card gap-3 rounded-2xl border dark:border-border/50 py-4",
+          "text-card-foreground flex flex-col bg-card gap-3 rounded-2xl border dark:border-border/50 py-4 h-full",
           "cursor-pointer transition-colors",
           "has-data-checked:border-primary/30 dark:has-data-checked:border-primary/30 has-data-checked:bg-primary/8",
           "hover:border-border/20",
