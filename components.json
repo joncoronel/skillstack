@@ -20,6 +20,8 @@
     "hooks": "@/hooks"
   },
   "registries": {
-    "@cubby-ui": "https://cubby-ui.dev/r/{name}.json"
+    "@cubby-ui": "https://cubby-ui.dev/r/{name}.json",
+    "@ss-blocks": "https://shadcnstudio.com/r/blocks/{name}.json",
+    "@shadcnblocks": "https://shadcnblocks.com/r/{name}"
   }
 }

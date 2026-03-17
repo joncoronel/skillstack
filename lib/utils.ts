@@ -1,8 +1,26 @@
 import { clsx, type ClassValue } from "clsx"
+import { isClerkAPIResponseError } from "@clerk/nextjs/errors"
 import { twMerge } from "tailwind-merge"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
+}
+
+export function getInitials(
+  firstName?: string | null,
+  lastName?: string | null,
+): string {
+  return (
+    [firstName?.[0], lastName?.[0]].filter(Boolean).join("").toUpperCase() ||
+    "?"
+  );
+}
+
+export function getClerkErrorMessage(err: unknown, fallback: string): string {
+  if (isClerkAPIResponseError(err)) {
+    return err.errors[0]?.longMessage ?? fallback;
+  }
+  return fallback;
 }
 
 export function timeAgo(timestamp: number): string {

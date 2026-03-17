@@ -1,23 +1,25 @@
-# Next.js 16 + Convex + Better Auth Pattern Guide
+# Next.js 16 + Convex + Clerk Architecture Guide
 
-Patterns for building a full-stack app with Next.js 16 (App Router), Convex as the backend/database, and Better Auth for authentication. Copy these patterns into a new project.
+Patterns for building a full-stack app with Next.js 16 (App Router), Convex as the backend/database, and Clerk for authentication.
 
 ## Stack
 
-| Layer        | Tech                                        | Role                                           |
-| ------------ | ------------------------------------------- | ---------------------------------------------- |
-| Frontend     | Next.js 16 (App Router), React 19           | SSR, streaming, static shells                  |
-| Backend + DB | Convex                                      | Real-time queries, mutations, actions, storage |
-| Auth         | Better Auth + `@convex-dev/better-auth`     | Auth with Convex as the database               |
-| Config       | `cacheComponents: true` in `next.config.ts` | Enables Next.js cache component behavior       |
+| Layer        | Tech                                    | Role                                           |
+| ------------ | --------------------------------------- | ---------------------------------------------- |
+| Frontend     | Next.js 16 (App Router), React 19      | SSR, streaming, static shells                  |
+| Backend + DB | Convex                                  | Real-time queries, mutations, actions, storage |
+| Auth         | Clerk + `convex/react-clerk`            | Auth via Clerk, bridged to Convex via JWT      |
+| Data Layer   | TanStack Query + `@convex-dev/react-query` | Client-side query integration                |
 
 ### Key dependencies
 
 ```
-better-auth
-@convex-dev/better-auth
+@clerk/nextjs
 convex
-next
+convex/react-clerk
+@convex-dev/react-query
+@tanstack/react-query
+svix
 ```
 
 ---
@@ -29,261 +31,373 @@ next
 ```
 Browser                     Next.js Server              Convex Backend
 ───────                     ──────────────              ──────────────
-authClient.signIn.email()
+User clicks "Sign in"
        │
-       ├──► POST /api/auth/[...all]
-       │    Forwards to `handler` from lib/auth-server.ts
+       ├──► Clerk hosted UI / components
+       │    User authenticates via Clerk
        │              │
-       │              ├──► Convex HTTP routes
-       │              │    authComponent.registerRoutes()
-       │              │              │
-       │              │              ├──► betterAuth() with
-       │              │              │    authComponent.adapter(ctx)
-       │              │              │
-       │              │              ◄── JWT token returned
-       │              ◄──────────────
+       │              ◄── Session created, JWT issued
        ◄──────────────
-Token stored in browser
+ClerkProvider has session
+       │
+       ├──► ConvexProviderWithClerk
+       │    calls useAuth() to get token
+       │    passes JWT to ConvexReactClient
+       │              │
+       │              ├──► Convex validates JWT
+       │              │    against Clerk's public key
+       │              │    (issuer domain in auth.config.ts)
+       │              │
+       │              ◄── Auth confirmed, queries execute
+       ◄──────────────
+
+Separately (async):
+Clerk ──► POST /clerk-users-webhook ──► Convex HTTP action
+          Svix validates signature         upserts user in DB
 ```
 
-### Files to create
+### Convex auth config
 
-**`lib/auth-client.ts`** -- Browser-side auth client
-
-```ts
-import { createAuthClient } from "better-auth/react";
-import { convexClient } from "@convex-dev/better-auth/client/plugins";
-
-export const authClient = createAuthClient({
-  plugins: [convexClient()],
-});
-```
-
-Use `authClient.signIn.email()`, `authClient.signUp.email()`, etc. in client components.
-
-**`lib/auth-server.ts`** -- Server-side auth helpers
+`convex/auth.config.ts` — Tells Convex how to validate Clerk JWTs:
 
 ```ts
-import { convexBetterAuthNextJs } from "@convex-dev/better-auth/nextjs";
-
-export const {
-  handler, // Next.js API route handler
-  preloadAuthQuery, // Preload Convex query with auth token (for RSCs)
-  isAuthenticated, // Check auth status server-side
-  getToken, // Get JWT for client hydration
-  fetchAuthQuery, // Fetch Convex query server-side
-  fetchAuthMutation, // Run Convex mutation server-side
-  fetchAuthAction, // Run Convex action server-side
-} = convexBetterAuthNextJs({
-  convexUrl: process.env.NEXT_PUBLIC_CONVEX_URL!,
-  convexSiteUrl: process.env.NEXT_PUBLIC_CONVEX_SITE_URL!,
-  // Cache JWTs to avoid repeated auth checks during SSR
-  jwtCache: {
-    enabled: true,
-    expirationToleranceSeconds: 60,
-    isAuthError: (error) =>
-      error instanceof Error && error.message === "Unauthenticated",
-  },
-});
-```
-
-**`convex/convex.config.ts`** -- Register the Better Auth component
-
-```ts
-import { defineApp } from "convex/server";
-import betterAuth from "@convex-dev/better-auth/convex.config";
-
-const app = defineApp();
-app.use(betterAuth);
-
-export default app;
-```
-
-**`convex/auth.config.ts`** -- Register Better Auth as a Convex auth provider
-
-```ts
-import { getAuthConfigProvider } from "@convex-dev/better-auth/auth-config";
 import type { AuthConfig } from "convex/server";
 
 export default {
-  providers: [getAuthConfigProvider()],
+  providers: [
+    {
+      domain: process.env.CLERK_JWT_ISSUER_DOMAIN!,
+      applicationID: "convex",
+    },
+  ],
 } satisfies AuthConfig;
 ```
 
-**`convex/auth.ts`** -- Convex auth component + user query
+Set `CLERK_JWT_ISSUER_DOMAIN` on the Convex dashboard. In development: `https://verb-noun-00.clerk.accounts.dev`. In production: `https://clerk.<your-domain>.com`.
 
-```ts
-import { createClient, type GenericCtx } from "@convex-dev/better-auth";
-import { convex } from "@convex-dev/better-auth/plugins";
-import { components } from "./_generated/api";
-import { DataModel } from "./_generated/dataModel";
-import { query } from "./_generated/server";
-import { betterAuth } from "better-auth/minimal";
-import authConfig from "./auth.config";
+### Clerk webhook handler
 
-const siteUrl = process.env.SITE_URL!;
-
-export const authComponent = createClient<DataModel>(components.betterAuth);
-
-export const createAuth = (ctx: GenericCtx<DataModel>) => {
-  return betterAuth({
-    baseURL: siteUrl,
-    database: authComponent.adapter(ctx), // Convex as the DB
-    emailAndPassword: { enabled: true, requireEmailVerification: false },
-    plugins: [convex({ authConfig })],
-  });
-};
-
-// Reusable query to get the current user in any Convex function
-export const getCurrentUser = query({
-  args: {},
-  handler: async (ctx) => {
-    try {
-      return await authComponent.getAuthUser(ctx);
-    } catch {
-      return null;
-    }
-  },
-});
-```
-
-**`convex/http.ts`** -- Register auth HTTP routes
+`convex/http.ts` — Syncs Clerk user events to the Convex `users` table:
 
 ```ts
 import { httpRouter } from "convex/server";
-import { authComponent, createAuth } from "./auth";
+import { httpAction } from "./_generated/server";
+import { internal } from "./_generated/api";
+import type { WebhookEvent } from "@clerk/backend";
+import { Webhook } from "svix";
 
 const http = httpRouter();
-authComponent.registerRoutes(http, createAuth);
+
+http.route({
+  path: "/clerk-users-webhook",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const event = await validateRequest(request);
+    if (!event) {
+      return new Response("Error occurred", { status: 400 });
+    }
+    switch (event.type) {
+      case "user.created":
+      case "user.updated":
+        await ctx.runMutation(internal.users.upsertFromClerk, {
+          data: event.data,
+        });
+        break;
+      case "user.deleted": {
+        const clerkUserId = event.data.id!;
+        await ctx.runMutation(internal.users.deleteFromClerk, { clerkUserId });
+        break;
+      }
+      default:
+        console.log("Ignored Clerk webhook event", event.type);
+    }
+    return new Response(null, { status: 200 });
+  }),
+});
+
+async function validateRequest(req: Request): Promise<WebhookEvent | null> {
+  const payloadString = await req.text();
+  const svixHeaders = {
+    "svix-id": req.headers.get("svix-id")!,
+    "svix-timestamp": req.headers.get("svix-timestamp")!,
+    "svix-signature": req.headers.get("svix-signature")!,
+  };
+  const wh = new Webhook(process.env.CLERK_WEBHOOK_SECRET!);
+  try {
+    return wh.verify(payloadString, svixHeaders) as unknown as WebhookEvent;
+  } catch (error) {
+    console.error("Error verifying webhook event", error);
+    return null;
+  }
+}
 
 export default http;
 ```
 
-**`app/api/auth/[...all]/route.ts`** -- Next.js catch-all forwarding to Better Auth
+Set `CLERK_WEBHOOK_SECRET` on the Convex dashboard. Configure the webhook endpoint in the Clerk Dashboard pointing to `<CONVEX_SITE_URL>/clerk-users-webhook`.
+
+### User helpers in Convex
+
+`convex/users.ts` — Two key helpers used across all Convex functions:
 
 ```ts
-import { handler } from "@/lib/auth-server";
-export const { GET, POST } = handler;
+export async function getCurrentUser(ctx: QueryCtx) {
+  const identity = await ctx.auth.getUserIdentity();
+  if (identity === null) return null;
+  return await userByExternalId(ctx, identity.subject);
+}
+
+export async function getCurrentUserOrThrow(ctx: QueryCtx) {
+  const userRecord = await getCurrentUser(ctx);
+  if (!userRecord) throw new Error("Can't get current user");
+  return userRecord;
+}
 ```
 
-### Auth protection patterns
+- `ctx.auth.getUserIdentity()` — Convex's built-in auth. Validates the JWT and returns identity claims.
+- `identity.subject` — Maps to Clerk's `userId` (e.g. `user_2abc...`), used to look up the user in the Convex `users` table via the `byExternalId` index.
 
-| Where             | How                                             | Behavior                    |
-| ----------------- | ----------------------------------------------- | --------------------------- |
-| Server components | `isAuthenticated()` + `redirect()`              | Redirect to sign-in page    |
-| Convex queries    | `authComponent.getAuthUser(ctx)` with try/catch | Return `null` / empty array |
-| Convex mutations  | `authComponent.getAuthUser(ctx)` + throw        | Block execution             |
-| Layout components | Async RSC that checks auth before rendering     | Redirect in layout          |
+### Server-side auth helpers
+
+`lib/auth.ts` — Used in Server Components and server actions:
+
+```ts
+import "server-only";
+
+import { cache } from "react";
+import { auth } from "@clerk/nextjs/server";
+import { redirect } from "next/navigation";
+
+export async function getAuthToken() {
+  return (await (await auth()).getToken({ template: "convex" })) ?? undefined;
+}
+
+export const verifySession = cache(async () => {
+  const { userId } = await auth();
+  if (!userId) redirect("/sign-in");
+  return { userId };
+});
+```
+
+- `getAuthToken()` — Gets a Convex-specific JWT from Clerk for use with `preloadQuery()`.
+- `verifySession()` — Checks auth and redirects if not signed in. Wrapped in React `cache()` to deduplicate within a single request.
+
+### Clerk middleware
+
+`proxy.ts` — Route-level auth protection:
+
+```ts
+import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+
+const isPublicRoute = createRouteMatcher([
+  "/",
+  "/sign-in", "/sign-in/sso-callback",
+  "/sign-up", "/sign-up/sso-callback",
+  "/stack/(.*)",
+  "/explore",
+  "/compare",
+  "/:org/:repo/:skillId",
+]);
+
+const isAuthRoute = createRouteMatcher(["/sign-in", "/sign-up"]);
+
+export default clerkMiddleware(async (auth, request) => {
+  const { userId } = await auth();
+  if (isAuthRoute(request) && userId) {
+    return Response.redirect(new URL("/", request.url));
+  }
+  if (!isPublicRoute(request)) {
+    await auth.protect();
+  }
+});
+```
 
 ---
 
-## 2. Provider Setup & Token Hydration
+## 2. Auth Protection Patterns (3-Layer Defense)
 
-Fetch the JWT server-side in the root layout, pass it to the client so auth is available instantly on hydration (no flash, no extra round-trip).
+| Layer              | Where                       | How                                              | Behavior                 |
+| ------------------ | --------------------------- | ------------------------------------------------ | ------------------------ |
+| Route protection   | `proxy.ts` (middleware)     | `auth.protect()` on non-public routes            | Redirects to Clerk login |
+| Page protection    | Server Components           | `verifySession()` + `redirect()`                 | Redirects to `/sign-in`  |
+| Data protection    | Convex functions            | `getCurrentUserOrThrow(ctx)` + ownership checks  | Throws / returns `null`  |
 
-**`app/layout.tsx`**
+**Why three layers?**
+
+- Middleware alone isn't sufficient — it can be bypassed. The Next.js docs recommend defense-in-depth.
+- `verifySession()` in pages provides a server-side fallback.
+- Convex functions are the final gate — even if someone bypasses the frontend, data access requires a valid JWT.
+
+**Example: protected page with all three layers**
 
 ```tsx
-import { getToken } from "@/lib/auth-server";
-import { ConvexClientProvider } from "./ConvexClientProvider";
-import { Suspense } from "react";
+// proxy.ts — /dashboard is NOT in public routes, so middleware blocks unauthenticated users
 
-async function ConvexProviderWithToken({ children }) {
-  const token = await getToken();
+// app/(main)/dashboard/page.tsx — defense-in-depth
+export default async function DashboardPage() {
+  await verifySession(); // Redirects if not signed in
   return (
-    <ConvexClientProvider initialToken={token}>{children}</ConvexClientProvider>
+    <Suspense fallback={<Skeleton />}>
+      <DashboardBundles /> {/* Preloads data with auth token */}
+    </Suspense>
   );
 }
 
-export default function RootLayout({ children }) {
-  return (
-    <html lang="en" suppressHydrationWarning>
-      <body>
-        <Suspense fallback={null}>
-          <ConvexProviderWithToken>{children}</ConvexProviderWithToken>
-        </Suspense>
-      </body>
-    </html>
-  );
-}
+// convex/bundles.ts — data-level protection
+export const listByUser = query({
+  handler: async (ctx) => {
+    const user = await getCurrentUser(ctx);
+    if (!user) return [];
+    return ctx.db.query("bundles")
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
+      .collect();
+  },
+});
 ```
 
-**`app/ConvexClientProvider.tsx`**
+---
+
+## 3. Provider Setup
+
+### Provider nesting order
+
+`ClerkProvider` must wrap `ConvexProviderWithClerk` — Convex needs access to Clerk's context.
+
+```
+app/layout.tsx (Server Component)
+  └─ <Providers>                              (app/providers.tsx, "use client")
+       └─ NuqsAdapter
+            └─ ClerkProvider
+                 └─ ConvexClientProvider      (app/ConvexClientProvider.tsx)
+                      └─ ConvexProviderWithClerk  (bridges Clerk auth → Convex)
+                           └─ QueryClientProvider (TanStack Query)
+                                └─ ThemeProvider
+                                     └─ ToastProvider
+                                          └─ {children}
+```
+
+### ConvexClientProvider
+
+`app/ConvexClientProvider.tsx` — Bridges Clerk to Convex and sets up TanStack Query:
 
 ```tsx
 "use client";
 
 import { ReactNode } from "react";
 import { ConvexReactClient } from "convex/react";
-import { authClient } from "@/lib/auth-client";
-import { ConvexBetterAuthProvider } from "@convex-dev/better-auth/react";
+import { ConvexProviderWithClerk } from "convex/react-clerk";
+import { useAuth } from "@clerk/nextjs";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ConvexQueryClient } from "@convex-dev/react-query";
 
 const convex = new ConvexReactClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+const convexQueryClient = new ConvexQueryClient(convex);
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      queryKeyHashFn: convexQueryClient.hashFn(),
+      queryFn: convexQueryClient.queryFn(),
+    },
+  },
+});
+convexQueryClient.connect(queryClient);
 
-export function ConvexClientProvider({
-  children,
-  initialToken,
-}: {
-  children: ReactNode;
-  initialToken?: string | null;
-}) {
+export function ConvexClientProvider({ children }: { children: ReactNode }) {
   return (
-    <ConvexBetterAuthProvider
-      client={convex}
-      authClient={authClient}
-      initialToken={initialToken}
-    >
-      {children}
-    </ConvexBetterAuthProvider>
+    <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
+      <QueryClientProvider client={queryClient}>
+        {children}
+      </QueryClientProvider>
+    </ConvexProviderWithClerk>
+  );
+}
+```
+
+> **Note:** `useAuth` from `@clerk/nextjs` is passed as a **prop** to `ConvexProviderWithClerk`. This is the one correct use of Clerk's `useAuth`. Everywhere else, use `useConvexAuth()` from `convex/react`.
+
+---
+
+## 4. Client-Side Auth State
+
+Use Convex's auth components and hooks — **not** Clerk's — for UI that depends on auth state. This ensures the JWT has been fetched **and** validated by Convex before rendering authenticated content.
+
+### Components from `convex/react`
+
+| Convex component    | Replaces (Clerk)     | Renders when                         |
+| ------------------- | -------------------- | ------------------------------------ |
+| `<Authenticated>`   | `<ClerkLoaded>` + auth check | User is authenticated with Convex |
+| `<Unauthenticated>` | `<ClerkLoaded>` + no auth    | User is not authenticated          |
+| `<AuthLoading>`     | `<ClerkLoading>`     | Auth state is still loading          |
+
+### Hook: `useConvexAuth()` vs `useAuth()`
+
+| Hook             | From              | Returns                         | Use when                                |
+| ---------------- | ----------------- | -------------------------------- | --------------------------------------- |
+| `useConvexAuth()`| `convex/react`    | `{ isAuthenticated, isLoading }` | Checking auth state in components       |
+| `useAuth()`      | `@clerk/nextjs`   | `{ isSignedIn, userId, ... }`    | **Only** as a prop to `ConvexProviderWithClerk` |
+
+### Example: Header with auth state
+
+```tsx
+import { Authenticated, Unauthenticated, AuthLoading } from "convex/react";
+
+export function AppHeader() {
+  return (
+    <header>
+      <nav>
+        <NavLink href="/explore">Explore</NavLink>
+        <NavLink href="/dashboard">Dashboard</NavLink>
+      </nav>
+      <div>
+        <AuthLoading>
+          <Skeleton className="h-8 w-16 rounded-md" />
+        </AuthLoading>
+        <Authenticated>
+          <UserMenu />
+        </Authenticated>
+        <Unauthenticated>
+          <Link href="/sign-in">Sign in</Link>
+        </Unauthenticated>
+      </div>
+    </header>
   );
 }
 ```
 
 ---
 
-## 3. Data Fetching Patterns
+## 5. Data Fetching Patterns
 
 ### Pattern: Preload in RSC, hydrate on client
 
-The core flow: **async server component preloads data → passes `Preloaded<T>` as a prop → client component hydrates it into a live subscription**.
+The core flow: **async server component preloads data with auth token → passes `Preloaded<T>` as a prop → client component hydrates it into a live subscription**.
 
 ```
 Server Component (RSC)                     Client Component
 ──────────────────────                     ────────────────
-isAuthenticated()                          usePreloadedQuery(preloaded)
-preloadAuthQuery(api.yourResource.list)    └─ returns live, reactive data
+verifySession()                            usePreloadedQuery(preloaded)
+getAuthToken()                             └─ returns live, reactive data
+preloadQuery(api.x.list, {}, { token })
   └─ returns Preloaded<T>
 passes as prop ──────────────────────────►
 ```
 
-> **Note:** Use `usePreloadedQuery` from `convex/react` (not `usePreloadedAuthQuery` from `@convex-dev/better-auth`). The server-side `preloadAuthQuery` already fetches data with auth. On the client, `initialToken` provides the auth token immediately, so `usePreloadedQuery` hydrates synchronously and transitions to a live subscription without any gap. `usePreloadedAuthQuery` has a known bug where its internal subscription management causes `undefined` returns during client-side re-navigation.
-
-**Server component (page):**
+**Server component:**
 
 ```tsx
-import { Suspense } from "react";
-import { isAuthenticated, preloadAuthQuery } from "@/lib/auth-server";
+// app/(main)/dashboard/dashboard-bundles.tsx
+import { preloadQuery } from "convex/nextjs";
 import { api } from "@/convex/_generated/api";
+import { getAuthToken } from "@/lib/auth";
 
-async function ItemsList() {
-  const hasAuth = await isAuthenticated();
-  if (!hasAuth) redirect("/signin");
-
-  const preloadedItems = await preloadAuthQuery(api.items.list);
-  return <ItemsClient preloadedItems={preloadedItems} />;
-}
-
-export default function ItemsPage() {
-  return (
-    <div>
-      <h1>Your Items</h1> {/* static -- renders immediately */}
-      <Suspense fallback={<ItemsSkeleton />}>
-        {" "}
-        {/* dynamic -- streams when ready */}
-        <ItemsList />
-      </Suspense>
-    </div>
+export async function DashboardBundles() {
+  const token = await getAuthToken();
+  const preloadedBundles = await preloadQuery(
+    api.bundles.listByUser,
+    {},
+    { token },
   );
+  return <DashboardContent preloadedBundles={preloadedBundles} />;
 }
 ```
 
@@ -292,198 +406,74 @@ export default function ItemsPage() {
 ```tsx
 "use client";
 
-import { Preloaded, usePreloadedQuery } from "convex/react";
-
-export function ItemsClient({
-  preloadedItems,
-}: {
-  preloadedItems: Preloaded<typeof api.items.list>;
-}) {
-  const items = usePreloadedQuery(preloadedItems);
-
-  return items.map((item) => <ItemCard key={item._id} item={item} />);
-}
-```
-
-### Pattern: Parallel preloading with `Promise.all()`
-
-When a page needs multiple queries, preload them in parallel:
-
-```tsx
-async function DetailContent({ id }) {
-  const hasAuth = await isAuthenticated();
-  if (!hasAuth) redirect("/signin");
-
-  const [preloadedItem, preloadedQuota] = await Promise.all([
-    preloadAuthQuery(api.items.get, { id }),
-    preloadAuthQuery(api.users.checkQuota),
-  ]);
-
-  return (
-    <DetailClient
-      preloadedItem={preloadedItem}
-      preloadedQuota={preloadedQuota}
-    />
-  );
-}
-```
-
-### Pattern: Request deduplication with React `cache()`
-
-When multiple components on the same page need the same data (e.g. the header and the page body both need the current user), wrap with `cache()` so only one request fires per render.
-
-**`lib/cached-queries.ts`**
-
-```ts
-import { cache } from "react";
-import { preloadAuthQuery } from "./auth-server";
+import { usePreloadedQuery, type Preloaded } from "convex/react";
 import { api } from "@/convex/_generated/api";
 
-export const getCachedUser = cache(() =>
-  preloadAuthQuery(api.auth.getCurrentUser)
-);
-
-export const getCachedSettings = cache(() =>
-  preloadAuthQuery(api.users.getSettings)
-);
-
-// Add more as needed for data shared across layout + page
+export function DashboardContent({
+  preloadedBundles,
+}: {
+  preloadedBundles: Preloaded<typeof api.bundles.listByUser>;
+}) {
+  const bundles = usePreloadedQuery(preloadedBundles);
+  // bundles is now a live, reactive subscription
+}
 ```
 
-Then both the layout header and the page content call `getCachedUser()`, but only one network request is made:
+### Pattern: TanStack Query for dynamic client queries
 
+For queries that depend on client-side state (e.g. user selections, search filters), use `convexQuery()` with TanStack Query's `useQuery`:
+
+```tsx
+import { useQuery } from "@tanstack/react-query";
+import { convexQuery } from "@convex-dev/react-query";
+
+const { data: skills, isPending } = useQuery(
+  convexQuery(
+    api.skills.listByTechnologies,
+    selectedTechnologies.length > 0
+      ? { technologies: selectedTechnologies }
+      : "skip", // Skip query when no techs selected
+  ),
+);
 ```
-Without cache():  Header fetches user + Page fetches user  = 2 requests
-With cache():     Header fetches user + Page reuses cache  = 1 request
+
+### Pattern: Mutations with optimistic updates
+
+```tsx
+const deleteBundle = useMutation(
+  api.bundles.deleteBundle,
+).withOptimisticUpdate((localStore, { bundleId }) => {
+  const current = localStore.getQuery(api.bundles.listByUser, {});
+  if (current !== undefined) {
+    localStore.setQuery(
+      api.bundles.listByUser,
+      {},
+      current.filter((b) => b._id !== bundleId),
+    );
+  }
+});
 ```
 
 ### Pattern: Convex query with auth + row-level security
 
-Every Convex query should verify ownership. Use a `userId` field and a `by_user` index on your tables:
+Every Convex query/mutation that accesses user data should verify ownership:
 
 ```ts
-// convex/schema.ts
-items: defineTable({
-  userId: v.string(),
-  title: v.string(),
-  // ...
-}).index("by_user", ["userId"]),
-```
+// convex/bundles.ts
+export const deleteBundle = mutation({
+  args: { bundleId: v.id("bundles") },
+  handler: async (ctx, { bundleId }) => {
+    const user = await getCurrentUserOrThrow(ctx); // Throws if not authenticated
+    const bundle = await ctx.db.get(bundleId);
 
-```ts
-// convex/items.ts
-export const list = query({
-  handler: async (ctx) => {
-    const user = await authComponent.getAuthUser(ctx);
-    if (!user) return [];
+    if (!bundle || bundle.userId !== user._id) {
+      throw new Error("Bundle not found or unauthorized");
+    }
 
-    return ctx.db
-      .query("items")
-      .withIndex("by_user", (q) => q.eq("userId", user._id))
-      .collect();
+    await ctx.db.delete(bundleId);
   },
 });
 ```
-
----
-
-## 4. Static Shells & Suspense Streaming
-
-### The layout pattern
-
-Separate **static UI** (renders instantly) from **dynamic content** (streams in when data resolves). The static parts become the "shell" the user sees immediately.
-
-**Layout:**
-
-```tsx
-export default function DashboardLayout({ children }) {
-  return (
-    <div>
-      {/* Static shell -- renders at build time / instantly */}
-      <HeaderShell>
-        <Suspense fallback={<HeaderSkeleton />}>
-          <AuthenticatedHeader /> {/* async RSC, streams in */}
-        </Suspense>
-      </HeaderShell>
-
-      {/* Each page handles its own Suspense boundaries */}
-      <main>{children}</main>
-    </div>
-  );
-}
-```
-
-- `HeaderShell` = logo, nav chrome, static layout. Always renders immediately.
-- `AuthenticatedHeader` = async RSC that fetches user data. Wrapped in Suspense with a skeleton fallback.
-
-### The page pattern
-
-Every page follows this structure:
-
-```
-┌──────────────────────────────────┐
-│  Static content (h1, links)     │  ← renders immediately
-│                                  │
-│  ┌────────────────────────────┐  │
-│  │ <Suspense fallback={...}>  │  │
-│  │   <AsyncDataComponent />   │  │  ← streams when data is ready
-│  │ </Suspense>                │  │
-│  └────────────────────────────┘  │
-└──────────────────────────────────┘
-```
-
-Enable `cacheComponents: true` in `next.config.ts` so Next.js can cache these static portions across requests.
-
-### Auth-protected header example
-
-```tsx
-// components/authenticated-header.tsx
-import { isAuthenticated } from "@/lib/auth-server";
-import { getCachedUser, getCachedSettings } from "@/lib/cached-queries";
-
-export async function AuthenticatedHeader() {
-  const hasAuth = await isAuthenticated();
-  if (!hasAuth) redirect("/signin");
-
-  const [preloadedUser, preloadedSettings] = await Promise.all([
-    getCachedUser(), // deduplicated with page-level fetches
-    getCachedSettings(),
-  ]);
-
-  return (
-    <HeaderContent
-      preloadedUser={preloadedUser}
-      preloadedSettings={preloadedSettings}
-    />
-  );
-}
-```
-
----
-
-## 5. Why `usePreloadedQuery` Instead of `usePreloadedAuthQuery`
-
-`@convex-dev/better-auth` provides `usePreloadedAuthQuery` as a drop-in replacement for `usePreloadedQuery` that is supposed to "ensure server-rendered data is rendered until authentication is ready." However, it has a bug that causes the opposite behavior.
-
-### The bug
-
-`usePreloadedAuthQuery` internally tracks a `preloadExpired` flag. Once the live `useQuery` subscription returns data, this flag is set to `true` permanently. On client-side re-navigation (e.g. navigating away from a page and back), the subscription tears down and re-establishes. During this gap:
-
-1. `preloadExpired` is already `true` (from the previous visit)
-2. The live `useQuery` result is `undefined` (subscription re-establishing)
-3. The hook returns `undefined` instead of falling back to the preloaded data
-4. UI flashes empty for several render cycles
-
-This was verified with debug logging — `useConvexAuth()` returns `{ isLoading: false, isAuthenticated: true }` the entire time. The auth token is correctly passed. The issue is purely in the hook's subscription management.
-
-### The fix
-
-Use standard `usePreloadedQuery` from `convex/react`. This works because:
-
-- **Server-side auth is already enforced** — `isAuthenticated()` + `redirect()` in RSCs
-- **`initialToken` provides the token immediately** — `ConvexBetterAuthProvider` receives it from the root layout
-- **`usePreloadedQuery` hydrates synchronously** — no `undefined` gap, seamless transition to live subscription
-- **Reactive updates still work** — Convex's WebSocket subscription activates after hydration
 
 ---
 
@@ -492,56 +482,91 @@ Use standard `usePreloadedQuery` from `convex/react`. This works because:
 What happens when a user visits an authenticated page:
 
 ```
-1. Root Layout (server)
-   └─ getToken() fetches JWT (cached for 60s)
-   └─ Wraps children in ConvexClientProvider with initialToken
+1. Middleware (proxy.ts)
+   └─ Clerk checks session cookie
+   └─ /dashboard is not public → auth.protect()
+   └─ If no session → redirect to Clerk sign-in
 
-2. Dashboard Layout (server)
-   └─ Static shell renders immediately (header chrome, nav)
-   └─ Suspense: AuthenticatedHeader starts streaming
-      └─ isAuthenticated() checks auth
-      └─ getCachedUser() + getCachedSettings() preload (deduplicated)
-      └─ Client header component hydrates with preloaded data
+2. Root Layout (server)
+   └─ Renders <Providers> wrapper
+   └─ ClerkProvider initializes with session
+   └─ ConvexProviderWithClerk bridges auth to Convex
 
 3. Page (server)
-   └─ Static content (headings, links) renders immediately
-   └─ Suspense: Async data component starts streaming
-      └─ isAuthenticated() (same request, no extra cost)
-      └─ preloadAuthQuery() fetches page-specific data
-      └─ Client component hydrates with preloaded data
+   └─ verifySession() — defense-in-depth auth check
+   └─ Static content (headings) renders immediately
+   └─ Suspense boundary wraps async data component:
+      └─ getAuthToken() fetches Convex JWT from Clerk
+      └─ preloadQuery() fetches data with auth token
+      └─ Client component receives Preloaded<T> as prop
 
 4. Client hydration
-   └─ ConvexBetterAuthProvider initializes with server token (no re-fetch)
-   └─ usePreloadedQuery() hydrates from server data synchronously
+   └─ ConvexProviderWithClerk fetches auth token via useAuth
+   └─ Convex validates JWT against Clerk's public key
+   └─ usePreloadedQuery() hydrates from server data
    └─ Convex subscribes for real-time updates via WebSocket
 ```
 
 ---
 
-## File Structure Reference
+## 7. User Sync Flow
 
-These are the files that make this architecture work. Create them in this order:
+Clerk user data is synced to Convex via webhooks, not client-side:
+
+```
+Clerk (user signs up / updates profile / deletes account)
+  │
+  ├──► POST <CONVEX_SITE_URL>/clerk-users-webhook
+  │    Headers: svix-id, svix-timestamp, svix-signature
+  │
+  └──► convex/http.ts
+       ├─ Svix validates webhook signature
+       ├─ user.created / user.updated → upsertFromClerk mutation
+       │  Maps: first_name + last_name → name
+       │        email_addresses[0] → email
+       │        image_url → image
+       │        id → externalId
+       └─ user.deleted → deleteFromClerk mutation
+```
+
+The `externalId` field (Clerk's `userId`) is how Convex functions link JWT identity to database records:
+`ctx.auth.getUserIdentity().subject` === Clerk `userId` === `users.externalId`
+
+---
+
+## File Structure Reference
 
 ```text
 lib/
-  auth-client.ts          # Better Auth client (browser)
-  auth-server.ts          # Better Auth server helpers + JWT caching
-  cached-queries.ts       # React cache() wrappers for deduplication
+  auth.ts                 # Server-side auth helpers (getAuthToken, verifySession)
+  utils.ts                # cn() helper (clsx + tailwind-merge)
 
 convex/
-  convex.config.ts        # Registers the Better Auth component
-  auth.config.ts          # Registers Better Auth as Convex auth provider
-  auth.ts                 # Auth component, createAuth, getCurrentUser query
-  http.ts                 # Registers auth HTTP routes
+  auth.config.ts          # Clerk JWT issuer domain config
+  http.ts                 # Clerk webhook handler (Svix validation)
+  schema.ts               # Database schema (users, skills, bundles)
+  users.ts                # User CRUD, getCurrentUser/getCurrentUserOrThrow
+  bundles.ts              # Bundle queries/mutations with auth
+  skills.ts               # Skill sync pipeline, queries
+  crons.ts                # Daily skill sync at 06:00 UTC
 
 app/
-  api/auth/[...all]/
-    route.ts              # Catch-all forwarding to Better Auth handler
-  layout.tsx              # Root layout with token hydration + Suspense
-  ConvexClientProvider.tsx # Client-side Convex + Better Auth provider
-  (dashboard)/
-    layout.tsx            # Static shell + Suspense header
-    page.tsx              # Page with preloading + Suspense
+  layout.tsx              # Root layout (Server Component)
+  providers.tsx           # Provider chain (ClerkProvider → Convex → Theme → Toast)
+  ConvexClientProvider.tsx # ConvexProviderWithClerk + TanStack Query setup
+  (main)/
+    dashboard/
+      page.tsx            # Protected page (verifySession + Suspense)
+      dashboard-bundles.tsx  # Server component (preloadQuery with auth token)
+      dashboard-content.tsx  # Client component (usePreloadedQuery + mutations)
+    settings/
+      page.tsx            # Clerk UserProfile component
+      custom/
+        page.tsx          # Custom settings with Clerk server API
 
-next.config.ts            # cacheComponents: true
+components/
+  app-header.tsx          # Uses <Authenticated>, <Unauthenticated>, <AuthLoading>
+  bundle-bar.tsx          # Uses useConvexAuth() for auth state
+
+proxy.ts                  # Clerk middleware (route protection)
 ```
