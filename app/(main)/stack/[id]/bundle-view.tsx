@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePreloadedQuery, useMutation, type Preloaded } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -25,6 +25,7 @@ import {
   PopoverTrigger,
   PopoverContent,
 } from "@/components/ui/cubby-ui/popover";
+import { ForkBundleButton } from "@/components/explore/fork-bundle-button";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Share01Icon, Loading03Icon } from "@hugeicons/core-free-icons";
 
@@ -53,6 +54,15 @@ export function BundleView({
   const [activeSkill, setActiveSkill] = useState<SkillInfo | null>(null);
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const queryArgs = { urlId, shareToken };
+  const recordEvent = useMutation(api.bundleEvents.recordEvent);
+  const viewTracked = useRef(false);
+
+  useEffect(() => {
+    if (bundle?._id && !viewTracked.current) {
+      viewTracked.current = true;
+      recordEvent({ bundleId: bundle._id, eventType: "view" }).catch(() => {});
+    }
+  }, [bundle?._id, recordEvent]);
   const updateVisibility = useMutation(
     api.bundles.updateBundleVisibility,
   ).withOptimisticUpdate((localStore, { isPublic }) => {
@@ -108,6 +118,42 @@ export function BundleView({
           by {bundle.creatorName} &middot; {bundle.skills.length} skill
           {bundle.skills.length !== 1 ? "s" : ""}
         </p>
+        {(bundle.viewCount > 0 || bundle.copyCount > 0 || bundle.forkCount > 0) && (
+          <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
+            {bundle.viewCount > 0 && (
+              <span className="font-mono tabular-nums">
+                {bundle.viewCount} {bundle.viewCount === 1 ? "view" : "views"}
+              </span>
+            )}
+            {bundle.copyCount > 0 && (
+              <span className="font-mono tabular-nums">
+                {bundle.copyCount} {bundle.copyCount === 1 ? "copy" : "copies"}
+              </span>
+            )}
+            {bundle.forkCount > 0 && (
+              <span className="font-mono tabular-nums">
+                {bundle.forkCount} {bundle.forkCount === 1 ? "fork" : "forks"}
+              </span>
+            )}
+          </div>
+        )}
+        {bundle.forkedFrom && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            Forked from{" "}
+            <Link
+              href={`/stack/${bundle.forkedFrom.urlId}`}
+              className="underline hover:text-foreground"
+            >
+              {bundle.forkedFrom.name}
+            </Link>
+            {" "}by {bundle.forkedFrom.creatorName}
+          </p>
+        )}
+        {!bundle.isOwner && (
+          <div className="mt-3">
+            <ForkBundleButton bundleId={bundle._id} />
+          </div>
+        )}
 
         {bundle.isOwner && (
           <div className="mt-4 flex items-center gap-4 border-t pt-4">
@@ -158,7 +204,7 @@ export function BundleView({
       )}
 
       <section className="mb-10">
-        <InstallCommands skills={bundle.skills} />
+        <InstallCommands skills={bundle.skills} bundleId={bundle._id} />
       </section>
 
       <section>

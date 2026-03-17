@@ -91,6 +91,7 @@ export function DashboardContent({ preloadedBundles }: DashboardContentProps) {
               creatorName="You"
               technologies={[]}
               isPublic={bundle.isPublic}
+              viewCount={bundle.viewCount}
               actions={
                 <div className="flex gap-2">
                   <Button

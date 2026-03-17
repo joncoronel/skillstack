@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/cubby-ui/card";
 import { Badge } from "@/components/ui/cubby-ui/badge";
 import { TECHNOLOGIES } from "@/lib/technologies";
-import { timeAgo } from "@/lib/utils";
+import { cn, timeAgo } from "@/lib/utils";
 
 interface BundleCardProps {
   name: string;
@@ -24,6 +24,8 @@ interface BundleCardProps {
   technologies: string[];
   isPublic?: boolean;
   actions?: React.ReactNode;
+  viewCount?: number;
+  isTrending?: boolean;
 }
 
 const techMap = new Map(TECHNOLOGIES.map((t) => [t.id, t.name]));
@@ -37,9 +39,13 @@ export function BundleCard({
   technologies,
   isPublic = true,
   actions,
+  viewCount,
+  isTrending,
 }: BundleCardProps) {
   const content = (
-    <Card className="gap-3 py-4 transition-colors hover:border-border/20">
+    <Card
+      className={cn("gap-3 py-4 transition-colors hover:border-border/20", isTrending && "border-l-2 border-l-primary/40")}
+    >
       <CardHeader className="gap-1">
         <CardTitle className="text-sm leading-snug">{name}</CardTitle>
         <CardAction>
@@ -76,6 +82,13 @@ export function BundleCard({
               </Badge>
             )}
           </div>
+        </CardContent>
+      )}
+      {viewCount !== undefined && (
+        <CardContent className="pt-0">
+          <span className="text-xs font-mono tabular-nums text-muted-foreground">
+            {viewCount} {viewCount === 1 ? "view" : "views"}
+          </span>
         </CardContent>
       )}
       {actions && <CardFooter>{actions}</CardFooter>}

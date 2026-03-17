@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as bundleEvents from "../bundleEvents.js";
 import type * as bundles from "../bundles.js";
 import type * as crons from "../crons.js";
 import type * as github from "../github.js";
@@ -25,6 +26,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  bundleEvents: typeof bundleEvents;
   bundles: typeof bundles;
   crons: typeof crons;
   github: typeof github;

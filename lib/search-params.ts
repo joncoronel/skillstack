@@ -12,8 +12,4 @@ export const searchQueryParser = parseAsString.withDefault("");
 
 // -- Explore page (/explore) parsers --
 
-const sortValues = ["recent", "popular"] as const;
-export type SortMode = (typeof sortValues)[number];
-export const sortParser = parseAsStringLiteral(sortValues).withDefault(
-  "recent",
-);
+export const exploreQueryParser = parseAsString.withDefault("");

@@ -66,9 +66,34 @@ export default defineSchema({
     ),
     isPublic: v.boolean(),
     shareToken: v.optional(v.string()),
+    forkedFrom: v.optional(v.id("bundles")),
     createdAt: v.number(),
   })
     .index("by_userId", ["userId"])
     .index("by_urlId", ["urlId"])
     .index("by_public_createdAt", ["isPublic", "createdAt"]),
+
+  bundleEvents: defineTable({
+    bundleId: v.id("bundles"),
+    eventType: v.union(
+      v.literal("view"),
+      v.literal("copy"),
+      v.literal("fork"),
+    ),
+    userId: v.optional(v.id("users")),
+    createdAt: v.number(),
+  })
+    .index("by_bundle_createdAt", ["bundleId", "createdAt"])
+    .index("by_type_createdAt", ["eventType", "createdAt"]),
+
+  bundleStats: defineTable({
+    bundleId: v.id("bundles"),
+    viewCount: v.number(),
+    copyCount: v.number(),
+    forkCount: v.number(),
+    recentCopyCount: v.number(),
+    lastEventAt: v.number(),
+  })
+    .index("by_bundleId", ["bundleId"])
+    .index("by_recentCopies", ["recentCopyCount"]),
 });

@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import { Button } from "@/components/ui/cubby-ui/button";
 import {
   generateInstallCommands,
@@ -10,24 +13,32 @@ import {
 
 interface InstallCommandsProps {
   skills: BundleSkill[];
+  bundleId?: Id<"bundles">;
 }
 
-export function InstallCommands({ skills }: InstallCommandsProps) {
+export function InstallCommands({ skills, bundleId }: InstallCommandsProps) {
   const commands = generateInstallCommands(skills);
   const [copiedAll, setCopiedAll] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const recordEvent = useMutation(api.bundleEvents.recordEvent);
 
   async function handleCopyAll() {
     const text = generateAllCommandsText(skills);
     await navigator.clipboard.writeText(text);
     setCopiedAll(true);
     setTimeout(() => setCopiedAll(false), 2000);
+    if (bundleId) {
+      recordEvent({ bundleId, eventType: "copy" }).catch(() => {});
+    }
   }
 
   async function handleCopyOne(index: number, command: string) {
     await navigator.clipboard.writeText(command);
     setCopiedIndex(index);
     setTimeout(() => setCopiedIndex(null), 2000);
+    if (bundleId) {
+      recordEvent({ bundleId, eventType: "copy" }).catch(() => {});
+    }
   }
 
   if (commands.length === 0) return null;

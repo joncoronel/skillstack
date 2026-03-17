@@ -15,4 +15,10 @@ crons.daily(
   internal.githubCache.cleanupExpiredCache,
 );
 
+crons.weekly(
+  "recalculate recent copy counts",
+  { hourUTC: 4, minuteUTC: 0, dayOfWeek: "sunday" },
+  internal.bundleEvents.recalculateRecentCopyCounts,
+);
+
 export default crons;

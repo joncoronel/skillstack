@@ -1,4 +1,5 @@
 import { mutation, query, type QueryCtx } from "./_generated/server";
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { getCurrentUser, getCurrentUserOrThrow } from "./users";
 
@@ -197,7 +198,27 @@ export const getByUrlId = query({
       }),
     );
 
-    const creator = await ctx.db.get(bundle.userId);
+    const [creator, stats] = await Promise.all([
+      ctx.db.get(bundle.userId),
+      ctx.db
+        .query("bundleStats")
+        .withIndex("by_bundleId", (q) => q.eq("bundleId", bundle._id))
+        .unique(),
+    ]);
+
+    // Resolve fork lineage
+    let forkedFromInfo: { urlId: string; name: string; creatorName: string } | undefined;
+    if (bundle.forkedFrom) {
+      const parent = await ctx.db.get(bundle.forkedFrom);
+      if (parent) {
+        const parentCreator = await ctx.db.get(parent.userId);
+        forkedFromInfo = {
+          urlId: parent.urlId,
+          name: parent.name,
+          creatorName: parentCreator?.name ?? "Anonymous",
+        };
+      }
+    }
 
     return {
       _id: bundle._id,
@@ -209,6 +230,10 @@ export const getByUrlId = query({
       creatorName: creator?.name ?? "Anonymous",
       isOwner,
       shareToken: isOwner ? bundle.shareToken : undefined,
+      forkedFrom: forkedFromInfo,
+      viewCount: stats?.viewCount ?? 0,
+      copyCount: stats?.copyCount ?? 0,
+      forkCount: stats?.forkCount ?? 0,
     };
   },
 });
@@ -219,52 +244,174 @@ export const listByUser = query({
     const user = await getCurrentUser(ctx);
     if (!user) return [];
 
-    return await ctx.db
+    const bundles = await ctx.db
       .query("bundles")
       .withIndex("by_userId", (q) => q.eq("userId", user._id))
       .order("desc")
       .collect();
-  },
-});
-
-export const listPublic = query({
-  args: { limit: v.optional(v.number()) },
-  handler: async (ctx, { limit = 30 }) => {
-    const bundles = await ctx.db
-      .query("bundles")
-      .withIndex("by_public_createdAt", (q) => q.eq("isPublic", true))
-      .order("desc")
-      .take(limit);
 
     return Promise.all(
       bundles.map(async (bundle) => {
-        const creator = await ctx.db.get(bundle.userId);
-
-        const techSet = new Set<string>();
-        for (const s of bundle.skills) {
-          const skill = await ctx.db
-            .query("skills")
-            .withIndex("by_source_skillId", (q) =>
-              q.eq("source", s.source).eq("skillId", s.skillId),
-            )
-            .unique();
-          if (skill) {
-            skill.technologies.forEach((t) => techSet.add(t));
-          }
-        }
+        const stats = await ctx.db
+          .query("bundleStats")
+          .withIndex("by_bundleId", (q) => q.eq("bundleId", bundle._id))
+          .unique();
 
         return {
-          _id: bundle._id,
-          name: bundle.name,
-          urlId: bundle.urlId,
-          skillCount: bundle.skills.length,
-          createdAt: bundle.createdAt,
-          creatorName: creator?.name ?? "Anonymous",
-          creatorImage: creator?.image,
-          technologies: Array.from(techSet),
+          ...bundle,
+          viewCount: stats?.viewCount ?? 0,
+          copyCount: stats?.copyCount ?? 0,
+          forkCount: stats?.forkCount ?? 0,
         };
       }),
     );
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Paginated public bundles (for explore page infinite scroll)
+// ---------------------------------------------------------------------------
+
+export async function enrichBundle(
+  ctx: QueryCtx,
+  bundle: {
+    _id: ReturnType<typeof v.id<"bundles">>["type"];
+    name: string;
+    urlId: string;
+    skills: Array<{ source: string; skillId: string; addedAt?: number }>;
+    createdAt: number;
+    userId: ReturnType<typeof v.id<"users">>["type"];
+    forkedFrom?: ReturnType<typeof v.id<"bundles">>["type"];
+  },
+) {
+  const [creator, stats] = await Promise.all([
+    ctx.db.get(bundle.userId),
+    ctx.db
+      .query("bundleStats")
+      .withIndex("by_bundleId", (q) => q.eq("bundleId", bundle._id))
+      .unique(),
+  ]);
+
+  const skills = await Promise.all(
+    bundle.skills.map((s) =>
+      ctx.db
+        .query("skills")
+        .withIndex("by_source_skillId", (q) =>
+          q.eq("source", s.source).eq("skillId", s.skillId),
+        )
+        .unique(),
+    ),
+  );
+  const techSet = new Set<string>();
+  for (const skill of skills) {
+    if (skill) skill.technologies.forEach((t) => techSet.add(t));
+  }
+
+  return {
+    _id: bundle._id,
+    name: bundle.name,
+    urlId: bundle.urlId,
+    skillCount: bundle.skills.length,
+    createdAt: bundle.createdAt,
+    creatorName: creator?.name ?? "Anonymous",
+    creatorImage: creator?.image,
+    technologies: Array.from(techSet),
+    forkedFrom: bundle.forkedFrom,
+    viewCount: stats?.viewCount ?? 0,
+    copyCount: stats?.copyCount ?? 0,
+    forkCount: stats?.forkCount ?? 0,
+  };
+}
+
+export const listPublicPaginated = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, { paginationOpts }) => {
+    const result = await ctx.db
+      .query("bundles")
+      .withIndex("by_public_createdAt", (q) => q.eq("isPublic", true))
+      .order("desc")
+      .paginate(paginationOpts);
+
+    const enriched = await Promise.all(
+      result.page.map((bundle) => enrichBundle(ctx, bundle)),
+    );
+
+    return {
+      ...result,
+      page: enriched,
+    };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Fork a bundle
+// ---------------------------------------------------------------------------
+
+export const forkBundle = mutation({
+  args: {
+    bundleId: v.id("bundles"),
+    name: v.optional(v.string()),
+  },
+  handler: async (ctx, { bundleId, name }) => {
+    const user = await getCurrentUserOrThrow(ctx);
+    const source = await ctx.db.get(bundleId);
+    if (!source) throw new Error("Bundle not found");
+
+    // Must be public or owned by user
+    if (!source.isPublic && source.userId !== user._id) {
+      throw new Error("Cannot fork a private bundle");
+    }
+
+    const urlId = await ensureUniqueUrlId(ctx);
+    const now = Date.now();
+
+    const newBundleId = await ctx.db.insert("bundles", {
+      userId: user._id,
+      name: name ?? `${source.name} (fork)`,
+      urlId,
+      skills: source.skills.map((s) => ({
+        source: s.source,
+        skillId: s.skillId,
+        addedAt: now,
+      })),
+      isPublic: true,
+      forkedFrom: bundleId,
+      createdAt: now,
+    });
+
+    // Record fork event on the source bundle
+    await ctx.db.insert("bundleEvents", {
+      bundleId,
+      eventType: "fork",
+      userId: user._id,
+      createdAt: now,
+    });
+
+    // Update source bundle stats
+    const stats = await ctx.db
+      .query("bundleStats")
+      .withIndex("by_bundleId", (q) => q.eq("bundleId", bundleId))
+      .unique();
+
+    if (stats) {
+      await ctx.db.patch(stats._id, {
+        forkCount: stats.forkCount + 1,
+        lastEventAt: now,
+      });
+    } else {
+      await ctx.db.insert("bundleStats", {
+        bundleId,
+        viewCount: 0,
+        copyCount: 0,
+        forkCount: 1,
+        recentCopyCount: 0,
+        lastEventAt: now,
+      });
+    }
+
+    return { bundleId: newBundleId, urlId };
   },
 });
 
