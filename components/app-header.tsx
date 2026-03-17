@@ -15,6 +15,7 @@ import {
   DrawerTitle,
   DrawerBody,
   DrawerFooter,
+  DrawerHandle,
 } from "@/components/ui/cubby-ui/drawer/drawer";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
@@ -128,6 +129,7 @@ function MobileDrawer({
   return (
     <Drawer direction="bottom" open={open} onOpenChange={onOpenChange}>
       <DrawerContent>
+        <DrawerHandle />
         <DrawerHeader>
           <DrawerTitle className="font-display text-lg font-bold tracking-tight">
             SkillStack
