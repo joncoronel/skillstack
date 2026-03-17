@@ -38,10 +38,7 @@ html {
 
   /* Neutral */
   --neutral: light-dark(oklch(0.17 0 0), oklch(0.93 0.0038 286));
-  --neutral-foreground: light-dark(
-    oklch(0.955 0 0),
-    oklch(0.145 0.0038 286)
-  );
+  --neutral-foreground: light-dark(oklch(0.955 0 0), oklch(0.145 0.0038 286));
 
   /* Secondary */
   /*  */

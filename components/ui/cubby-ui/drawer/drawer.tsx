@@ -1,7 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { Dialog as BaseDialog } from "@base-ui/react/dialog";
+import {
+  Dialog as BaseDialog,
+  type DialogRootChangeEventDetails,
+} from "@base-ui/react/dialog";
 import { mergeProps } from "@base-ui/react/merge-props";
 import { useRender } from "@base-ui/react/use-render";
 import { cva } from "class-variance-authority";
@@ -40,7 +43,7 @@ const createDrawerHandle = BaseDialog.createHandle;
 const drawerContentVariants = cva(
   [
     "bg-popover text-popover-foreground flex flex-col",
-    "relative ",
+    "relative",
     "ease-[cubic-bezier(0, 0, 0.58, 1)] transition-transform duration-300 will-change-transform",
     "motion-reduce:transition-none",
   ],
@@ -85,7 +88,7 @@ const drawerContentVariants = cva(
         variant: "default",
         direction: "left",
         class:
-          "max-w-screen w-screen  rounded-r-xl sm:max-w-sm [&[data-starting-style]]:-translate-x-[var(--drawer-offset)] [&[data-ending-style]]:-translate-x-[var(--drawer-offset)]",
+          "max-w-screen w-screen rounded-r-xl sm:max-w-sm [&[data-starting-style]]:-translate-x-[var(--drawer-offset)] [&[data-ending-style]]:-translate-x-[var(--drawer-offset)]",
       },
       // Floating variant - direction-specific sizing and transforms
       {
@@ -175,28 +178,39 @@ interface DrawerConfigContextValue {
   repositionInputs: boolean;
 }
 
-interface DrawerAnimationContextValue {
+/** High-frequency values updated during scroll/drag */
+interface DrawerScrollContextValue {
   isDragging: boolean;
-  setIsDragging: (dragging: boolean) => void;
   dragProgress: number;
-  setDragProgress: (progress: number) => void;
   snapProgress: number;
-  setSnapProgress: (progress: number) => void;
+}
+
+/** Low-frequency control values and stable setters */
+interface DrawerControlContextValue {
+  open: boolean;
+  onOpenChange: (
+    open: boolean,
+    eventDetails?: DialogRootChangeEventDetails,
+  ) => void;
+  dismissViaSwipe: () => void;
   activeSnapPoint: SnapPoint;
   setActiveSnapPoint: (snapPoint: SnapPoint) => void;
-  open: boolean;
-  onOpenChange: (open: boolean, eventDetails?: { reason?: string }) => void;
   contentSize: number | null;
   setContentSize: (size: number | null) => void;
   isAnimating: boolean;
   immediateClose: boolean;
   setImmediateClose: (value: boolean) => void;
+  setIsDragging: (dragging: boolean) => void;
+  setDragProgress: (progress: number) => void;
+  setSnapProgress: (progress: number) => void;
 }
 
 const DrawerConfigContext =
   React.createContext<DrawerConfigContextValue | null>(null);
-const DrawerAnimationContext =
-  React.createContext<DrawerAnimationContextValue | null>(null);
+const DrawerScrollContext =
+  React.createContext<DrawerScrollContextValue | null>(null);
+const DrawerControlContext =
+  React.createContext<DrawerControlContextValue | null>(null);
 
 function useDrawerConfig() {
   const context = React.useContext(DrawerConfigContext);
@@ -206,16 +220,42 @@ function useDrawerConfig() {
   return context;
 }
 
-function useDrawerAnimation() {
-  const context = React.useContext(DrawerAnimationContext);
+/** High-frequency scroll/drag state. Subscribing causes re-renders during drag. */
+function useDrawerScroll() {
+  const context = React.useContext(DrawerScrollContext);
   if (!context) {
     throw new Error("Drawer components must be used within a <Drawer />");
   }
   return context;
 }
 
+/** Low-frequency control state and stable setters. Does not re-render during drag. */
+function useDrawerControl() {
+  const context = React.useContext(DrawerControlContext);
+  if (!context) {
+    throw new Error("Drawer components must be used within a <Drawer />");
+  }
+  return context;
+}
+
+/**
+ * Convenience hook combining scroll and control contexts.
+ * Subscribes to both — re-renders on any animation state change.
+ * For fewer re-renders, use `useDrawerControl()` or `useDrawerScroll()`.
+ */
+function useDrawerAnimation() {
+  return { ...useDrawerScroll(), ...useDrawerControl() };
+}
+
+/**
+ * Convenience hook that returns all drawer context values.
+ * For granular subscriptions (fewer re-renders), use
+ * `useDrawerConfig()` for static config,
+ * `useDrawerControl()` for control state, or
+ * `useDrawerScroll()` for scroll/drag state.
+ */
 function useDrawer() {
-  return { ...useDrawerConfig(), ...useDrawerAnimation() };
+  return { ...useDrawerConfig(), ...useDrawerScroll(), ...useDrawerControl() };
 }
 
 /* -------------------------------------------------------------------------------------------------
@@ -233,7 +273,7 @@ interface DrawerRenderProps {
 
 interface DrawerProps extends Omit<
   React.ComponentProps<typeof BaseDialog.Root>,
-  "children"
+  "children" | "onOpenChange"
 > {
   direction?: DrawerDirection;
   variant?: DrawerVariant;
@@ -249,13 +289,23 @@ interface DrawerProps extends Omit<
   sequentialSnap?: boolean;
   /** Repositions drawer when virtual keyboard appears (bottom only) */
   repositionInputs?: boolean;
+  /**
+   * Event handler called when the drawer is opened or closed.
+   * `eventDetails` may be undefined for internal close actions (e.g., DrawerClose, DrawerHandle).
+   */
+  onOpenChange?: (
+    open: boolean,
+    eventDetails?: DialogRootChangeEventDetails,
+  ) => void;
   children?: React.ReactNode | ((props: DrawerRenderProps) => React.ReactNode);
 }
+
+const DEFAULT_SNAP_POINTS: SnapPoint[] = [1];
 
 function Drawer({
   direction = "bottom",
   variant = "default",
-  snapPoints = [1],
+  snapPoints = DEFAULT_SNAP_POINTS,
   defaultSnapPoint,
   activeSnapPoint: controlledSnapPoint,
   onActiveSnapPointChange,
@@ -301,25 +351,47 @@ function Drawer({
   const [isAnimating, setIsAnimating] = React.useState(false);
   const [immediateClose, setImmediateClose] = React.useState(false);
 
+  // Sync animation state when controlled `open` transitions to true.
+  // Base UI doesn't call onOpenChange for external prop changes, so
+  // handleOpenChange(true) never runs — we set isAnimating here to
+  // block dismiss gestures during the enter transition.
+  const prevOpenRef = React.useRef(open);
+  React.useLayoutEffect(() => {
+    if (open && !prevOpenRef.current) {
+      setIsAnimating(true);
+      setImmediateClose(false);
+    }
+    prevOpenRef.current = open;
+  }, [open]);
+
   const { isVertical } = DIRECTION_CONFIG[direction];
+
+  // Refs for stable access in callbacks without adding deps
+  const isDraggingRef = React.useRef(false);
+  const swipeDismissRef = React.useRef(false);
+  React.useLayoutEffect(() => {
+    isDraggingRef.current = isDragging;
+  });
 
   const handleOpenChangeComplete = React.useCallback(() => {
     setIsAnimating(false);
+    setImmediateClose(false);
   }, []);
 
   const handleOpenChange = React.useCallback(
-    (nextOpen: boolean, eventDetails?: { reason?: string }) => {
+    (nextOpen: boolean, eventDetails?: DialogRootChangeEventDetails) => {
       // Prevent closing while scrolling, but allow explicit swipe dismiss
-      if (!nextOpen && isDragging && eventDetails?.reason !== "swipe-dismiss") {
+      if (!nextOpen && isDraggingRef.current && !swipeDismissRef.current) {
         return;
       }
+      swipeDismissRef.current = false;
 
       setIsAnimating(true);
 
       if (!isOpenControlled) {
         setUncontrolledOpen(nextOpen);
       }
-      controlledOnOpenChange?.(nextOpen, eventDetails as never);
+      controlledOnOpenChange?.(nextOpen, eventDetails);
 
       if (nextOpen && !isSnapPointControlled) {
         setInternalSnapPointIndex(defaultSnapPointIndex);
@@ -344,7 +416,6 @@ function Drawer({
       }
     },
     [
-      isDragging,
       isOpenControlled,
       controlledOnOpenChange,
       snapPoints,
@@ -353,6 +424,11 @@ function Drawer({
       defaultSnapPointIndex,
     ],
   );
+
+  const dismissViaSwipe = React.useCallback(() => {
+    swipeDismissRef.current = true;
+    handleOpenChange(false);
+  }, [handleOpenChange]);
 
   const setActiveSnapPoint = React.useCallback(
     (value: SnapPoint) => {
@@ -388,32 +464,37 @@ function Drawer({
     ],
   );
 
-  const animationValue = React.useMemo(
+  const scrollValue = React.useMemo(
     () => ({
       isDragging,
-      setIsDragging,
       dragProgress,
-      setDragProgress,
       snapProgress,
-      setSnapProgress,
-      activeSnapPoint: activeSnapPointValue,
-      setActiveSnapPoint,
+    }),
+    [isDragging, dragProgress, snapProgress],
+  );
+
+  const controlValue = React.useMemo(
+    () => ({
       open,
       onOpenChange: handleOpenChange,
+      dismissViaSwipe,
+      activeSnapPoint: activeSnapPointValue,
+      setActiveSnapPoint,
       contentSize,
       setContentSize,
       isAnimating,
       immediateClose,
       setImmediateClose,
+      setIsDragging,
+      setDragProgress,
+      setSnapProgress,
     }),
     [
-      isDragging,
-      dragProgress,
-      snapProgress,
-      activeSnapPointValue,
-      setActiveSnapPoint,
       open,
       handleOpenChange,
+      dismissViaSwipe,
+      activeSnapPointValue,
+      setActiveSnapPoint,
       contentSize,
       isAnimating,
       immediateClose,
@@ -432,19 +513,21 @@ function Drawer({
 
   return (
     <DrawerConfigContext.Provider value={configValue}>
-      <DrawerAnimationContext.Provider value={animationValue}>
-        <BaseDialog.Root
-          data-slot="drawer"
-          open={open}
-          onOpenChange={handleOpenChange}
-          onOpenChangeComplete={handleOpenChangeComplete}
-          modal={modal}
-          disablePointerDismissal={isAnimating || modal !== true}
-          {...props}
-        >
-          {resolvedChildren}
-        </BaseDialog.Root>
-      </DrawerAnimationContext.Provider>
+      <DrawerScrollContext.Provider value={scrollValue}>
+        <DrawerControlContext.Provider value={controlValue}>
+          <BaseDialog.Root
+            data-slot="drawer"
+            open={open}
+            onOpenChange={handleOpenChange}
+            onOpenChangeComplete={handleOpenChangeComplete}
+            modal={modal}
+            disablePointerDismissal={isAnimating || modal !== true}
+            {...props}
+          >
+            {resolvedChildren}
+          </BaseDialog.Root>
+        </DrawerControlContext.Provider>
+      </DrawerScrollContext.Provider>
     </DrawerConfigContext.Provider>
   );
 }
@@ -473,7 +556,7 @@ function DrawerClose({
   render,
   ...props
 }: DrawerCloseProps) {
-  const { onOpenChange, isAnimating } = useDrawerAnimation();
+  const { onOpenChange, isAnimating } = useDrawerControl();
 
   const handleClick = React.useCallback(
     (event: React.MouseEvent) => {
@@ -537,109 +620,90 @@ function DrawerContent({
   );
 }
 
-function DrawerContentInner({
-  className,
-  children,
-  footerVariant = "default",
-  initialFocus,
-  finalFocus,
-  ...props
-}: DrawerContentProps) {
-  const {
-    direction,
-    variant,
-    snapPoints,
-    activeSnapPoint,
-    setActiveSnapPoint,
-    dismissible,
-    modal,
-    contentSize,
-    setContentSize,
-    isVertical,
-    setIsDragging,
-    dragProgress,
-    setDragProgress,
-    snapProgress,
-    setSnapProgress,
-    onOpenChange,
-    open,
-    isAnimating,
-    immediateClose,
-    setImmediateClose,
-    isDragging,
-    sequentialSnap,
-    repositionInputs,
-  } = useDrawer();
+/* -------------------------------------------------------------------------------------------------
+ * Content Hooks (extracted from DrawerContentInner for readability)
+ * -------------------------------------------------------------------------------------------------*/
 
-  const activeSnapPointIndex = findSnapPointIndex(snapPoints, activeSnapPoint);
+/**
+ * Measures drawer content size via ResizeObserver and provides merged refs
+ * for the popup element.
+ */
+function useContentMeasurement(
+  isVertical: boolean,
+  floatingMargin: number,
+  setContentSize: (size: number | null) => void,
+) {
+  const observerRef = React.useRef<ResizeObserver | null>(null);
 
-  const handleSnapPointChange = React.useCallback(
-    (index: number) => {
-      setActiveSnapPoint(getSnapPointValue(snapPoints, index));
+  const measureRef = React.useCallback(
+    (node: HTMLDivElement | null) => {
+      observerRef.current?.disconnect();
+      observerRef.current = null;
+
+      if (!node) return;
+
+      const measure = () => {
+        const baseSize = isVertical ? node.offsetHeight : node.offsetWidth;
+        setContentSize(baseSize + floatingMargin);
+      };
+
+      measure();
+      observerRef.current = new ResizeObserver(measure);
+      observerRef.current.observe(node);
     },
-    [snapPoints, setActiveSnapPoint],
+    [isVertical, setContentSize, floatingMargin],
   );
 
-  const { keyboardHeight, isKeyboardVisible } = useVirtualKeyboard({
-    enabled: direction === "bottom",
-  });
+  const popupRef = React.useRef<HTMLDivElement>(null);
 
-  // Provides real-time viewport height that updates with URL bar changes
-  const visualViewportHeight = useVisualViewportHeight({
-    enabled: !isVertical && modal !== true,
-  });
-
-  const handleDismiss = React.useCallback(() => {
-    onOpenChange(false, { reason: "swipe-dismiss" });
-  }, [onOpenChange]);
-
-  const handleImmediateClose = React.useCallback(() => {
-    setImmediateClose(true);
-  }, [setImmediateClose]);
-
-  // Skip progress updates during enter/exit animations (let CSS control backdrop)
-  const handleScrollProgress = React.useCallback(
-    (progress: number) => {
-      if (!isAnimating) {
-        setDragProgress(progress);
-      }
+  const mergedRef = React.useCallback(
+    (node: HTMLDivElement | null) => {
+      popupRef.current = node;
+      measureRef(node);
     },
-    [isAnimating, setDragProgress],
+    [measureRef],
   );
 
-  const handleSnapProgress = React.useCallback(
-    (progress: number) => {
-      if (!isAnimating) {
-        setSnapProgress(progress);
-      }
-    },
-    [isAnimating, setSnapProgress],
-  );
+  React.useEffect(() => () => observerRef.current?.disconnect(), []);
 
-  const {
-    containerRef,
-    isScrolling,
-    setSnapTargetRef,
-    trackSize,
-    snapScrollPositions,
-    isInitialized,
-    isClosing,
-  } = useScrollSnap({
-    direction,
-    snapPoints,
-    activeSnapPointIndex,
-    onSnapPointChange: handleSnapPointChange,
-    onDismiss: handleDismiss,
-    dismissible,
-    contentSize,
-    open,
-    onScrollProgress: handleScrollProgress,
-    onSnapProgress: handleSnapProgress,
-    onImmediateClose: handleImmediateClose,
-    isAnimating,
-    onScrollingChange: setIsDragging,
-  });
+  return { mergedRef, popupRef };
+}
 
+/**
+ * Computes all CSS style objects for the drawer viewport, popup, and backdrop.
+ * Handles scroll-driven animation detection, snap ratios, and CSS custom properties.
+ */
+function useDrawerContentStyles({
+  direction,
+  variant,
+  activeSnapPoint,
+  snapPoints,
+  contentSize,
+  isVertical,
+  isInitialized,
+  isAnimating,
+  immediateClose,
+  dismissible,
+  snapProgress,
+  repositionInputs,
+  keyboardHeight,
+  visualViewportHeight,
+}: {
+  direction: DrawerDirection;
+  variant: DrawerVariant;
+  activeSnapPoint: SnapPoint;
+  snapPoints: SnapPoint[];
+  contentSize: number | null;
+  isVertical: boolean;
+  isInitialized: boolean;
+  isAnimating: boolean;
+  immediateClose: boolean;
+  dismissible: boolean;
+  snapProgress: number;
+  repositionInputs: boolean;
+  keyboardHeight: number;
+  visualViewportHeight: number | null;
+}) {
   const snapPointRatio = React.useMemo(() => {
     if (typeof activeSnapPoint === "number") {
       return activeSnapPoint;
@@ -670,30 +734,6 @@ function DrawerContentInner({
     variant === "floating" ? `calc(${baseOffset} + 1rem)` : baseOffset;
 
   const targetBackdropOpacity = snapPointRatio;
-
-  const observerRef = React.useRef<ResizeObserver | null>(null);
-  const floatingMargin = variant === "floating" ? 16 : 0;
-
-  const measureRef = React.useCallback(
-    (node: HTMLDivElement | null) => {
-      observerRef.current?.disconnect();
-      observerRef.current = null;
-
-      if (!node) return;
-
-      const measure = () => {
-        const baseSize = isVertical ? node.offsetHeight : node.offsetWidth;
-        setContentSize(baseSize + floatingMargin);
-      };
-
-      measure();
-      observerRef.current = new ResizeObserver(measure);
-      observerRef.current.observe(node);
-    },
-    [isVertical, setContentSize, floatingMargin],
-  );
-
-  React.useEffect(() => () => observerRef.current?.disconnect(), []);
 
   const useScrollDrivenAnimation =
     supportsScrollTimeline && isInitialized && !isAnimating && !immediateClose;
@@ -762,6 +802,152 @@ function DrawerContentInner({
     [animationOffset, isVertical],
   );
 
+  return {
+    viewportStyle,
+    popupStyle,
+    useScrollDrivenAnimation,
+    targetBackdropOpacity,
+  };
+}
+
+/* -------------------------------------------------------------------------------------------------
+ * DrawerContentInner
+ * -------------------------------------------------------------------------------------------------*/
+
+function DrawerContentInner({
+  className,
+  children,
+  footerVariant = "default",
+  initialFocus,
+  finalFocus,
+  ...props
+}: DrawerContentProps) {
+  const {
+    direction,
+    variant,
+    snapPoints,
+    dismissible,
+    modal,
+    isVertical,
+    sequentialSnap,
+    repositionInputs,
+  } = useDrawerConfig();
+
+  const { isDragging, dragProgress, snapProgress } = useDrawerScroll();
+
+  const {
+    activeSnapPoint,
+    setActiveSnapPoint,
+    contentSize,
+    setContentSize,
+    setIsDragging,
+    setDragProgress,
+    setSnapProgress,
+    dismissViaSwipe,
+    open,
+    isAnimating,
+    immediateClose,
+    setImmediateClose,
+  } = useDrawerControl();
+
+  const activeSnapPointIndex = findSnapPointIndex(snapPoints, activeSnapPoint);
+
+  const handleSnapPointChange = React.useCallback(
+    (index: number) => {
+      setActiveSnapPoint(getSnapPointValue(snapPoints, index));
+    },
+    [snapPoints, setActiveSnapPoint],
+  );
+
+  const { keyboardHeight, isKeyboardVisible } = useVirtualKeyboard({
+    enabled: direction === "bottom",
+  });
+
+  // Provides real-time viewport height that updates with URL bar changes
+  const visualViewportHeight = useVisualViewportHeight({
+    enabled: !isVertical && modal !== true,
+  });
+
+  const handleDismiss = React.useCallback(() => {
+    dismissViaSwipe();
+  }, [dismissViaSwipe]);
+
+  const handleImmediateClose = React.useCallback(() => {
+    setImmediateClose(true);
+  }, [setImmediateClose]);
+
+  // Skip progress updates during enter/exit animations (let CSS control backdrop)
+  const handleScrollProgress = React.useCallback(
+    (progress: number) => {
+      if (!isAnimating) {
+        setDragProgress(progress);
+      }
+    },
+    [isAnimating, setDragProgress],
+  );
+
+  const handleSnapProgress = React.useCallback(
+    (progress: number) => {
+      if (!isAnimating) {
+        setSnapProgress(progress);
+      }
+    },
+    [isAnimating, setSnapProgress],
+  );
+
+  const {
+    containerRef,
+    isScrolling,
+    setSnapTargetRef,
+    trackSize,
+    snapScrollPositions,
+    isInitialized,
+    isClosing,
+  } = useScrollSnap({
+    direction,
+    snapPoints,
+    activeSnapPointIndex,
+    onSnapPointChange: handleSnapPointChange,
+    onDismiss: handleDismiss,
+    dismissible,
+    contentSize,
+    open,
+    onScrollProgress: handleScrollProgress,
+    onSnapProgress: handleSnapProgress,
+    onImmediateClose: handleImmediateClose,
+    isAnimating,
+    onScrollingChange: setIsDragging,
+  });
+
+  const floatingMargin = variant === "floating" ? 16 : 0;
+  const { mergedRef, popupRef } = useContentMeasurement(
+    isVertical,
+    floatingMargin,
+    setContentSize,
+  );
+
+  const {
+    viewportStyle,
+    popupStyle,
+    useScrollDrivenAnimation,
+    targetBackdropOpacity,
+  } = useDrawerContentStyles({
+    direction,
+    variant,
+    activeSnapPoint,
+    snapPoints,
+    contentSize,
+    isVertical,
+    isInitialized,
+    isAnimating,
+    immediateClose,
+    dismissible,
+    snapProgress,
+    repositionInputs,
+    keyboardHeight,
+    visualViewportHeight,
+  });
+
   return (
     <div
       data-slot="drawer-timeline-scope"
@@ -827,7 +1013,7 @@ function DrawerContentInner({
             ? "pointer-events-none"
             : "pointer-events-auto",
           "bg-transparent opacity-100! [&[data-ending-style]]:opacity-100! [&[data-starting-style]]:opacity-100!",
-          "[scrollbar-width:none_!important] [&::-webkit-scrollbar]:hidden!",
+          "[scrollbar-width:none]! [&::-webkit-scrollbar]:hidden!",
           isAnimating || isClosing
             ? "touch-none overflow-hidden"
             : isVertical
@@ -877,10 +1063,10 @@ function DrawerContentInner({
           ))}
 
           <BaseDialog.Popup
-            ref={measureRef}
+            ref={mergedRef}
             data-slot="drawer-content"
             data-footer-variant={footerVariant}
-            initialFocus={initialFocus}
+            initialFocus={initialFocus ?? popupRef}
             finalFocus={finalFocus}
             className={cn(
               drawerContentVariants({ variant, direction }),
@@ -916,7 +1102,7 @@ function DrawerContentInner({
  * -------------------------------------------------------------------------------------------------*/
 
 interface DrawerHandleProps extends Omit<
-  React.ComponentProps<"button">,
+  useRender.ComponentProps<"button">,
   "children"
 > {
   hidden?: boolean;
@@ -928,37 +1114,46 @@ function DrawerHandle({
   hidden,
   preventClose = false,
   onClick,
+  render,
   ...props
 }: DrawerHandleProps) {
   const { isVertical } = useDrawerConfig();
-  const { onOpenChange, isAnimating } = useDrawerAnimation();
+  const { onOpenChange, isAnimating } = useDrawerControl();
+
+  const handleClick = React.useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      onClick?.(event);
+      if (event.defaultPrevented) return;
+      if (isAnimating || preventClose) return;
+      onOpenChange(false);
+    },
+    [onClick, onOpenChange, isAnimating, preventClose],
+  );
+
+  const defaultProps = {
+    "data-slot": "drawer-handle" as const,
+    type: "button" as const,
+    "aria-label": preventClose ? "Drawer handle" : "Close drawer",
+    onClick: handleClick,
+    className: cn(
+      "appearance-none border-0 bg-transparent p-0",
+      "focus-visible:ring-ring/50 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
+      "bg-muted-foreground/30 shrink-0 cursor-pointer rounded-full",
+      isVertical ? "mx-auto my-3 h-1.5 w-12" : "mx-3 my-auto h-12 w-1.5",
+      "hover:bg-muted-foreground/50 transition-colors",
+      className,
+    ),
+  };
+
+  const element = useRender({
+    defaultTagName: "button",
+    render,
+    props: mergeProps<"button">(defaultProps, props),
+  });
 
   if (hidden) return null;
 
-  const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
-    onClick?.(event);
-    if (event.defaultPrevented) return;
-    if (isAnimating || preventClose) return;
-    onOpenChange(false);
-  };
-
-  return (
-    <button
-      type="button"
-      data-slot="drawer-handle"
-      aria-label="Close drawer"
-      onClick={handleClick}
-      className={cn(
-        "appearance-none border-0 bg-transparent p-0",
-        "focus-visible:ring-ring/50 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
-        "bg-muted-foreground/30 shrink-0 cursor-pointer rounded-full",
-        isVertical ? "mx-auto my-3 h-1.5 w-12" : "mx-3 my-auto h-12 w-1.5",
-        "hover:bg-muted-foreground/50 transition-colors",
-        className,
-      )}
-      {...props}
-    />
-  );
+  return element;
 }
 
 /* -------------------------------------------------------------------------------------------------
@@ -990,7 +1185,10 @@ function DrawerFooter({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="drawer-footer"
       className={cn(
-        "bg-popover mt-auto flex flex-col gap-2 px-5 pt-3 pb-5",
+        // z-1 + translateZ(0): stays above DrawerBody(z-0); Safari-only GPU layer
+        // promotion fixes sticky/transform compositing flash during enter animation
+        "bg-popover z-1 mt-auto flex flex-col gap-2 px-5 pt-3 pb-5",
+        "[@supports(-webkit-touch-callout:none)]:transform-[translateZ(0)]",
         "first:pt-5",
         "in-data-[footer-variant=inset]:border-border in-data-[footer-variant=inset]:bg-muted in-data-[footer-variant=inset]:border-t in-data-[footer-variant=inset]:pt-4 in-data-[footer-variant=inset]:pb-4",
         className,
@@ -1011,7 +1209,10 @@ function DrawerTitle({
   return (
     <BaseDialog.Title
       data-slot="drawer-title"
-      className={cn("text-foreground text-lg font-semibold text-balance", className)}
+      className={cn(
+        "text-foreground text-lg font-semibold text-balance",
+        className,
+      )}
       {...props}
     />
   );
@@ -1103,6 +1304,8 @@ export {
   useDrawer,
   useDrawerConfig,
   useDrawerAnimation,
+  useDrawerScroll,
+  useDrawerControl,
   createDrawerHandle,
 };
 
