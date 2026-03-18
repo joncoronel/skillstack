@@ -22,9 +22,14 @@ export default defineSchema({
     contentFetchedAt: v.optional(v.number()),
     contentUpdatedAt: v.optional(v.number()),
     lastSynced: v.number(),
+    syncHash: v.optional(v.string()),
+    needsDiscovery: v.optional(v.boolean()),
+    needsContentFetch: v.optional(v.boolean()),
   })
     .index("by_leaderboard", ["leaderboard"])
     .index("by_source_skillId", ["source", "skillId"])
+    .index("by_needsDiscovery", ["needsDiscovery"])
+    .index("by_needsContentFetch", ["needsContentFetch"])
     .searchIndex("search_name", { searchField: "name" }),
 
   skillSummaries: defineTable({

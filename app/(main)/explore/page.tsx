@@ -1,7 +1,9 @@
-import { Suspense } from "react";
+import { connection } from "next/server";
 import { ExploreContent } from "./explore-content";
 
-export default function ExplorePage() {
+export default async function ExplorePage() {
+  await connection();
+
   return (
     <main className="mx-auto max-w-5xl px-4 pt-12 pb-20">
       <div className="mb-8">
@@ -14,9 +16,7 @@ export default function ExplorePage() {
         </p>
       </div>
 
-      <Suspense>
-        <ExploreContent />
-      </Suspense>
+      <ExploreContent />
     </main>
   );
 }

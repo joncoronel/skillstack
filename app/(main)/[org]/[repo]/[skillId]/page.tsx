@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { fetchQuery } from "convex/nextjs";
+import { cache } from "react";
 import { api } from "@/convex/_generated/api";
 import { SkillPageContent } from "./skill-page-content";
 
@@ -13,6 +14,10 @@ export async function generateStaticParams() {
 
 type Params = Promise<{ org: string; repo: string; skillId: string }>;
 
+const getSkill = cache((source: string, skillId: string) =>
+  fetchQuery(api.skills.getBySourceAndSkillId, { source, skillId }),
+);
+
 export async function generateMetadata({
   params,
 }: {
@@ -21,10 +26,7 @@ export async function generateMetadata({
   const { org, repo, skillId } = await params;
   const source = `${org}/${repo}`;
 
-  const skill = await fetchQuery(api.skills.getBySourceAndSkillId, {
-    source,
-    skillId,
-  });
+  const skill = await getSkill(source, skillId);
 
   if (!skill) {
     return { title: "Skill Not Found | SkillStack" };
@@ -49,14 +51,23 @@ export default async function SkillPage({ params }: { params: Params }) {
   const { org, repo, skillId } = await params;
   const source = `${org}/${repo}`;
 
-  const skill = await fetchQuery(api.skills.getBySourceAndSkillId, {
-    source,
-    skillId,
-  });
+  const skill = await getSkill(source, skillId);
 
   if (!skill) {
     notFound();
   }
 
-  return <SkillPageContent skill={skill} content={skill.content ?? null} />;
+  return (
+    <SkillPageContent
+      skill={{
+        source: skill.source,
+        skillId: skill.skillId,
+        name: skill.name,
+        description: skill.description,
+        installs: skill.installs,
+        technologies: skill.technologies,
+      }}
+      content={skill.content ?? null}
+    />
+  );
 }

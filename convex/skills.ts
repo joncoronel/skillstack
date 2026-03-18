@@ -202,30 +202,33 @@ async function syncSkillTechnologies(
   skillDocId: Id<"skills">,
   tagResults: TagResult[],
   installs: number,
+  forceRewrite = false,
 ) {
   const existingEntries = await ctx.db
     .query("skillTechnologies")
     .withIndex("by_skillId", (q) => q.eq("skillId", skillDocId))
     .collect();
 
-  const existingTechs = existingEntries.map((e) => e.technology).sort();
-  const newTechs = tagResults.map((r) => r.tech).sort();
-  const installsMatch =
-    existingEntries.length === 0 || existingEntries[0].installs === installs;
-  const weightsMatch =
-    existingEntries.length > 0 &&
-    existingEntries.every((e) => {
-      const tr = tagResults.find((r) => r.tech === e.technology);
-      return tr !== undefined && e.weight === tr.weight;
-    });
+  if (!forceRewrite) {
+    const existingTechs = existingEntries.map((e) => e.technology).sort();
+    const newTechs = tagResults.map((r) => r.tech).sort();
+    const installsMatch =
+      existingEntries.length === 0 || existingEntries[0].installs === installs;
+    const weightsMatch =
+      existingEntries.length > 0 &&
+      existingEntries.every((e) => {
+        const tr = tagResults.find((r) => r.tech === e.technology);
+        return tr !== undefined && e.weight === tr.weight;
+      });
 
-  if (
-    existingTechs.length === newTechs.length &&
-    existingTechs.every((t, i) => t === newTechs[i]) &&
-    installsMatch &&
-    weightsMatch
-  ) {
-    return;
+    if (
+      existingTechs.length === newTechs.length &&
+      existingTechs.every((t, i) => t === newTechs[i]) &&
+      installsMatch &&
+      weightsMatch
+    ) {
+      return;
+    }
   }
 
   for (const entry of existingEntries) {
@@ -271,6 +274,11 @@ async function upsertSkillSummary(
   }
 }
 
+/** Simple hash of the fields that come from the API to detect changes. */
+function computeSyncHash(name: string, installs: number, leaderboard: string) {
+  return `${name}|${installs}|${leaderboard}`;
+}
+
 export const upsertSkillsBatch = internalMutation({
   args: {
     skills: v.array(
@@ -293,6 +301,21 @@ export const upsertSkillsBatch = internalMutation({
           q.eq("source", skill.source).eq("skillId", skill.skillId),
         )
         .unique();
+
+      const newHash = computeSyncHash(skill.name, skill.installs, leaderboard);
+
+      // Skip entirely if nothing from the API changed
+      if (existing && existing.syncHash === newHash) {
+        // Still check if content needs periodic re-fetch
+        const contentStale =
+          existing.skillMdUrl &&
+          existing.skillMdUrl !== "" &&
+          (now - (existing.contentFetchedAt ?? 0)) > CONTENT_REFRESH_INTERVAL_MS;
+        if (contentStale && !existing.needsContentFetch) {
+          await ctx.db.patch(existing._id, { needsContentFetch: true });
+        }
+        continue;
+      }
 
       const tagResults = tagSkill(
         skill.source,
@@ -317,15 +340,17 @@ export const upsertSkillsBatch = internalMutation({
           leaderboard,
           ...(tagsChanged && { technologies }),
           lastSynced: now,
+          syncHash: newHash,
         });
 
-        // Only sync junction table if tags or installs changed
+        // Only sync junction table if tags or installs changed; skip comparison reads
         if (tagsChanged || existing.installs !== skill.installs) {
           await syncSkillTechnologies(
             ctx,
             skillDocId,
             tagResults,
             skill.installs,
+            true, // forceRewrite — we already know something changed
           );
         }
       } else {
@@ -337,6 +362,9 @@ export const upsertSkillsBatch = internalMutation({
           technologies,
           leaderboard,
           lastSynced: now,
+          syncHash: newHash,
+          needsDiscovery: true,
+          needsContentFetch: false,
         });
 
         await syncSkillTechnologies(
@@ -424,15 +452,17 @@ export const listSourcesNeedingDiscovery = internalQuery({
     const paginationOpts = cursor
       ? { numItems: 500, cursor }
       : { numItems: 500, cursor: null };
-    const result = await ctx.db.query("skills").paginate(paginationOpts);
+    const result = await ctx.db
+      .query("skills")
+      .withIndex("by_needsDiscovery", (q) => q.eq("needsDiscovery", true))
+      .paginate(paginationOpts);
 
-    // Group skills that need URL discovery by source repo
+    // Group skills by source repo
     const bySource = new Map<
       string,
       Array<{ docId: string; skillId: string }>
     >();
     for (const s of result.page) {
-      if (s.skillMdUrl !== undefined && s.skillMdUrl !== "") continue;
       const list = bySource.get(s.source) ?? [];
       list.push({ docId: s._id, skillId: s.skillId });
       bySource.set(s.source, list);
@@ -626,7 +656,13 @@ export const updateSkillMdUrl = internalMutation({
     skillMdUrl: v.string(),
   },
   handler: async (ctx, { docId, skillMdUrl }) => {
-    await ctx.db.patch(docId, { skillMdUrl });
+    const hasUrl = skillMdUrl !== "";
+    await ctx.db.patch(docId, {
+      skillMdUrl,
+      needsDiscovery: false,
+      // If we found a URL, mark for content fetch; otherwise no
+      needsContentFetch: hasUrl,
+    });
   },
 });
 
@@ -691,22 +727,16 @@ export const listSkillsNeedingContentFetch = internalQuery({
     const paginationOpts = cursor
       ? { numItems: 200, cursor }
       : { numItems: 200, cursor: null };
-    const result = await ctx.db.query("skills").paginate(paginationOpts);
-    const now = Date.now();
+    const result = await ctx.db
+      .query("skills")
+      .withIndex("by_needsContentFetch", (q) =>
+        q.eq("needsContentFetch", true),
+      )
+      .paginate(paginationOpts);
 
+    // Filter to only skills that have a valid URL
     const ids = result.page
-      .filter((s) => {
-        if (!s.skillMdUrl || s.skillMdUrl === "") return false;
-
-        // Case 1: Never fetched content (or broken parse artifacts)
-        if (!s.content || s.description === "|" || s.description === ">" || s.description === "") {
-          return true;
-        }
-
-        // Case 2: Content is stale — re-fetch periodically
-        const fetchedAt = s.contentFetchedAt ?? 0;
-        return now - fetchedAt > CONTENT_REFRESH_INTERVAL_MS;
-      })
+      .filter((s) => s.skillMdUrl && s.skillMdUrl !== "")
       .map((s) => s._id);
 
     return {
@@ -858,6 +888,7 @@ export const updateDescription = internalMutation({
       ...(tagsChanged && { technologies }),
       contentFetchedAt: now,
       ...(hasActualChange && { contentUpdatedAt: now }),
+      needsContentFetch: false,
     });
 
     if (tagsChanged) {
@@ -880,7 +911,10 @@ export const updateDescription = internalMutation({
 export const markContentFetched = internalMutation({
   args: { skillId: v.id("skills") },
   handler: async (ctx, { skillId }) => {
-    await ctx.db.patch(skillId, { contentFetchedAt: Date.now() });
+    await ctx.db.patch(skillId, {
+      contentFetchedAt: Date.now(),
+      needsContentFetch: false,
+    });
   },
 });
 
@@ -1008,44 +1042,51 @@ export const listByTechnologies = query({
     type SkillDoc = NonNullable<
       Awaited<ReturnType<typeof ctx.db.get<"skills">>>
     >;
-    const cache = new Map<string, SkillDoc>();
-    const seen = new Set<string>(); // global dedup across technologies
+    type SkillSummary = Pick<
+      SkillDoc,
+      "_id" | "_creationTime" | "source" | "skillId" | "name" | "description" | "installs" | "technologies"
+    >;
+    const cache = new Map<string, SkillSummary>();
     const groups: Array<{
       technology: string;
-      skills: SkillDoc[];
+      skills: SkillSummary[];
       hasMore: boolean;
     }> = [];
 
     for (const tech of technologies) {
       const limit = techLimits[tech] ?? DEFAULT_LIMIT;
-      // Over-fetch to compensate for cross-tech dedup (typically 10-30% overlap)
-      const fetchCount = limit * 2 + 1;
       const entries = await ctx.db
         .query("skillTechnologies")
         .withIndex("by_technology", (q) => q.eq("technology", tech))
         .order("desc")
-        .take(fetchCount);
+        .take(limit + 1);
 
-      // Index orders by installs desc — just resolve and dedup, no re-sorting needed
-      const skills: SkillDoc[] = [];
+      const skills: SkillSummary[] = [];
 
       for (const entry of entries) {
         if (skills.length >= limit) break;
         const id = entry.skillId.toString();
-        if (seen.has(id)) continue;
 
         let skill = cache.get(id);
         if (!skill) {
           const doc = await ctx.db.get(entry.skillId);
           if (!doc) continue;
-          skill = doc;
+          skill = {
+            _id: doc._id,
+            _creationTime: doc._creationTime,
+            source: doc.source,
+            skillId: doc.skillId,
+            name: doc.name,
+            description: doc.description,
+            installs: doc.installs,
+            technologies: doc.technologies,
+          };
           cache.set(id, skill);
         }
-        seen.add(id);
         skills.push(skill);
       }
 
-      const hasMore = skills.length >= limit && entries.length === fetchCount;
+      const hasMore = entries.length > limit;
       groups.push({
         technology: tech,
         skills,
@@ -1079,25 +1120,6 @@ export const list = query({
 // ---------------------------------------------------------------------------
 // Skill summaries (for client-side search)
 // ---------------------------------------------------------------------------
-
-export const listSkillSummaries = query({
-  args: { paginationOpts: paginationOptsValidator },
-  handler: async (ctx, { paginationOpts }) => {
-    const result = await ctx.db.query("skills").paginate(paginationOpts);
-    return {
-      ...result,
-      page: result.page.map((s) => ({
-        _id: s._id,
-        source: s.source,
-        skillId: s.skillId,
-        name: s.name,
-        description: s.description,
-        installs: s.installs,
-        technologies: s.technologies,
-      })),
-    };
-  },
-});
 
 export const listAllSkillSummaries = query({
   args: { paginationOpts: paginationOptsValidator },
@@ -1151,6 +1173,79 @@ export const backfillSkillSummariesBatch = internalMutation({
       isDone: result.isDone,
       count: result.page.length,
     };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Backfill: set needsDiscovery / needsContentFetch / syncHash on existing rows
+// ---------------------------------------------------------------------------
+
+export const backfillSyncFlags = internalMutation({
+  args: { cursor: v.optional(v.string()) },
+  handler: async (ctx, { cursor }) => {
+    const paginationOpts = cursor
+      ? { numItems: 200, cursor }
+      : { numItems: 200, cursor: null };
+    const result = await ctx.db.query("skills").paginate(paginationOpts);
+    const now = Date.now();
+    let patched = 0;
+
+    for (const s of result.page) {
+      const updates: Record<string, unknown> = {};
+
+      // Set syncHash if missing
+      if (s.syncHash === undefined) {
+        updates.syncHash = computeSyncHash(s.name, s.installs, s.leaderboard);
+      }
+
+      // Set needsDiscovery if missing
+      if (s.needsDiscovery === undefined) {
+        updates.needsDiscovery = !s.skillMdUrl || s.skillMdUrl === "";
+      }
+
+      // Set needsContentFetch if missing
+      if (s.needsContentFetch === undefined) {
+        const hasUrl = !!s.skillMdUrl && s.skillMdUrl !== "";
+        const needsFetch =
+          hasUrl &&
+          (!s.content ||
+            s.description === "|" ||
+            s.description === ">" ||
+            s.description === "" ||
+            (now - (s.contentFetchedAt ?? 0)) > CONTENT_REFRESH_INTERVAL_MS);
+        updates.needsContentFetch = needsFetch;
+      }
+
+      if (Object.keys(updates).length > 0) {
+        await ctx.db.patch(s._id, updates);
+        patched++;
+      }
+    }
+
+    return {
+      nextCursor: result.continueCursor,
+      isDone: result.isDone,
+      patched,
+    };
+  },
+});
+
+export const backfillAllSyncFlags = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    let cursor: string | undefined;
+    let isDone = false;
+    let total = 0;
+
+    while (!isDone) {
+      const result: { nextCursor: string; isDone: boolean; patched: number } =
+        await ctx.runMutation(internal.skills.backfillSyncFlags, { cursor });
+      total += result.patched;
+      cursor = result.nextCursor;
+      isDone = result.isDone;
+    }
+
+    console.log(`Backfilled sync flags on ${total} skills`);
   },
 });
 
