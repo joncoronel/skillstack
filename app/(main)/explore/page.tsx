@@ -1,8 +1,13 @@
-import { connection } from "next/server";
+import type { SearchParams } from "nuqs/server";
+import { loadExploreSearchParams } from "@/lib/search-params.server";
 import { ExploreContent } from "./explore-content";
 
-export default async function ExplorePage() {
-  await connection();
+type ExplorePageProps = {
+  searchParams: Promise<SearchParams>;
+};
+
+export default async function ExplorePage({ searchParams }: ExplorePageProps) {
+  await loadExploreSearchParams(searchParams);
 
   return (
     <main className="mx-auto max-w-5xl px-4 pt-12 pb-20">

@@ -1,7 +1,12 @@
-import { connection } from "next/server";
+import type { SearchParams } from "nuqs/server";
+import { loadHomeSearchParams } from "@/lib/search-params.server";
 import { HomeContent } from "./home-content";
 
-export default async function Home() {
-  await connection();
+type HomeProps = {
+  searchParams: Promise<SearchParams>;
+};
+
+export default async function Home({ searchParams }: HomeProps) {
+  await loadHomeSearchParams(searchParams);
   return <HomeContent />;
 }
