@@ -657,7 +657,7 @@ export const discoverSkillMdUrls = internalAction({
           // Extract name from frontmatter: "name: some-skill-id"
           const nameMatch = text.match(/^name:\s*(.+)$/m);
           if (!nameMatch) continue;
-          const name = nameMatch[1].trim();
+          const name = nameMatch[1].trim().replace(/^["']|["']$/g, "");
 
           // Try exact match, then kebab-case, then prefix match
           // (skills.sh sometimes truncates names at commas to create skillIds)
