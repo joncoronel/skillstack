@@ -74,6 +74,11 @@ export function InstallCommands({ skills, bundleId }: InstallCommandsProps) {
                 {copiedIndex === i ? "Copied!" : "Copy"}
               </Button>
             </div>
+            {cmd.hasWarning && (
+              <p className="mt-1.5 text-[11px] text-warning-foreground">
+                Some skills in this command may not be installable — their source files could not be found.
+              </p>
+            )}
           </div>
         ))}
       </div>

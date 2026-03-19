@@ -201,12 +201,7 @@ export function SkillSearch() {
                   return (
                     <SkillCard
                       key={`${skill.source}/${skill.skillId}`}
-                      name={skill.name}
-                      source={skill.source}
-                      skillId={skill.skillId}
-                      description={skill.description}
-                      installs={skill.installs}
-                      technologies={skill.technologies}
+                      skill={skill}
                       selectable
                       variant="row"
                       onViewDetail={() => setActiveSkill(skill)}

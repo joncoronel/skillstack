@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePreloadedQuery, useMutation, type Preloaded } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
-import { SkillCard } from "@/components/skill-card";
+import { SkillCard, type SkillData } from "@/components/skill-card";
 import { SkillDetailSheet } from "@/components/skill-detail-sheet";
 import { InstallCommands } from "@/components/install-commands";
 import { Button } from "@/components/ui/cubby-ui/button";
@@ -35,15 +35,7 @@ interface BundleViewProps {
   shareToken?: string;
 }
 
-interface SkillInfo {
-  source: string;
-  skillId: string;
-  name: string;
-  description?: string;
-  installs: number;
-  technologies: string[];
-  updatedSinceAdded?: boolean;
-}
+type SkillInfo = SkillData;
 
 export function BundleView({
   preloadedBundle,
@@ -216,13 +208,8 @@ export function BundleView({
           {bundle.skills.map((skill) => (
             <SkillCard
               key={`${skill.source}/${skill.skillId}`}
-              name={skill.name}
-              source={skill.source}
-              skillId={skill.skillId}
-              description={skill.description}
-              installs={skill.installs}
-              technologies={skill.technologies}
-              updatedSinceAdded={skill.updatedSinceAdded}
+              skill={skill}
+              showTechnologies={false}
               onViewDetail={() => setActiveSkill(skill)}
             />
           ))}

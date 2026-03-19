@@ -2,15 +2,8 @@ import Link from "next/link";
 import Markdown from "react-markdown";
 import { Badge } from "@/components/ui/cubby-ui/badge";
 import { CopyButton } from "@/components/ui/cubby-ui/copy-button/copy-button";
-import { TECHNOLOGIES } from "@/lib/technologies";
-
-const techMap = new Map(TECHNOLOGIES.map((t) => [t.id, t.name]));
-
-function formatInstalls(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
-  return n.toString();
-}
+import { techNameMap } from "@/lib/technologies";
+import { formatInstalls, timeAgo } from "@/lib/utils";
 
 interface Skill {
   source: string;
@@ -19,6 +12,10 @@ interface Skill {
   description?: string;
   installs: number;
   technologies: string[];
+  contentUpdatedAt?: number;
+  createdAt: number;
+  isDelisted: boolean;
+  hasContentFetchError: boolean;
 }
 
 interface SkillPageContentProps {
@@ -42,6 +39,13 @@ export function SkillPageContent({ skill, content }: SkillPageContentProps) {
         <span className="text-foreground">{skill.skillId}</span>
       </nav>
 
+      {/* Delisted banner */}
+      {skill.isDelisted && (
+        <div className="mb-4 rounded-lg border border-warning-border bg-warning px-4 py-3 text-sm text-warning-foreground">
+          This skill is no longer listed on skills.sh
+        </div>
+      )}
+
       {/* Header */}
       <h1 className="font-display text-3xl font-bold tracking-tight mb-3">{skill.name}</h1>
 
@@ -58,6 +62,12 @@ export function SkillPageContent({ skill, content }: SkillPageContentProps) {
         >
           {skill.source}
         </a>
+        <span>·</span>
+        {skill.contentUpdatedAt ? (
+          <span>Updated {timeAgo(skill.contentUpdatedAt)}</span>
+        ) : (
+          <span>Added {timeAgo(skill.createdAt)}</span>
+        )}
       </div>
 
       {/* Technologies */}
@@ -69,9 +79,16 @@ export function SkillPageContent({ skill, content }: SkillPageContentProps) {
               variant="secondary"
               className="text-xs px-2 py-0.5"
             >
-              {techMap.get(techId) ?? techId}
+              {techNameMap.get(techId) ?? techId}
             </Badge>
           ))}
+        </div>
+      )}
+
+      {/* Install warning */}
+      {skill.hasContentFetchError && !skill.isDelisted && (
+        <div className="mb-4 rounded-lg border border-warning-border bg-warning px-4 py-3 text-sm text-warning-foreground">
+          This skill&apos;s source file could not be found in its repository. The install command may not work.
         </div>
       )}
 

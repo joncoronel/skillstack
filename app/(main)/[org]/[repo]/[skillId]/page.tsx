@@ -66,6 +66,10 @@ export default async function SkillPage({ params }: { params: Params }) {
         description: skill.description,
         installs: skill.installs,
         technologies: skill.technologies,
+        contentUpdatedAt: skill.contentUpdatedAt,
+        createdAt: skill._creationTime,
+        isDelisted: skill.isDelisted ?? false,
+        hasContentFetchError: skill.hasContentFetchError ?? false,
       }}
       content={skill.content ?? null}
     />

@@ -18,16 +18,9 @@ import {
   TabsPanels,
   TabsContent,
 } from "@/components/ui/cubby-ui/tabs";
-import { TECHNOLOGIES } from "@/lib/technologies";
+import { techNameMap } from "@/lib/technologies";
 import { useBundleSelection } from "@/lib/bundle-selection-context";
-
-const techMap = new Map(TECHNOLOGIES.map((t) => [t.id, t.name]));
-
-function formatInstalls(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
-  return n.toString();
-}
+import { formatInstalls } from "@/lib/utils";
 
 interface SkillRef {
   source: string;
@@ -104,7 +97,7 @@ function CompareColumn({ source, skillId }: SkillRef) {
                 variant="secondary"
                 className="text-[10px] px-1.5 py-0.5"
               >
-                {techMap.get(techId) ?? techId}
+                {techNameMap.get(techId) ?? techId}
               </Badge>
             ))}
           </div>

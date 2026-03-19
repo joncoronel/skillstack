@@ -11,7 +11,7 @@ import {
   CardAction,
 } from "@/components/ui/cubby-ui/card";
 import { Badge } from "@/components/ui/cubby-ui/badge";
-import { TECHNOLOGIES } from "@/lib/technologies";
+import { techNameMap } from "@/lib/technologies";
 import { cn, timeAgo } from "@/lib/utils";
 
 interface BundleCardProps {
@@ -27,8 +27,6 @@ interface BundleCardProps {
   viewCount?: number;
   isTrending?: boolean;
 }
-
-const techMap = new Map(TECHNOLOGIES.map((t) => [t.id, t.name]));
 
 export function BundleCard({
   name,
@@ -73,7 +71,7 @@ export function BundleCard({
                 variant="secondary"
                 className="text-[10px] px-1.5 py-0.5"
               >
-                {techMap.get(techId) ?? techId}
+                {techNameMap.get(techId) ?? techId}
               </Badge>
             ))}
             {technologies.length > 5 && (

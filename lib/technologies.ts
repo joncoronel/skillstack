@@ -13,3 +13,5 @@ export interface Technology {
 export const TECHNOLOGY_CATEGORIES = CATEGORIES;
 
 export const TECHNOLOGIES: Technology[] = buildFrontendTechnologies();
+
+export const techNameMap = new Map(TECHNOLOGIES.map((t) => [t.id, t.name]));

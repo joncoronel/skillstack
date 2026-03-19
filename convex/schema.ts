@@ -25,11 +25,17 @@ export default defineSchema({
     syncHash: v.optional(v.string()),
     needsDiscovery: v.optional(v.boolean()),
     needsContentFetch: v.optional(v.boolean()),
+    contentFetchFailCount: v.optional(v.number()),
+    hasContentFetchError: v.optional(v.boolean()),
+    lastSeenInApi: v.optional(v.number()),
+    isDelisted: v.optional(v.boolean()),
   })
     .index("by_leaderboard", ["leaderboard"])
     .index("by_source_skillId", ["source", "skillId"])
     .index("by_needsDiscovery", ["needsDiscovery"])
     .index("by_needsContentFetch", ["needsContentFetch"])
+    .index("by_isDelisted", ["isDelisted"])
+    .index("by_leaderboard_active", ["leaderboard", "isDelisted"])
     .searchIndex("search_name", { searchField: "name" }),
 
   skillSummaries: defineTable({

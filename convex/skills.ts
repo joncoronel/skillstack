@@ -184,6 +184,13 @@ export const syncSkills = internalAction({
 
     console.log(`Synced ${totalSynced} skills (min ${MIN_INSTALLS} installs)`);
 
+    // Mark skills not seen in the API for 30+ days as delisted
+    await ctx.scheduler.runAfter(
+      5_000,
+      internal.skills.markDelistedSkills,
+      {},
+    );
+
     // Schedule two-phase content backfill (URL discovery → content fetch)
     await ctx.scheduler.runAfter(
       10_000,
@@ -306,14 +313,54 @@ export const upsertSkillsBatch = internalMutation({
 
       // Skip entirely if nothing from the API changed
       if (existing && existing.syncHash === newHash) {
-        // Still check if content needs periodic re-fetch
+        const patch: Record<string, unknown> = { lastSeenInApi: now };
+
+        // Clear delisted flag and recreate summary + junction entries if skill reappears
+        if (existing.isDelisted) {
+          patch.isDelisted = false;
+          const relistTagResults = tagSkill(
+            skill.source,
+            skill.skillId,
+            skill.name,
+            existing.description,
+            existing.content,
+          );
+          await upsertSkillSummary(ctx, {
+            source: skill.source,
+            skillId: skill.skillId,
+            name: skill.name,
+            description: existing.description,
+            installs: skill.installs,
+            technologies: tagResultsToIds(relistTagResults),
+          });
+          await syncSkillTechnologies(
+            ctx,
+            existing._id,
+            relistTagResults,
+            skill.installs,
+            true,
+          );
+        }
+
+        // Check if content needs periodic re-fetch (non-empty URL, >7 days)
         const contentStale =
           existing.skillMdUrl &&
           existing.skillMdUrl !== "" &&
           (now - (existing.contentFetchedAt ?? 0)) > CONTENT_REFRESH_INTERVAL_MS;
         if (contentStale && !existing.needsContentFetch) {
-          await ctx.db.patch(existing._id, { needsContentFetch: true });
+          patch.needsContentFetch = true;
         }
+
+        // Re-discover empty URLs every 30 days (repo may have added SKILL.md later)
+        if (
+          existing.skillMdUrl === "" &&
+          !existing.needsDiscovery &&
+          (now - (existing.contentFetchedAt ?? 0)) > REDISCOVERY_INTERVAL_MS
+        ) {
+          patch.needsDiscovery = true;
+        }
+
+        await ctx.db.patch(existing._id, patch);
         continue;
       }
 
@@ -341,10 +388,12 @@ export const upsertSkillsBatch = internalMutation({
           ...(tagsChanged && { technologies }),
           lastSynced: now,
           syncHash: newHash,
+          lastSeenInApi: now,
+          ...(existing.isDelisted && { isDelisted: false }),
         });
 
-        // Only sync junction table if tags or installs changed; skip comparison reads
-        if (tagsChanged || existing.installs !== skill.installs) {
+        // Sync junction table if tags/installs changed, or if un-delisting (entries were deleted)
+        if (tagsChanged || existing.installs !== skill.installs || existing.isDelisted) {
           await syncSkillTechnologies(
             ctx,
             skillDocId,
@@ -365,6 +414,7 @@ export const upsertSkillsBatch = internalMutation({
           syncHash: newHash,
           needsDiscovery: true,
           needsContentFetch: false,
+          lastSeenInApi: now,
         });
 
         await syncSkillTechnologies(
@@ -376,11 +426,13 @@ export const upsertSkillsBatch = internalMutation({
       }
 
       // Only update the summary when something actually changed
+      const wasDelisted = existing?.isDelisted === true;
       const summaryChanged =
         !existing ||
         existing.name !== skill.name ||
         existing.installs !== skill.installs ||
-        tagsChanged;
+        tagsChanged ||
+        wasDelisted;
 
       if (summaryChanged) {
         await upsertSkillSummary(ctx, {
@@ -662,6 +714,7 @@ export const updateSkillMdUrl = internalMutation({
       needsDiscovery: false,
       // If we found a URL, mark for content fetch; otherwise no
       needsContentFetch: hasUrl,
+      ...(hasUrl && { hasContentFetchError: false }),
     });
   },
 });
@@ -720,6 +773,7 @@ export const backfillDiscoverUrls = internalAction({
 // ---------------------------------------------------------------------------
 
 const CONTENT_REFRESH_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const REDISCOVERY_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 export const listSkillsNeedingContentFetch = internalQuery({
   args: { cursor: v.optional(v.string()) },
@@ -761,8 +815,8 @@ export const fetchSkillContent = internalAction({
           console.error(
             `Failed to fetch content for ${skill.skillId}: ${res.status}`,
           );
-          // Mark as fetched so we don't retry endlessly on persistent errors (e.g. 404)
-          await ctx.runMutation(internal.skills.markContentFetched, {
+          // Track failure — after 3 consecutive failures, re-discover the URL
+          await ctx.runMutation(internal.skills.markContentFetchFailed, {
             skillId,
           });
           return;
@@ -889,6 +943,8 @@ export const updateDescription = internalMutation({
       contentFetchedAt: now,
       ...(hasActualChange && { contentUpdatedAt: now }),
       needsContentFetch: false,
+      contentFetchFailCount: 0,
+      hasContentFetchError: false,
     });
 
     if (tagsChanged) {
@@ -915,6 +971,129 @@ export const markContentFetched = internalMutation({
       contentFetchedAt: Date.now(),
       needsContentFetch: false,
     });
+  },
+});
+
+export const markContentFetchFailed = internalMutation({
+  args: { skillId: v.id("skills") },
+  handler: async (ctx, { skillId }) => {
+    const skill = await ctx.db.get(skillId);
+    if (!skill) return;
+
+    const failCount = (skill.contentFetchFailCount ?? 0) + 1;
+
+    if (failCount >= 3) {
+      // After 3 consecutive failures, clear the URL and re-discover
+      await ctx.db.patch(skillId, {
+        contentFetchedAt: Date.now(),
+        needsContentFetch: false,
+        contentFetchFailCount: 0,
+        hasContentFetchError: true,
+        skillMdUrl: "",
+        needsDiscovery: true,
+      });
+    } else {
+      await ctx.db.patch(skillId, {
+        contentFetchedAt: Date.now(),
+        needsContentFetch: false,
+        contentFetchFailCount: failCount,
+        hasContentFetchError: true,
+      });
+    }
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Delist skills not seen in the API for 30+ days
+// ---------------------------------------------------------------------------
+
+const DELIST_THRESHOLD_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+export const listStaleSkills = internalQuery({
+  args: { cursor: v.optional(v.string()) },
+  handler: async (ctx, { cursor }) => {
+    const paginationOpts = cursor
+      ? { numItems: 100, cursor }
+      : { numItems: 100, cursor: null };
+    // Convex orders: undefined < false < true — lt(true) skips already-delisted skills
+    const result = await ctx.db
+      .query("skills")
+      .withIndex("by_isDelisted", (q) => q.lt("isDelisted", true))
+      .paginate(paginationOpts);
+
+    const cutoff = Date.now() - DELIST_THRESHOLD_MS;
+    const staleIds = result.page
+      .filter(
+        (s) => s.lastSeenInApi !== undefined && s.lastSeenInApi < cutoff,
+      )
+      .map((s) => s._id);
+
+    return {
+      ids: staleIds,
+      nextCursor: result.continueCursor,
+      isDone: result.isDone,
+    };
+  },
+});
+
+export const delistSkillsBatch = internalMutation({
+  args: { skillIds: v.array(v.id("skills")) },
+  handler: async (ctx, { skillIds }) => {
+    for (const id of skillIds) {
+      const skill = await ctx.db.get(id);
+      if (!skill || skill.isDelisted) continue;
+
+      await ctx.db.patch(id, { isDelisted: true });
+
+      // Remove from skillSummaries (powers search/autocomplete)
+      const summary = await ctx.db
+        .query("skillSummaries")
+        .withIndex("by_source_skillId", (q) =>
+          q.eq("source", skill.source).eq("skillId", skill.skillId),
+        )
+        .unique();
+      if (summary) {
+        await ctx.db.delete(summary._id);
+      }
+
+      // Remove from skillTechnologies (so listByTechnologies skips them)
+      const techEntries = await ctx.db
+        .query("skillTechnologies")
+        .withIndex("by_skillId", (q) => q.eq("skillId", id))
+        .collect();
+      for (const entry of techEntries) {
+        await ctx.db.delete(entry._id);
+      }
+    }
+  },
+});
+
+export const markDelistedSkills = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    let cursor: string | undefined;
+    let isDone = false;
+    let totalDelisted = 0;
+
+    while (!isDone) {
+      const result = await ctx.runQuery(internal.skills.listStaleSkills, {
+        cursor,
+      });
+
+      if (result.ids.length > 0) {
+        await ctx.runMutation(internal.skills.delistSkillsBatch, {
+          skillIds: result.ids,
+        });
+        totalDelisted += result.ids.length;
+      }
+
+      cursor = result.nextCursor;
+      isDone = result.isDone;
+    }
+
+    if (totalDelisted > 0) {
+      console.log(`Delisted ${totalDelisted} skills not seen in API for 30+ days`);
+    }
   },
 });
 
@@ -1104,14 +1283,20 @@ export const list = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, { leaderboard, limit = 50 }) => {
+    // Convex orders: undefined < false < true — lt(true) includes active + never-flagged skills
     const skills = leaderboard
       ? await ctx.db
           .query("skills")
-          .withIndex("by_leaderboard", (idx) =>
-            idx.eq("leaderboard", leaderboard),
+          .withIndex("by_leaderboard_active", (q) =>
+            q.eq("leaderboard", leaderboard).lt("isDelisted", true),
           )
           .take(limit)
-      : await ctx.db.query("skills").take(limit);
+      : await ctx.db
+          .query("skills")
+          .withIndex("by_isDelisted", (q) =>
+            q.lt("isDelisted", true),
+          )
+          .take(limit);
 
     return skills.sort((a, b) => b.installs - a.installs);
   },
@@ -1246,6 +1431,52 @@ export const backfillAllSyncFlags = internalAction({
     }
 
     console.log(`Backfilled sync flags on ${total} skills`);
+  },
+});
+
+export const backfillLastSeenInApiBatch = internalMutation({
+  args: { cursor: v.optional(v.string()) },
+  handler: async (ctx, { cursor }) => {
+    const paginationOpts = cursor
+      ? { numItems: 200, cursor }
+      : { numItems: 200, cursor: null };
+    const result = await ctx.db.query("skills").paginate(paginationOpts);
+    const now = Date.now();
+    let patched = 0;
+
+    for (const s of result.page) {
+      if (s.lastSeenInApi === undefined) {
+        await ctx.db.patch(s._id, { lastSeenInApi: now });
+        patched++;
+      }
+    }
+
+    return {
+      nextCursor: result.continueCursor,
+      isDone: result.isDone,
+      patched,
+    };
+  },
+});
+
+export const backfillLastSeenInApi = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    let cursor: string | undefined;
+    let isDone = false;
+    let total = 0;
+
+    while (!isDone) {
+      const result: { nextCursor: string; isDone: boolean; patched: number } =
+        await ctx.runMutation(internal.skills.backfillLastSeenInApiBatch, {
+          cursor,
+        });
+      total += result.patched;
+      cursor = result.nextCursor;
+      isDone = result.isDone;
+    }
+
+    console.log(`Backfilled lastSeenInApi on ${total} skills`);
   },
 });
 

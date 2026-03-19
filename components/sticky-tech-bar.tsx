@@ -6,9 +6,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Cancel01Icon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/cubby-ui/button";
 import { ScrollArea } from "@/components/ui/cubby-ui/scroll-area/scroll-area";
-import { TECHNOLOGIES } from "@/lib/technologies";
-
-const techNameMap = new Map(TECHNOLOGIES.map((t) => [t.id, t.name]));
+import { techNameMap } from "@/lib/technologies";
 
 interface StickyTechBarProps {
   selected: string[];

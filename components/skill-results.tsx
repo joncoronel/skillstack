@@ -15,7 +15,7 @@ import {
   CollapsibleTrigger,
   CollapsibleContent,
 } from "@/components/ui/cubby-ui/collapsible";
-import { TECHNOLOGIES } from "@/lib/technologies";
+import { techNameMap } from "@/lib/technologies";
 
 interface SkillInfo {
   source: string;
@@ -31,7 +31,6 @@ interface SkillResultsProps {
 }
 
 const PAGE_SIZE = 20;
-const techNameMap = new Map(TECHNOLOGIES.map((t) => [t.id, t.name]));
 
 type GroupResult = {
   groups: Array<{
@@ -178,12 +177,7 @@ export function SkillResults({ selectedTechnologies }: SkillResultsProps) {
                         style={{ animationDelay: `${Math.max(0, i - animOffset) * 15}ms`, animationDuration: "100ms" }}
                       >
                         <SkillCard
-                          name={skill.name}
-                          source={skill.source}
-                          skillId={skill.skillId}
-                          description={skill.description}
-                          installs={skill.installs}
-                          technologies={skill.technologies}
+                          skill={skill}
                           selectable
                           onViewDetail={() => setActiveSkill(skill)}
                         />

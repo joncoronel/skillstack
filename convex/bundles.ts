@@ -194,6 +194,10 @@ export const getByUrlId = query({
           installs: skill?.installs ?? 0,
           technologies: skill?.technologies ?? [],
           updatedSinceAdded,
+          contentUpdatedAt: skill?.contentUpdatedAt,
+          createdAt: skill?._creationTime,
+          isDelisted: skill?.isDelisted ?? false,
+          hasContentFetchError: skill?.hasContentFetchError ?? false,
         };
       }),
     );

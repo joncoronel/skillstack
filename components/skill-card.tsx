@@ -8,49 +8,92 @@ import {
   CardTitle,
   CardDescription,
   CardContent,
+  CardFooter,
   CardAction,
 } from "@/components/ui/cubby-ui/card";
 import { Badge } from "@/components/ui/cubby-ui/badge";
 import { Checkbox } from "@/components/ui/cubby-ui/checkbox";
 import { Label } from "@/components/ui/cubby-ui/label";
-import { TECHNOLOGIES } from "@/lib/technologies";
+import { techNameMap } from "@/lib/technologies";
 import { useBundleSelection } from "@/lib/bundle-selection-context";
-import { cn } from "@/lib/utils";
+import { cn, formatInstalls, timeAgo } from "@/lib/utils";
 
-interface SkillCardProps {
+type SkillStatus = "delisted" | "fetch-error" | "updated" | null;
+
+function deriveSkillStatus(props: {
+  isDelisted?: boolean;
+  hasContentFetchError?: boolean;
+  updatedSinceAdded?: boolean;
+}): SkillStatus {
+  if (props.isDelisted) return "delisted";
+  if (props.hasContentFetchError) return "fetch-error";
+  if (props.updatedSinceAdded) return "updated";
+  return null;
+}
+
+const STATUS_BADGE_CONFIG: Record<
+  Exclude<SkillStatus, null>,
+  { label: string; variant: "warning" | "info" }
+> = {
+  delisted: { label: "No longer listed", variant: "warning" },
+  "fetch-error": { label: "Install may fail", variant: "warning" },
+  updated: { label: "Updated", variant: "info" },
+};
+
+function SkillStatusBadge({ status }: { status: SkillStatus }) {
+  if (!status) return null;
+  const { label, variant } = STATUS_BADGE_CONFIG[status];
+  return (
+    <Badge variant={variant} className="text-[10px] px-1.5 py-0.5">
+      {label}
+    </Badge>
+  );
+}
+
+export interface SkillData {
   name: string;
   source: string;
   skillId: string;
   description?: string;
   installs: number;
   technologies: string[];
+  updatedSinceAdded?: boolean;
+  contentUpdatedAt?: number;
+  createdAt?: number;
+  isDelisted?: boolean;
+  hasContentFetchError?: boolean;
+}
+
+interface SkillCardProps {
+  skill: SkillData;
   selectable?: boolean;
   onViewDetail?: () => void;
-  updatedSinceAdded?: boolean;
+  showTechnologies?: boolean;
   className?: string;
   variant?: "card" | "row";
 }
 
-function formatInstalls(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
-  return n.toString();
-}
-
 export function SkillCard({
-  name,
-  source,
-  skillId,
-  description,
-  installs,
-  technologies,
+  skill,
   selectable = false,
   onViewDetail,
-  updatedSinceAdded,
+  showTechnologies = true,
   className,
   variant = "card",
 }: SkillCardProps) {
-  const techMap = new Map(TECHNOLOGIES.map((t) => [t.id, t.name]));
+  const {
+    name,
+    source,
+    skillId,
+    description,
+    installs,
+    technologies,
+    updatedSinceAdded,
+    contentUpdatedAt,
+    createdAt,
+    isDelisted,
+    hasContentFetchError,
+  } = skill;
   const id = useId();
   const checkboxId = `skill-${id}`;
 
@@ -58,6 +101,9 @@ export function SkillCard({
   const selection = useBundleSelection();
   const selected =
     selectable && selection ? selection.isSelected(source, skillId) : false;
+
+  const cardTimestamp = contentUpdatedAt ?? createdAt;
+  const cardTimeLabel = contentUpdatedAt !== undefined ? "Updated" : "Added";
 
   if (variant === "row") {
     const rowInner = (
@@ -100,9 +146,14 @@ export function SkillCard({
           </span>
           <span className="text-sm text-muted-foreground">{source}</span>
         </div>
-        <span className="ml-auto text-xs font-mono tabular-nums text-muted-foreground shrink-0">
-          {formatInstalls(installs)}
-        </span>
+        <div className="ml-auto flex items-center gap-1.5 shrink-0">
+          <SkillStatusBadge
+            status={deriveSkillStatus({ isDelisted, hasContentFetchError, updatedSinceAdded })}
+          />
+          <span className="text-xs font-mono tabular-nums text-muted-foreground">
+            {formatInstalls(installs)}
+          </span>
+        </div>
       </div>
     );
 
@@ -174,11 +225,9 @@ export function SkillCard({
         </div>
         <CardAction>
           <div className="flex items-center gap-1.5">
-            {updatedSinceAdded && (
-              <Badge variant="info" className="text-[10px] px-1.5 py-0.5">
-                Updated
-              </Badge>
-            )}
+            <SkillStatusBadge
+              status={deriveSkillStatus({ isDelisted, hasContentFetchError, updatedSinceAdded })}
+            />
             <span className="text-xs font-mono tabular-nums text-muted-foreground">
               {formatInstalls(installs)} installs
             </span>
@@ -188,7 +237,7 @@ export function SkillCard({
           {description ?? source}
         </CardDescription>
       </CardHeader>
-      {technologies.length > 0 && (
+      {showTechnologies && technologies.length > 0 && (
         <CardContent className="pt-0">
           <div className="flex flex-wrap gap-1">
             {technologies.slice(0, 4).map((techId) => (
@@ -197,7 +246,7 @@ export function SkillCard({
                 variant="secondary"
                 className="text-[10px] px-1.5 py-0.5"
               >
-                {techMap.get(techId) ?? techId}
+                {techNameMap.get(techId) ?? techId}
               </Badge>
             ))}
             {technologies.length > 4 && (
@@ -207,6 +256,13 @@ export function SkillCard({
             )}
           </div>
         </CardContent>
+      )}
+      {cardTimestamp !== undefined && (
+        <CardFooter className="mt-auto pt-0 justify-end">
+          <span className="text-[11px] text-muted-foreground/60">
+            {cardTimeLabel} {timeAgo(cardTimestamp)}
+          </span>
+        </CardFooter>
       )}
     </>
   );

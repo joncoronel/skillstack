@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { convexQuery } from "@convex-dev/react-query";
@@ -20,30 +20,15 @@ import { ArrowRight01Icon, PlusSignIcon, MinusSignIcon } from "@hugeicons/core-f
 import { Badge } from "@/components/ui/cubby-ui/badge";
 import { Button, buttonVariants } from "@/components/ui/cubby-ui/button";
 import { Skeleton } from "@/components/ui/cubby-ui/skeleton";
-import { TECHNOLOGIES } from "@/lib/technologies";
+import { techNameMap } from "@/lib/technologies";
 import { useBundleSelection } from "@/lib/bundle-selection-context";
-
-interface SkillInfo {
-  source: string;
-  skillId: string;
-  name: string;
-  description?: string;
-  installs: number;
-  technologies: string[];
-}
+import { formatInstalls } from "@/lib/utils";
+import type { SkillData } from "@/components/skill-card";
 
 interface SkillDetailSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  skill: SkillInfo | null;
-}
-
-const techMap = new Map(TECHNOLOGIES.map((t) => [t.id, t.name]));
-
-function formatInstalls(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
-  return n.toString();
+  skill: SkillData | null;
 }
 
 export function SkillDetailSheet({
@@ -52,11 +37,11 @@ export function SkillDetailSheet({
   skill,
 }: SkillDetailSheetProps) {
   // Keep the last non-null skill so content stays visible during exit animation
-  const [displaySkill, setDisplaySkill] = useState<SkillInfo | null>(null);
-  if (skill && skill !== displaySkill) {
-    setDisplaySkill(skill);
+  const displaySkillRef = useRef<SkillData | null>(null);
+  if (skill) {
+    displaySkillRef.current = skill;
   }
-  const shownSkill = skill ?? displaySkill;
+  const shownSkill = skill ?? displaySkillRef.current;
 
   const { data: content, isPending: contentLoading } = useQuery(
     convexQuery(
@@ -102,7 +87,7 @@ export function SkillDetailSheet({
                       variant="secondary"
                       className="text-[10px] px-1.5 py-0.5"
                     >
-                      {techMap.get(techId) ?? techId}
+                      {techNameMap.get(techId) ?? techId}
                     </Badge>
                   ))}
                 </div>
