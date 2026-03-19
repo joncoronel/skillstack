@@ -45,7 +45,12 @@ export default defineSchema({
     description: v.optional(v.string()),
     installs: v.number(),
     technologies: v.array(v.string()),
-  }).index("by_source_skillId", ["source", "skillId"]),
+    syncHash: v.optional(v.string()),
+    lastSeenInApi: v.optional(v.number()),
+    isDelisted: v.optional(v.boolean()),
+  })
+    .index("by_source_skillId", ["source", "skillId"])
+    .index("by_isDelisted", ["isDelisted"]),
 
   skillTechnologies: defineTable({
     skillId: v.id("skills"),
