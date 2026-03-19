@@ -1068,7 +1068,8 @@ export const markContentFetchFailed = internalMutation({
         contentFetchedAt: Date.now(),
         needsContentFetch: false,
         contentFetchFailCount: failCount,
-        hasContentFetchError: true,
+        // Only show UI warning after 2+ consecutive failures (avoid false alarms from transient errors)
+        ...(failCount >= 2 && { hasContentFetchError: true }),
       });
     }
   },
