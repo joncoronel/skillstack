@@ -34,8 +34,22 @@ const SOURCE_TECH_MAP: Record<string, string> = {
 // Keywords that must ALWAYS use word-boundary regex regardless of length,
 // because they commonly appear as substrings in unrelated words.
 const STRICT_BOUNDARY_KEYWORDS = new Set([
-  "test", "ai", "go", "ci", "cd", "git", "css", "rest", "node",
-  "java", "ruby", "php", "dart", "swift", "rust", "less",
+  "test",
+  "ai",
+  "go",
+  "ci",
+  "cd",
+  "git",
+  "css",
+  "rest",
+  "node",
+  "java",
+  "ruby",
+  "php",
+  "dart",
+  "swift",
+  "rust",
+  "less",
 ]);
 
 // Tier 1: Matches against name/skillId (derived from registry)
@@ -185,18 +199,10 @@ export const syncSkills = internalAction({
     console.log(`Synced ${totalSynced} skills (min ${MIN_INSTALLS} installs)`);
 
     // Mark skills not seen in the API for 30+ days as delisted
-    await ctx.scheduler.runAfter(
-      5_000,
-      internal.skills.markDelistedSkills,
-      {},
-    );
+    await ctx.scheduler.runAfter(5_000, internal.skills.markDelistedSkills, {});
 
     // Mark skills with stale content or empty URLs for re-fetch/re-discovery
-    await ctx.scheduler.runAfter(
-      8_000,
-      internal.skills.markStaleContent,
-      {},
-    );
+    await ctx.scheduler.runAfter(8_000, internal.skills.markStaleContent, {});
 
     // Schedule two-phase content backfill (URL discovery → content fetch)
     await ctx.scheduler.runAfter(
@@ -286,7 +292,9 @@ async function upsertSkillSummary(
       installs: fields.installs,
       technologies: fields.technologies,
       ...(fields.syncHash !== undefined && { syncHash: fields.syncHash }),
-      ...(fields.lastSeenInApi !== undefined && { lastSeenInApi: fields.lastSeenInApi }),
+      ...(fields.lastSeenInApi !== undefined && {
+        lastSeenInApi: fields.lastSeenInApi,
+      }),
       ...(fields.isDelisted !== undefined && { isDelisted: fields.isDelisted }),
     });
   } else {
@@ -347,11 +355,20 @@ export const upsertSkillsBatch = internalMutation({
           if (existing) {
             await ctx.db.patch(existing._id, { isDelisted: false });
             const relistTagResults = tagSkill(
-              skill.source, skill.skillId, skill.name,
-              existing.description, existing.content,
+              skill.source,
+              skill.skillId,
+              skill.name,
+              existing.description,
+              existing.content,
             );
             const relistTechs = tagResultsToIds(relistTagResults);
-            await syncSkillTechnologies(ctx, existing._id, relistTagResults, skill.installs, true);
+            await syncSkillTechnologies(
+              ctx,
+              existing._id,
+              relistTagResults,
+              skill.installs,
+              true,
+            );
             await ctx.db.patch(summary._id, {
               lastSeenInApi: now,
               isDelisted: false,
@@ -401,7 +418,11 @@ export const upsertSkillsBatch = internalMutation({
         });
 
         // Sync junction table if tags/installs changed, or if un-delisting
-        if (tagsChanged || existing.installs !== skill.installs || existing.isDelisted) {
+        if (
+          tagsChanged ||
+          existing.installs !== skill.installs ||
+          existing.isDelisted
+        ) {
           await syncSkillTechnologies(
             ctx,
             skillDocId,
@@ -534,12 +555,32 @@ export const listSourcesNeedingDiscovery = internalQuery({
   },
 });
 
+/** Check if a source looks like a GitHub org/repo (e.g. "resend/resend-skills")
+ *  vs a domain (e.g. "smithery.ai", "bun.sh", "react-aria.adobe.com") */
+function isGitHubSource(source: string): boolean {
+  const parts = source.split("/");
+  // Must be "owner/repo" format. Dots in repo name are fine (e.g. vercel/next.js)
+  // but dots in the org name indicate a domain (e.g. smithery.ai → not GitHub)
+  return parts.length === 2 && !parts[0].includes(".");
+}
+
 export const discoverSkillMdUrls = internalAction({
   args: {
     source: v.string(),
     skills: v.array(v.object({ docId: v.string(), skillId: v.string() })),
   },
   handler: async (ctx, { source, skills }) => {
+    // Skip non-GitHub sources (domains like smithery.ai, bun.sh, etc.)
+    if (!isGitHubSource(source)) {
+      for (const s of skills) {
+        await ctx.runMutation(internal.skills.updateSkillMdUrl, {
+          docId: s.docId as ReturnType<typeof v.id<"skills">>["type"],
+          skillMdUrl: "",
+        });
+      }
+      return;
+    }
+
     // source is "owner/repo" format
     const [owner, repo] = source.split("/");
     const defaultBranch = await resolveDefaultBranch(owner, repo);
@@ -716,23 +757,33 @@ export const updateSkillMdUrl = internalMutation({
       // If we found a URL, mark for content fetch; otherwise no
       needsContentFetch: hasUrl,
       ...(hasUrl && { hasContentFetchError: false }),
+      // Reset the timer so markStaleContent doesn't re-flag immediately
+      ...(!hasUrl && { contentFetchedAt: Date.now() }),
     });
   },
 });
 
 export const backfillDiscoverUrls = internalAction({
-  args: { cursor: v.optional(v.string()) },
-  handler: async (ctx, { cursor }) => {
+  args: {
+    cursor: v.optional(v.string()),
+    scheduledSources: v.optional(v.array(v.string())),
+  },
+  handler: async (ctx, { cursor, scheduledSources }) => {
     const REPOS_PER_BATCH = 25;
     const hasToken = !!process.env.GITHUB_TOKEN;
     const stagger = hasToken ? 500 : 30_000;
+    const alreadyScheduled = new Set(scheduledSources ?? []);
 
     const result = await ctx.runQuery(
       internal.skills.listSourcesNeedingDiscovery,
       { cursor: cursor ?? undefined },
     );
 
-    const batch = result.sources.slice(0, REPOS_PER_BATCH);
+    // Filter out sources already scheduled in previous batches
+    const newSources = result.sources.filter(
+      (s) => !alreadyScheduled.has(s.source),
+    );
+    const batch = newSources.slice(0, REPOS_PER_BATCH);
     if (batch.length > 0) {
       console.log(`Scheduling Tree API discovery for ${batch.length} repos`);
       for (let i = 0; i < batch.length; i++) {
@@ -741,11 +792,12 @@ export const backfillDiscoverUrls = internalAction({
           internal.skills.discoverSkillMdUrls,
           { source: batch[i].source, skills: batch[i].skills },
         );
+        alreadyScheduled.add(batch[i].source);
       }
     }
 
     // More sources on this page that we didn't process
-    const remaining = result.sources.length - batch.length;
+    const remaining = newSources.length - batch.length;
 
     if (remaining > 0 || !result.isDone) {
       // If we have remaining on this page, re-query same cursor
@@ -756,7 +808,7 @@ export const backfillDiscoverUrls = internalAction({
       await ctx.scheduler.runAfter(
         delay,
         internal.skills.backfillDiscoverUrls,
-        { cursor: nextCursor },
+        { cursor: nextCursor, scheduledSources: [...alreadyScheduled] },
       );
     } else {
       console.log("URL discovery complete — starting content fetch");
@@ -774,9 +826,9 @@ export const backfillDiscoverUrls = internalAction({
 // ---------------------------------------------------------------------------
 
 const CONTENT_REFRESH_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
-const REDISCOVERY_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+const REDISCOVERY_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
-/** Mark skills whose content is stale (>7 days) or whose empty URL needs re-discovery (>30 days).
+/** Mark skills whose content is stale (>7 days) or whose empty URL needs re-discovery (>7 days).
  *  Runs as a separate step after sync to avoid reading full skill docs in the hot upsert path.
  */
 export const markStaleContentBatch = internalMutation({
@@ -785,9 +837,7 @@ export const markStaleContentBatch = internalMutation({
     const paginationOpts = cursor
       ? { numItems: 200, cursor }
       : { numItems: 200, cursor: null };
-    const result = await ctx.db
-      .query("skills")
-      .paginate(paginationOpts);
+    const result = await ctx.db.query("skills").paginate(paginationOpts);
 
     const now = Date.now();
     let marked = 0;
@@ -800,13 +850,13 @@ export const markStaleContentBatch = internalMutation({
         s.skillMdUrl &&
         s.skillMdUrl !== "" &&
         !s.needsContentFetch &&
-        (now - (s.contentFetchedAt ?? 0)) > CONTENT_REFRESH_INTERVAL_MS;
+        now - (s.contentFetchedAt ?? 0) > CONTENT_REFRESH_INTERVAL_MS;
 
-      // URL re-discovery: empty URL, >30 days since last check
+      // URL re-discovery: empty URL, >7 days since last check
       const needsRediscovery =
         s.skillMdUrl === "" &&
         !s.needsDiscovery &&
-        (now - (s.contentFetchedAt ?? 0)) > REDISCOVERY_INTERVAL_MS;
+        now - (s.contentFetchedAt ?? 0) > REDISCOVERY_INTERVAL_MS;
 
       if (contentStale) {
         await ctx.db.patch(s._id, { needsContentFetch: true });
@@ -834,14 +884,18 @@ export const markStaleContent = internalAction({
 
     while (!isDone) {
       const result: { nextCursor: string; isDone: boolean; marked: number } =
-        await ctx.runMutation(internal.skills.markStaleContentBatch, { cursor });
+        await ctx.runMutation(internal.skills.markStaleContentBatch, {
+          cursor,
+        });
       total += result.marked;
       cursor = result.nextCursor;
       isDone = result.isDone;
     }
 
     if (total > 0) {
-      console.log(`Marked ${total} skills for content re-fetch or URL re-discovery`);
+      console.log(
+        `Marked ${total} skills for content re-fetch or URL re-discovery`,
+      );
     }
   },
 });
@@ -854,9 +908,7 @@ export const listSkillsNeedingContentFetch = internalQuery({
       : { numItems: 200, cursor: null };
     const result = await ctx.db
       .query("skills")
-      .withIndex("by_needsContentFetch", (q) =>
-        q.eq("needsContentFetch", true),
-      )
+      .withIndex("by_needsContentFetch", (q) => q.eq("needsContentFetch", true))
       .paginate(paginationOpts);
 
     // Filter to only skills that have a valid URL
@@ -975,10 +1027,7 @@ export const updateDescription = internalMutation({
     content: v.optional(v.string()),
     skillMdUrl: v.string(),
   },
-  handler: async (
-    ctx,
-    { skillId, description, content, skillMdUrl },
-  ) => {
+  handler: async (ctx, { skillId, description, content, skillMdUrl }) => {
     const skill = await ctx.db.get(skillId);
     if (!skill) return;
 
@@ -1053,8 +1102,8 @@ export const markContentFetchFailed = internalMutation({
 
     const failCount = (skill.contentFetchFailCount ?? 0) + 1;
 
-    if (failCount >= 3) {
-      // After 3 consecutive failures, clear the URL and re-discover
+    if (failCount >= 2) {
+      // After 2 consecutive failures, clear the URL and re-discover
       await ctx.db.patch(skillId, {
         contentFetchedAt: Date.now(),
         needsContentFetch: false,
@@ -1064,12 +1113,12 @@ export const markContentFetchFailed = internalMutation({
         needsDiscovery: true,
       });
     } else {
+      // First failure: show warning immediately
       await ctx.db.patch(skillId, {
         contentFetchedAt: Date.now(),
         needsContentFetch: false,
         contentFetchFailCount: failCount,
-        // Only show UI warning after 2+ consecutive failures (avoid false alarms from transient errors)
-        ...(failCount >= 2 && { hasContentFetchError: true }),
+        hasContentFetchError: true,
       });
     }
   },
@@ -1095,9 +1144,7 @@ export const listStaleSummaries = internalQuery({
 
     const cutoff = Date.now() - DELIST_THRESHOLD_MS;
     const staleEntries = result.page
-      .filter(
-        (s) => s.lastSeenInApi !== undefined && s.lastSeenInApi < cutoff,
-      )
+      .filter((s) => s.lastSeenInApi !== undefined && s.lastSeenInApi < cutoff)
       .map((s) => ({ summaryId: s._id, source: s.source, skillId: s.skillId }));
 
     return {
@@ -1172,7 +1219,9 @@ export const markDelistedSkills = internalAction({
     }
 
     if (totalDelisted > 0) {
-      console.log(`Delisted ${totalDelisted} skills not seen in API for 30+ days`);
+      console.log(
+        `Delisted ${totalDelisted} skills not seen in API for 30+ days`,
+      );
     }
   },
 });
@@ -1303,7 +1352,14 @@ export const listByTechnologies = query({
     >;
     type SkillSummary = Pick<
       SkillDoc,
-      "_id" | "_creationTime" | "source" | "skillId" | "name" | "description" | "installs" | "technologies"
+      | "_id"
+      | "_creationTime"
+      | "source"
+      | "skillId"
+      | "name"
+      | "description"
+      | "installs"
+      | "technologies"
     >;
     const cache = new Map<string, SkillSummary>();
     const groups: Array<{
@@ -1373,9 +1429,7 @@ export const list = query({
           .take(limit)
       : await ctx.db
           .query("skills")
-          .withIndex("by_isDelisted", (q) =>
-            q.lt("isDelisted", true),
-          )
+          .withIndex("by_isDelisted", (q) => q.lt("isDelisted", true))
           .take(limit);
 
     return skills.sort((a, b) => b.installs - a.installs);
@@ -1477,7 +1531,7 @@ export const backfillSyncFlags = internalMutation({
             s.description === "|" ||
             s.description === ">" ||
             s.description === "" ||
-            (now - (s.contentFetchedAt ?? 0)) > CONTENT_REFRESH_INTERVAL_MS);
+            now - (s.contentFetchedAt ?? 0) > CONTENT_REFRESH_INTERVAL_MS);
         updates.needsContentFetch = needsFetch;
       }
 
@@ -1520,7 +1574,9 @@ export const backfillLastSeenInApiBatch = internalMutation({
     const paginationOpts = cursor
       ? { numItems: 200, cursor }
       : { numItems: 200, cursor: null };
-    const result = await ctx.db.query("skillSummaries").paginate(paginationOpts);
+    const result = await ctx.db
+      .query("skillSummaries")
+      .paginate(paginationOpts);
     const now = Date.now();
     let patched = 0;
 
