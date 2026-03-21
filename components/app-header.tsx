@@ -22,6 +22,7 @@ import {
   CompassIcon,
   DashboardSquare01Icon,
   Menu01Icon,
+  Tag01Icon,
 } from "@hugeicons/core-free-icons";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { cn } from "@/lib/utils";
@@ -59,6 +60,9 @@ export function AppHeader() {
             </NavLink>
             <NavLink href="/dashboard" icon={<HugeiconsIcon icon={DashboardSquare01Icon} strokeWidth={2} className="size-4" />}>
               Dashboard
+            </NavLink>
+            <NavLink href="/pricing" icon={<HugeiconsIcon icon={Tag01Icon} strokeWidth={2} className="size-4" />}>
+              Pricing
             </NavLink>
           </nav>
         </div>
@@ -127,6 +131,13 @@ function MobileDrawer({
             isActive={pathname === "/dashboard"}
           >
             Dashboard
+          </DrawerNavLink>
+          <DrawerNavLink
+            href="/pricing"
+            icon={Tag01Icon}
+            isActive={pathname === "/pricing"}
+          >
+            Pricing
           </DrawerNavLink>
         </DrawerBody>
         <DrawerFooter className="px-4">

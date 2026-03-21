@@ -3,6 +3,7 @@ import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { WebhookEvent } from "@clerk/backend";
 import { Webhook } from "svix";
+import { polar } from "./polar";
 
 const http = httpRouter();
 
@@ -22,7 +23,11 @@ http.route({
         });
         break;
       case "user.deleted": {
-        const clerkUserId = event.data.id!;
+        const clerkUserId = event.data.id;
+        if (!clerkUserId) {
+          console.error("Clerk user.deleted event missing user ID");
+          return new Response("Missing user ID", { status: 400 });
+        }
         await ctx.runMutation(internal.users.deleteFromClerk, { clerkUserId });
         break;
       }
@@ -34,19 +39,35 @@ http.route({
 });
 
 async function validateRequest(req: Request): Promise<WebhookEvent | null> {
+  const webhookSecret = process.env.CLERK_WEBHOOK_SECRET;
+  if (!webhookSecret) {
+    console.error("CLERK_WEBHOOK_SECRET is not set");
+    return null;
+  }
+
+  const svixId = req.headers.get("svix-id");
+  const svixTimestamp = req.headers.get("svix-timestamp");
+  const svixSignature = req.headers.get("svix-signature");
+  if (!svixId || !svixTimestamp || !svixSignature) {
+    console.error("Missing svix headers");
+    return null;
+  }
+
   const payloadString = await req.text();
-  const svixHeaders = {
-    "svix-id": req.headers.get("svix-id")!,
-    "svix-timestamp": req.headers.get("svix-timestamp")!,
-    "svix-signature": req.headers.get("svix-signature")!,
-  };
-  const wh = new Webhook(process.env.CLERK_WEBHOOK_SECRET!);
+  const wh = new Webhook(webhookSecret);
   try {
-    return wh.verify(payloadString, svixHeaders) as unknown as WebhookEvent;
+    return wh.verify(payloadString, {
+      "svix-id": svixId,
+      "svix-timestamp": svixTimestamp,
+      "svix-signature": svixSignature,
+    }) as unknown as WebhookEvent;
   } catch (error) {
     console.error("Error verifying webhook event", error);
     return null;
   }
 }
+
+// Polar webhook route — creates /polar/events POST endpoint
+polar.registerRoutes(http as any);
 
 export default http;

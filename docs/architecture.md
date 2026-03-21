@@ -9,7 +9,9 @@ Patterns for building a full-stack app with Next.js 16 (App Router), Convex as t
 | Frontend     | Next.js 16 (App Router), React 19      | SSR, streaming, static shells                  |
 | Backend + DB | Convex                                  | Real-time queries, mutations, actions, storage |
 | Auth         | Clerk + `convex/react-clerk`            | Auth via Clerk, bridged to Convex via JWT      |
+| Billing      | Polar + `@convex-dev/polar`             | Subscription billing via Polar MoR, synced to Convex |
 | Data Layer   | TanStack Query + `@convex-dev/react-query` | Client-side query integration                |
+| URL State    | nuqs                                    | Type-safe URL search param state management  |
 
 ### Key dependencies
 
@@ -18,7 +20,9 @@ Patterns for building a full-stack app with Next.js 16 (App Router), Convex as t
 convex
 convex/react-clerk
 @convex-dev/react-query
+@convex-dev/polar
 @tanstack/react-query
+nuqs
 svix
 ```
 
@@ -266,7 +270,7 @@ export const listByUser = query({
 ```
 app/layout.tsx (Server Component)
   └─ <Providers>                              (app/providers.tsx, "use client")
-       └─ NuqsAdapter
+       └─ NuqsAdapter                        (enables shallow URL state updates)
             └─ ClerkProvider
                  └─ ConvexClientProvider      (app/ConvexClientProvider.tsx)
                       └─ ConvexProviderWithClerk  (bridges Clerk auth → Convex)
@@ -366,7 +370,125 @@ export function AppHeader() {
 
 ---
 
-## 5. Data Fetching Patterns
+## 5. Billing / Subscriptions
+
+### How Polar integrates
+
+The `@convex-dev/polar` component is registered in `convex/convex.config.ts` and manages subscription data via webhooks. Polar acts as a Merchant of Record (MoR) — it handles payments, tax, and compliance.
+
+```
+User clicks "Upgrade to Pro"
+       │
+       ├──► CheckoutLink generates Polar checkout URL
+       │    User completes payment on Polar
+       │              │
+       │              ├──► Polar sends webhook to /polar/events
+       │              │    @convex-dev/polar processes event
+       │              │    Stores subscription in Convex
+       │              │
+       │              ◄── Subscription active
+       ◄──────────────
+getUserPlan() returns "pro"
+```
+
+### Polar client
+
+`convex/polar.ts` — Central billing configuration:
+
+- `getUserInfo` query — resolves current user's ID and email for Polar (defined in the same file to avoid circular references with the generated API)
+- `products` — maps product keys (`proMonthly`, `proYearly`) to Polar product IDs
+- Exports API functions: `generateCheckoutLink`, `generateCustomerPortalUrl`, `changeCurrentSubscription`, `cancelCurrentSubscription`, `getConfiguredProducts`, `listAllProducts`, `listAllSubscriptions`
+
+### Plan resolution
+
+`convex/lib/plans.ts` — Server-side plan logic:
+
+- `getUserPlan(ctx)` — calls `polar.getCurrentSubscription()`, maps `productKey` to `"free"` or `"pro"`
+- `getPlanLimits(plan)` — returns feature limits per plan (bundle count, private bundles, etc.)
+- `FEATURE_GATING_ENABLED` — master switch. When `false` (MVP), all users get pro-level access. Flip to `true` to enforce limits.
+
+`convex/plans.ts` — exposes `currentPlan` query to the frontend.
+
+`hooks/use-user-plan.ts` — client-side hook returning `{ plan, limits, gatingEnabled, isLoading }`.
+
+### Subscription details
+
+`convex/subscriptions.ts` — query returning rich subscription data (status, billing period, cancellation state) for the billing settings UI.
+
+### Billing UI
+
+- **Pricing page** (`app/(main)/pricing/`) — static marketing page. Signed-out users see "Get started" → sign up. Signed-in free users see "Upgrade to Pro" → Polar checkout. Signed-in pro users see "Manage subscription" → billing settings.
+- **Billing tab** (`components/auth/settings/billing-tab.tsx`) — in account settings, shows current plan, billing period, renewal/cancellation dates, and "Manage subscription" button that opens Polar's customer portal.
+
+### Webhook routes
+
+`convex/http.ts` registers two webhook endpoints:
+
+- `POST /clerk-users-webhook` — Clerk user sync (Svix validated)
+- `POST /polar/events` — Polar subscription/product sync (registered via `polar.registerRoutes()`)
+
+### Environment variables (Convex dashboard)
+
+```
+POLAR_ORGANIZATION_TOKEN   # Polar API token
+POLAR_WEBHOOK_SECRET       # Webhook signature verification
+POLAR_SERVER               # "sandbox" or "production"
+```
+
+---
+
+## 6. URL State Management (nuqs)
+
+### Two-layer pattern
+
+nuqs provides type-safe URL search parameter state that stays in sync between server and client.
+
+**Server side** — `lib/search-params.server.ts`:
+
+`createLoader()` validates and parses URL params in server components. Must be called before client components can read the params via `useQueryState`.
+
+```tsx
+// lib/search-params.server.ts
+import { createLoader, parseAsString, parseAsStringLiteral } from "nuqs/server";
+
+export const loadHomeSearchParams = createLoader({
+  q: parseAsString.withDefault(""),
+  tab: parseAsStringLiteral(["browse", "search"] as const).withDefault("browse"),
+  tech: parseAsArrayOf(parseAsString).withDefault([]),
+});
+
+// app/(main)/page.tsx — call loader in server component
+export default async function Home({ searchParams }: { searchParams: Promise<SearchParams> }) {
+  await loadHomeSearchParams(searchParams);
+  return <HomeContent />;
+}
+```
+
+**Client side** — `lib/search-params.ts`:
+
+Parsers are defined separately and used with `useQueryState()` for reactive URL state with shallow updates (no full page re-render).
+
+```tsx
+// lib/search-params.ts
+export const tabParser = parseAsStringLiteral(["browse", "search"] as const).withDefault("browse");
+
+// In a client component:
+const [tab, setTab] = useQueryState("tab", tabParser);
+```
+
+**Provider**: `NuqsAdapter` wraps the app (outermost in the provider chain) to enable shallow URL updates.
+
+### Current usage
+
+| Page | Params | Purpose |
+| ---- | ------ | ------- |
+| Home (`/`) | `tab`, `q`, `tech` | Browse/search toggle, search query, technology filter |
+| Explore (`/explore`) | `q` | Search query |
+| Settings (`/settings/custom`) | `tab` | Profile/Security/Billing tab switcher |
+
+---
+
+## 7. Data Fetching Patterns
 
 ### Pattern: Preload in RSC, hydrate on client
 
@@ -477,7 +599,7 @@ export const deleteBundle = mutation({
 
 ---
 
-## 6. Full Request Lifecycle
+## 8. Full Request Lifecycle
 
 What happens when a user visits an authenticated page:
 
@@ -509,7 +631,7 @@ What happens when a user visits an authenticated page:
 
 ---
 
-## 7. User Sync Flow
+## 9. User Sync Flow
 
 Clerk user data is synced to Convex via webhooks, not client-side:
 
@@ -538,35 +660,53 @@ The `externalId` field (Clerk's `userId`) is how Convex functions link JWT ident
 
 ```text
 lib/
-  auth.ts                 # Server-side auth helpers (getAuthToken, verifySession)
-  utils.ts                # cn() helper (clsx + tailwind-merge)
+  auth.ts                   # Server-side auth helpers (getAuthToken, verifySession)
+  plans.ts                  # Frontend plan display data (names, prices, features)
+  search-params.ts          # nuqs client-side parsers (tab, tech, search, settings tab)
+  search-params.server.ts   # nuqs server-side loaders (createLoader)
+  utils.ts                  # cn() helper (clsx + tailwind-merge)
+
+hooks/
+  use-user-plan.ts          # useUserPlan() hook — returns plan, limits, gatingEnabled
 
 convex/
-  auth.config.ts          # Clerk JWT issuer domain config
-  http.ts                 # Clerk webhook handler (Svix validation)
-  schema.ts               # Database schema (users, skills, bundles)
-  users.ts                # User CRUD, getCurrentUser/getCurrentUserOrThrow
-  bundles.ts              # Bundle queries/mutations with auth
-  skills.ts               # Skill sync pipeline, queries
-  crons.ts                # Daily skill sync at 06:00 UTC
+  convex.config.ts          # App config, registers @convex-dev/polar component
+  auth.config.ts            # Clerk JWT issuer domain config
+  http.ts                   # Webhook handlers (Clerk + Polar)
+  schema.ts                 # Database schema (users, skills, bundles)
+  users.ts                  # User CRUD, getCurrentUser/getCurrentUserOrThrow
+  polar.ts                  # Polar client, getUserInfo, product config, API exports
+  plans.ts                  # currentPlan query (exposes plan to frontend)
+  subscriptions.ts          # Subscription details query (billing UI)
+  bundles.ts                # Bundle queries/mutations with auth
+  skills.ts                 # Skill sync pipeline, queries
+  crons.ts                  # Daily skill sync at 06:00 UTC
+  lib/
+    plans.ts                # getUserPlan(), PlanLimits, FEATURE_GATING_ENABLED
 
 app/
-  layout.tsx              # Root layout (Server Component)
-  providers.tsx           # Provider chain (ClerkProvider → Convex → Theme → Toast)
-  ConvexClientProvider.tsx # ConvexProviderWithClerk + TanStack Query setup
+  layout.tsx                # Root layout (Server Component)
+  providers.tsx             # Provider chain (NuqsAdapter → Clerk → Convex → Theme → Toast)
+  ConvexClientProvider.tsx   # ConvexProviderWithClerk + TanStack Query setup
   (main)/
     dashboard/
-      page.tsx            # Protected page (verifySession + Suspense)
+      page.tsx              # Protected page (verifySession + Suspense)
       dashboard-bundles.tsx  # Server component (preloadQuery with auth token)
       dashboard-content.tsx  # Client component (usePreloadedQuery + mutations)
+    pricing/
+      page.tsx              # Static pricing page (server component)
+      pricing-content.tsx   # Pricing cards with checkout links (client component)
     settings/
-      page.tsx            # Clerk UserProfile component
+      page.tsx              # Clerk UserProfile component
       custom/
-        page.tsx          # Custom settings with Clerk server API
+        page.tsx            # Custom settings with Profile/Security/Billing tabs
 
 components/
-  app-header.tsx          # Uses <Authenticated>, <Unauthenticated>, <AuthLoading>
-  bundle-bar.tsx          # Uses useConvexAuth() for auth state
+  app-header.tsx            # Uses <Authenticated>, <Unauthenticated>, <AuthLoading>
+  bundle-bar.tsx            # Uses useConvexAuth() for auth state
+  auth/
+    settings/
+      billing-tab.tsx       # Billing tab — plan info, subscription details, manage link
 
-proxy.ts                  # Clerk middleware (route protection)
+proxy.ts                    # Clerk middleware (route protection)
 ```

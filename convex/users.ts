@@ -9,14 +9,18 @@ export const current = query({
   },
 });
 
+
 export const upsertFromClerk = internalMutation({
-  args: { data: v.any() as Validator<UserJSON> },
+  args: { data: v.any() as Validator<UserJSON> }, // no runtime validation, trust Clerk
   async handler(ctx, { data }) {
     const userAttributes = {
       name:
         [data.first_name, data.last_name].filter(Boolean).join(" ") ||
         "Anonymous",
-      email: data.email_addresses?.[0]?.email_address,
+      email:
+        data.email_addresses?.find(
+          (e) => e.id === data.primary_email_address_id,
+        )?.email_address ?? data.email_addresses?.[0]?.email_address,
       image: data.image_url,
       externalId: data.id,
     };
