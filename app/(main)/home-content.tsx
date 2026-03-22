@@ -6,8 +6,10 @@ import { searchQueryParser, tabParser } from "@/lib/search-params";
 import { SkillExplorer } from "@/components/skill-explorer";
 // import useMeasure from "react-use-measure";
 import { useCollapsibleHeight } from "@/hooks/cubby-ui/use-collapsible-height";
+import { useUserPlan } from "@/hooks/use-user-plan";
 
 export function HomeContent() {
+  const { limits } = useUserPlan();
   const [query] = useQueryState("q", searchQueryParser);
   const [tab] = useQueryState("tab", tabParser);
   const searchActive = tab === "search" && query.trim().length > 0;
@@ -47,7 +49,7 @@ export function HomeContent() {
           searchActive ? "pt-6" : "pt-0",
         )}
       >
-        <SkillExplorer />
+        <SkillExplorer canAutoDetect={limits?.canAutoDetect ?? true} />
       </main>
     </>
   );

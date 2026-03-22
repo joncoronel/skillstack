@@ -16,7 +16,7 @@ const PLAN_LIMITS: Record<Plan, PlanLimits> = {
   free: {
     maxBundles: 3,
     canMakePrivate: false,
-    canAutoDetect: false,
+    canAutoDetect: true,
     canViewAnalytics: false,
     canExport: false,
   },
@@ -33,7 +33,7 @@ const PLAN_LIMITS: Record<Plan, PlanLimits> = {
  * Feature gating master switch.
  * Set to `true` to enforce plan limits, `false` to keep everything free (MVP mode).
  */
-export const FEATURE_GATING_ENABLED = false;
+export const FEATURE_GATING_ENABLED = true;
 
 export function getPlanLimits(plan: Plan): PlanLimits {
   if (!FEATURE_GATING_ENABLED) {

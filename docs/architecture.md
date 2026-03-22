@@ -89,6 +89,7 @@ import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { WebhookEvent } from "@clerk/backend";
 import { Webhook } from "svix";
+import { polar } from "./polar";
 
 const http = httpRouter();
 
@@ -108,7 +109,11 @@ http.route({
         });
         break;
       case "user.deleted": {
-        const clerkUserId = event.data.id!;
+        const clerkUserId = event.data.id;
+        if (!clerkUserId) {
+          console.error("Clerk user.deleted event missing user ID");
+          return new Response("Missing user ID", { status: 400 });
+        }
         await ctx.runMutation(internal.users.deleteFromClerk, { clerkUserId });
         break;
       }
@@ -120,20 +125,36 @@ http.route({
 });
 
 async function validateRequest(req: Request): Promise<WebhookEvent | null> {
+  const webhookSecret = process.env.CLERK_WEBHOOK_SECRET;
+  if (!webhookSecret) {
+    console.error("CLERK_WEBHOOK_SECRET is not set");
+    return null;
+  }
+
+  const svixId = req.headers.get("svix-id");
+  const svixTimestamp = req.headers.get("svix-timestamp");
+  const svixSignature = req.headers.get("svix-signature");
+  if (!svixId || !svixTimestamp || !svixSignature) {
+    console.error("Missing svix headers");
+    return null;
+  }
+
   const payloadString = await req.text();
-  const svixHeaders = {
-    "svix-id": req.headers.get("svix-id")!,
-    "svix-timestamp": req.headers.get("svix-timestamp")!,
-    "svix-signature": req.headers.get("svix-signature")!,
-  };
-  const wh = new Webhook(process.env.CLERK_WEBHOOK_SECRET!);
+  const wh = new Webhook(webhookSecret);
   try {
-    return wh.verify(payloadString, svixHeaders) as unknown as WebhookEvent;
+    return wh.verify(payloadString, {
+      "svix-id": svixId,
+      "svix-timestamp": svixTimestamp,
+      "svix-signature": svixSignature,
+    }) as unknown as WebhookEvent;
   } catch (error) {
     console.error("Error verifying webhook event", error);
     return null;
   }
 }
+
+// Polar webhook route — creates /polar/events POST endpoint
+polar.registerRoutes(http as any);
 
 export default http;
 ```
@@ -340,6 +361,19 @@ Use Convex's auth components and hooks — **not** Clerk's — for UI that depen
 | `useConvexAuth()`| `convex/react`    | `{ isAuthenticated, isLoading }` | Checking auth state in components       |
 | `useAuth()`      | `@clerk/nextjs`   | `{ isSignedIn, userId, ... }`    | **Only** as a prop to `ConvexProviderWithClerk` |
 
+### Skipping queries for unauthenticated users
+
+Use `useConvexAuth()` to conditionally skip Convex queries when the user isn't signed in. This prevents wasteful subscriptions for anonymous visitors:
+
+```tsx
+import { useQuery, useConvexAuth } from "convex/react";
+
+const { isAuthenticated } = useConvexAuth();
+const result = useQuery(api.plans.currentPlan, isAuthenticated ? {} : "skip");
+```
+
+Passing `"skip"` tells Convex not to run the query at all — no subscription, no server round-trip. Used in `useUserPlan()` hook and `ForkBundleButton`.
+
 ### Example: Header with auth state
 
 ```tsx
@@ -410,6 +444,32 @@ getUserPlan() returns "pro"
 `convex/plans.ts` — exposes `currentPlan` query to the frontend.
 
 `hooks/use-user-plan.ts` — client-side hook returning `{ plan, limits, gatingEnabled, isLoading }`.
+
+### Feature gating
+
+Two-layer enforcement: server-side mutations/actions reject unauthorized operations, client-side UI disables controls and shows upgrade prompts.
+
+**Server-side enforcement** (`convex/bundles.ts`, `convex/github.ts`):
+
+- `createBundle` / `forkBundle` — check `limits.maxBundles` via `getUserPlanWithLimits(ctx)`
+- `createBundle` / `updateBundleVisibility` — check `limits.canMakePrivate`
+- `detectTechnologies` action — checks `limits.canAutoDetect` via `ctx.runQuery(internal.plans.internalCurrentPlan)` (actions can't access `ctx.db` directly)
+- `countByUser` query — returns current user's bundle count for frontend limit checks
+
+**Client-side gating**:
+
+| Component | Gate | UX |
+| --- | --- | --- |
+| `SaveBundleDialog` | `maxBundles` | Shows `UpgradeBanner` instead of form when at limit |
+| `SaveBundleDialog` | `canMakePrivate` | Switch disabled + "Pro" badge + tooltip |
+| `VisibilityToggle` (bundle-view) | `canMakePrivate` | Switch disabled + tooltip |
+| Dashboard "Make private" | `canMakePrivate` | Toast on click |
+| `ForkBundleButton` | `maxBundles` | Toast on click |
+| `RepoUrlInput` | `canAutoDetect` | Button disabled + "Pro" badge + upgrade link |
+
+**Master switch**: `FEATURE_GATING_ENABLED` in `convex/lib/plans.ts`. When `false`, `getPlanLimits()` returns pro limits for all users regardless of plan. When `true`, limits are enforced per plan.
+
+**Reusable component**: `components/upgrade-banner.tsx` — inline banner with upgrade message and link to `/pricing`.
 
 ### Subscription details
 
@@ -645,7 +705,7 @@ Clerk (user signs up / updates profile / deletes account)
        ├─ Svix validates webhook signature
        ├─ user.created / user.updated → upsertFromClerk mutation
        │  Maps: first_name + last_name → name
-       │        email_addresses[0] → email
+       │        email_addresses.find(primary_email_address_id) → email
        │        image_url → image
        │        id → externalId
        └─ user.deleted → deleteFromClerk mutation
@@ -667,7 +727,7 @@ lib/
   utils.ts                  # cn() helper (clsx + tailwind-merge)
 
 hooks/
-  use-user-plan.ts          # useUserPlan() hook — returns plan, limits, gatingEnabled
+  use-user-plan.ts          # useUserPlan() hook — skips query for unauth users, returns plan/limits
 
 convex/
   convex.config.ts          # App config, registers @convex-dev/polar component
@@ -704,6 +764,9 @@ app/
 components/
   app-header.tsx            # Uses <Authenticated>, <Unauthenticated>, <AuthLoading>
   bundle-bar.tsx            # Uses useConvexAuth() for auth state
+  upgrade-banner.tsx        # Reusable upgrade CTA banner (used in SaveBundleDialog)
+  explore/
+    fork-bundle-button.tsx  # Fork button with bundle limit check + auth-conditional query
   auth/
     settings/
       billing-tab.tsx       # Billing tab — plan info, subscription details, manage link

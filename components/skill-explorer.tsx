@@ -25,7 +25,11 @@ import {
   CollapsibleContent,
 } from "@/components/ui/cubby-ui/collapsible";
 
-export function SkillExplorer() {
+interface SkillExplorerProps {
+  canAutoDetect: boolean;
+}
+
+export function SkillExplorer({ canAutoDetect }: SkillExplorerProps) {
   const [selected, setSelected] = useQueryState("tech", techParser);
   const [tab, setTab] = useQueryState("tab", tabParser);
   const [pickerOpen, setPickerOpen] = useState(true);
@@ -66,7 +70,10 @@ export function SkillExplorer() {
 
           <TabsContent value="browse" keepMounted>
             <div ref={selectorRef}>
-              <RepoUrlInput onTechnologiesDetected={handleRepoDetected} />
+              <RepoUrlInput
+                onTechnologiesDetected={handleRepoDetected}
+                canAutoDetect={canAutoDetect}
+              />
               <Collapsible>
                 <div className="relative mt-5">
                   <div className="absolute inset-0 flex items-center">

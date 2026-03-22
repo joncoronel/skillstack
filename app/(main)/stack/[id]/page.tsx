@@ -15,11 +15,21 @@ export default async function BundlePage({
   const { id } = await params;
   const { share } = await searchParams;
   const token = await getAuthToken();
-  const preloadedBundle = await preloadQuery(
-    api.bundles.getByUrlId,
-    { urlId: id, shareToken: share },
-    { token },
-  );
+  const [preloadedBundle, preloadedPlan] = await Promise.all([
+    preloadQuery(
+      api.bundles.getByUrlId,
+      { urlId: id, shareToken: share },
+      { token },
+    ),
+    preloadQuery(api.plans.currentPlan, {}, { token }),
+  ]);
 
-  return <BundleView preloadedBundle={preloadedBundle} urlId={id} shareToken={share} />;
+  return (
+    <BundleView
+      preloadedBundle={preloadedBundle}
+      preloadedPlan={preloadedPlan}
+      urlId={id}
+      shareToken={share}
+    />
+  );
 }

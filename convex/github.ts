@@ -676,6 +676,15 @@ async function fetchAndCollectWorkspacePackages(
 export const detectTechnologies = action({
   args: { repoUrl: v.string() },
   handler: async (ctx, { repoUrl }) => {
+    const { limits } = await ctx.runQuery(internal.plans.internalCurrentPlan, {});
+    if (!limits.canAutoDetect) {
+      return {
+        error: "GitHub auto-detection requires a Pro plan.",
+        technologies: [],
+        repoName: "",
+      };
+    }
+
     const parsed = parseGitHubUrl(repoUrl);
     if (!parsed) {
       return { error: "Invalid GitHub URL", technologies: [], repoName: "" };
