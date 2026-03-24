@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useUser, useClerk } from "@clerk/nextjs";
 import Link from "next/link";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { DashboardSquare01Icon, UserIcon, Settings01Icon, Logout01Icon } from "@hugeicons/core-free-icons";
+import { DashboardSquare01Icon, UserIcon, Settings01Icon, Logout01Icon, Tag01Icon } from "@hugeicons/core-free-icons";
 import { getInitials } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/cubby-ui/avatar";
 import {
@@ -53,6 +53,10 @@ export function UserMenu() {
         <DropdownMenuLinkItem render={<Link href="/settings/custom" />} onClick={() => setOpen(false)}>
           <HugeiconsIcon icon={Settings01Icon} strokeWidth={2} className="size-4" />
           Account settings
+        </DropdownMenuLinkItem>
+        <DropdownMenuLinkItem render={<Link href="/settings/custom?tab=billing" />} onClick={() => setOpen(false)}>
+          <HugeiconsIcon icon={Tag01Icon} strokeWidth={2} className="size-4" />
+          Billing
         </DropdownMenuLinkItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => { setOpen(false); signOut({ redirectUrl: "/sign-in" }); }}>

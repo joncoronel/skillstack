@@ -9,6 +9,8 @@ import { BundleCard } from "@/components/bundle-card";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { EyeIcon, LockIcon, Delete01Icon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/cubby-ui/button";
+import { useUserPlan } from "@/hooks/use-user-plan";
+import { toast } from "@/components/ui/cubby-ui/toast/toast";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -49,6 +51,7 @@ export function DashboardContent({ preloadedBundles }: DashboardContentProps) {
       );
     }
   });
+  const { limits } = useUserPlan();
   const [deletingId, setDeletingId] = useState<Id<"bundles"> | null>(null);
 
   async function handleDelete() {
@@ -108,12 +111,19 @@ export function DashboardContent({ preloadedBundles }: DashboardContentProps) {
                   <Button
                     variant="ghost"
                     size="xs"
-                    onClick={() =>
+                    onClick={() => {
+                      if (bundle.isPublic && !limits?.canMakePrivate) {
+                        toast.info({
+                          title: "Pro feature",
+                          description: "Upgrade to Pro to make bundles private.",
+                        });
+                        return;
+                      }
                       updateVisibility({
                         bundleId: bundle._id,
                         isPublic: !bundle.isPublic,
-                      })
-                    }
+                      });
+                    }}
                     leftSection={<HugeiconsIcon icon={LockIcon} strokeWidth={2} className="size-3.5" />}
                   >
                     {bundle.isPublic ? "Make private" : "Make public"}

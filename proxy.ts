@@ -9,6 +9,7 @@ const isPublicRoute = createRouteMatcher([
   "/stack/(.*)",
   "/explore",
   "/compare",
+  "/pricing",
   "/:org/:repo/:skillId", // Skill detail pages
 ]);
 

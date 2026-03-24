@@ -4,15 +4,18 @@ import { useState } from "react";
 import { useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Input } from "@/components/ui/cubby-ui/input";
+import Link from "next/link";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { FlashIcon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/cubby-ui/button";
+import { Badge } from "@/components/ui/cubby-ui/badge";
 
 interface RepoUrlInputProps {
   onTechnologiesDetected: (technologies: string[]) => void;
+  canAutoDetect?: boolean;
 }
 
-export function RepoUrlInput({ onTechnologiesDetected }: RepoUrlInputProps) {
+export function RepoUrlInput({ onTechnologiesDetected, canAutoDetect = true }: RepoUrlInputProps) {
   const detectTechnologies = useAction(api.github.detectTechnologies);
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
@@ -65,13 +68,20 @@ export function RepoUrlInput({ onTechnologiesDetected }: RepoUrlInputProps) {
         <Button
           variant="outline"
           onClick={handleDetect}
-          disabled={!url.trim() || loading}
+          disabled={!url.trim() || loading || !canAutoDetect}
           loading={loading}
           leftSection={<HugeiconsIcon icon={FlashIcon} strokeWidth={2} className="size-3.5" />}
+          rightSection={!canAutoDetect ? <Badge variant="outline" className="text-[10px]">Pro</Badge> : undefined}
         >
           Detect
         </Button>
       </div>
+      {!canAutoDetect && (
+        <p className="text-xs text-muted-foreground">
+          <Link href="/pricing" className="underline hover:text-foreground">Upgrade to Pro</Link>{" "}
+          to auto-detect your stack from a GitHub repo.
+        </p>
+      )}
       {error && (
         <p className="text-xs text-destructive">{error}</p>
       )}

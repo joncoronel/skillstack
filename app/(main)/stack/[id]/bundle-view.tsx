@@ -10,6 +10,11 @@ import { SkillDetailSheet } from "@/components/skill-detail-sheet";
 import { InstallCommands } from "@/components/install-commands";
 import { Button } from "@/components/ui/cubby-ui/button";
 import { Switch } from "@/components/ui/cubby-ui/switch";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/cubby-ui/tooltip";
 import { Input } from "@/components/ui/cubby-ui/input";
 import {
   Dialog,
@@ -31,6 +36,7 @@ import { Share01Icon, Loading03Icon, Edit01Icon, Cancel01Icon } from "@hugeicons
 
 interface BundleViewProps {
   preloadedBundle: Preloaded<typeof api.bundles.getByUrlId>;
+  preloadedPlan: Preloaded<typeof api.plans.currentPlan>;
   urlId: string;
   shareToken?: string;
 }
@@ -39,10 +45,12 @@ type SkillInfo = SkillData;
 
 export function BundleView({
   preloadedBundle,
+  preloadedPlan,
   urlId,
   shareToken,
 }: BundleViewProps) {
   const bundle = usePreloadedQuery(preloadedBundle);
+  const planData = usePreloadedQuery(preloadedPlan);
   const [activeSkill, setActiveSkill] = useState<SkillInfo | null>(null);
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const queryArgs = { urlId, shareToken };
@@ -157,24 +165,12 @@ export function BundleView({
             >
               Rename
             </Button>
-            <div className="flex items-center gap-2">
-              <Switch
-                id="bundle-visibility"
-                checked={bundle.isPublic}
-                onCheckedChange={(checked) =>
-                  updateVisibility({
-                    bundleId: bundle._id,
-                    isPublic: checked,
-                  })
-                }
-              />
-              <label
-                htmlFor="bundle-visibility"
-                className="text-sm text-muted-foreground"
-              >
-                {bundle.isPublic ? "Public" : "Private"}
-              </label>
-            </div>
+            <VisibilityToggle
+              bundleId={bundle._id}
+              isPublic={bundle.isPublic}
+              canMakePrivate={planData.limits?.canMakePrivate ?? false}
+              updateVisibility={updateVisibility}
+            />
             {!bundle.isPublic && (
               <SharePopover
                 bundleId={bundle._id}
@@ -330,6 +326,56 @@ function SharePopover({
       </PopoverContent>
     </Popover>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Visibility toggle (plan-gated)
+// ---------------------------------------------------------------------------
+
+function VisibilityToggle({
+  bundleId,
+  isPublic,
+  canMakePrivate,
+  updateVisibility,
+}: {
+  bundleId: Id<"bundles">;
+  isPublic: boolean;
+  canMakePrivate: boolean;
+  updateVisibility: (args: { bundleId: Id<"bundles">; isPublic: boolean }) => void;
+}) {
+  const disabled = isPublic && !canMakePrivate;
+
+  const toggle = (
+    <div className="flex items-center gap-2">
+      <Switch
+        id="bundle-visibility"
+        checked={isPublic}
+        disabled={disabled}
+        onCheckedChange={(checked) =>
+          updateVisibility({ bundleId, isPublic: checked })
+        }
+      />
+      <label
+        htmlFor="bundle-visibility"
+        className="text-sm text-muted-foreground"
+      >
+        {isPublic ? "Public" : "Private"}
+      </label>
+    </div>
+  );
+
+  if (disabled) {
+    return (
+      <Tooltip>
+        <TooltipTrigger render={<div />}>{toggle}</TooltipTrigger>
+        <TooltipContent sideOffset={8}>
+          Upgrade to Pro to make bundles private
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return toggle;
 }
 
 // ---------------------------------------------------------------------------

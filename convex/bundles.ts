@@ -1,7 +1,9 @@
-import { mutation, query, type QueryCtx } from "./_generated/server";
+import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
+import type { Id } from "./_generated/dataModel";
 import { getCurrentUser, getCurrentUserOrThrow } from "./users";
+import { getUserPlanWithLimits } from "./lib/plans";
 
 // ---------------------------------------------------------------------------
 // URL ID helpers
@@ -25,6 +27,14 @@ async function ensureUniqueUrlId(ctx: QueryCtx): Promise<string> {
   return ensureUniqueUrlId(ctx);
 }
 
+async function countUserBundles(ctx: MutationCtx, userId: Id<"users">) {
+  const bundles = await ctx.db
+    .query("bundles")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .collect();
+  return bundles.length;
+}
+
 // ---------------------------------------------------------------------------
 // Mutations
 // ---------------------------------------------------------------------------
@@ -42,6 +52,16 @@ export const createBundle = mutation({
   },
   handler: async (ctx, { name, skills, isPublic }) => {
     const user = await getCurrentUserOrThrow(ctx);
+    const { limits } = await getUserPlanWithLimits(ctx);
+
+    const bundleCount = await countUserBundles(ctx, user._id);
+    if (bundleCount >= limits.maxBundles) {
+      throw new Error("Bundle limit reached. Upgrade to Pro for unlimited bundles.");
+    }
+    if (!isPublic && !limits.canMakePrivate) {
+      throw new Error("Private bundles require a Pro plan.");
+    }
+
     const urlId = await ensureUniqueUrlId(ctx);
 
     const now = Date.now();
@@ -69,6 +89,13 @@ export const updateBundleVisibility = mutation({
 
     if (!bundle || bundle.userId !== user._id) {
       throw new Error("Bundle not found or unauthorized");
+    }
+
+    if (!isPublic) {
+      const { limits } = await getUserPlanWithLimits(ctx);
+      if (!limits.canMakePrivate) {
+        throw new Error("Private bundles require a Pro plan.");
+      }
     }
 
     await ctx.db.patch(bundleId, { isPublic });
@@ -147,6 +174,19 @@ export const deleteBundle = mutation({
 // ---------------------------------------------------------------------------
 // Queries
 // ---------------------------------------------------------------------------
+
+export const countByUser = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await getCurrentUser(ctx);
+    if (!user) return 0;
+    const bundles = await ctx.db
+      .query("bundles")
+      .withIndex("by_userId", (q) => q.eq("userId", user._id))
+      .collect();
+    return bundles.length;
+  },
+});
 
 export const getByUrlId = query({
   args: { urlId: v.string(), shareToken: v.optional(v.string()) },
@@ -360,6 +400,13 @@ export const forkBundle = mutation({
   },
   handler: async (ctx, { bundleId, name }) => {
     const user = await getCurrentUserOrThrow(ctx);
+    const { limits } = await getUserPlanWithLimits(ctx);
+
+    const bundleCount = await countUserBundles(ctx, user._id);
+    if (bundleCount >= limits.maxBundles) {
+      throw new Error("Bundle limit reached. Upgrade to Pro for unlimited bundles.");
+    }
+
     const source = await ctx.db.get(bundleId);
     if (!source) throw new Error("Bundle not found");
 
