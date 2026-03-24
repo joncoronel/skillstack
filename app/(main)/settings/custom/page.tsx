@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
+import type { SearchParams } from "nuqs/server";
 import { clerkClient } from "@clerk/nextjs/server";
 import { verifySession } from "@/lib/auth";
+import { loadSettingsSearchParams } from "@/lib/search-params.server";
 import {
   CustomSettingsPage,
   type BackendSession,
@@ -44,7 +46,12 @@ async function getSessions(): Promise<BackendSession[]> {
   }
 }
 
-export default function CustomSettingsRoute() {
+export default async function CustomSettingsRoute({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
+  await loadSettingsSearchParams(searchParams);
   const sessionsPromise = getSessions();
 
   return (
