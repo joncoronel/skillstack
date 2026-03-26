@@ -16,7 +16,9 @@
       "Bash(findstr:*)",
       "Bash(dir:*)",
       "Bash(git mv:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Read(//Users/jonny/Documents/Projects/skillstack/convex/**)",
+      "Read(//c/Users/jonny/Documents/Projects/skillstack/convex/**)"
     ],
     "additionalDirectories": [
       "c:\\Users\\jonny\\Documents\\Projects\\skillstack\\app\\api\\auth"

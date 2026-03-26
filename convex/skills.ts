@@ -232,8 +232,9 @@ async function syncSkillTechnologies(
   if (!forceRewrite) {
     const existingTechs = existingEntries.map((e) => e.technology).sort();
     const newTechs = tagResults.map((r) => r.tech).sort();
-    const installsMatch =
-      existingEntries.length === 0 || existingEntries[0].installs === installs;
+    const techsMatch =
+      existingTechs.length === newTechs.length &&
+      existingTechs.every((t, i) => t === newTechs[i]);
     const weightsMatch =
       existingEntries.length > 0 &&
       existingEntries.every((e) => {
@@ -241,16 +242,21 @@ async function syncSkillTechnologies(
         return tr !== undefined && e.weight === tr.weight;
       });
 
-    if (
-      existingTechs.length === newTechs.length &&
-      existingTechs.every((t, i) => t === newTechs[i]) &&
-      installsMatch &&
-      weightsMatch
-    ) {
+    if (techsMatch && weightsMatch) {
+      // Techs and weights unchanged — patch installs in-place if needed
+      const installsMatch =
+        existingEntries.length === 0 ||
+        existingEntries[0].installs === installs;
+      if (installsMatch) return; // Nothing changed at all
+
+      for (const entry of existingEntries) {
+        await ctx.db.patch(entry._id, { installs });
+      }
       return;
     }
   }
 
+  // Full rewrite: techs or weights changed
   for (const entry of existingEntries) {
     await ctx.db.delete(entry._id);
   }
@@ -276,6 +282,11 @@ async function upsertSkillSummary(
     syncHash?: string;
     lastSeenInApi?: number;
     isDelisted?: boolean;
+    skillDocId?: Id<"skills">;
+    contentFetchedAt?: number;
+    skillMdUrl?: string;
+    needsContentFetch?: boolean;
+    needsDiscovery?: boolean;
   },
 ) {
   const existing = await ctx.db
@@ -296,6 +307,19 @@ async function upsertSkillSummary(
         lastSeenInApi: fields.lastSeenInApi,
       }),
       ...(fields.isDelisted !== undefined && { isDelisted: fields.isDelisted }),
+      ...(fields.skillDocId !== undefined && { skillDocId: fields.skillDocId }),
+      ...(fields.contentFetchedAt !== undefined && {
+        contentFetchedAt: fields.contentFetchedAt,
+      }),
+      ...(fields.skillMdUrl !== undefined && {
+        skillMdUrl: fields.skillMdUrl,
+      }),
+      ...(fields.needsContentFetch !== undefined && {
+        needsContentFetch: fields.needsContentFetch,
+      }),
+      ...(fields.needsDiscovery !== undefined && {
+        needsDiscovery: fields.needsDiscovery,
+      }),
     });
   } else {
     await ctx.db.insert("skillSummaries", {
@@ -307,13 +331,21 @@ async function upsertSkillSummary(
       technologies: fields.technologies,
       syncHash: fields.syncHash,
       lastSeenInApi: fields.lastSeenInApi,
+      skillDocId: fields.skillDocId,
+      contentFetchedAt: fields.contentFetchedAt,
+      skillMdUrl: fields.skillMdUrl,
+      needsContentFetch: fields.needsContentFetch,
+      needsDiscovery: fields.needsDiscovery,
     });
   }
 }
 
-/** Simple hash of the fields that come from the API to detect changes. */
-function computeSyncHash(name: string, installs: number, leaderboard: string) {
-  return `${name}|${installs}|${leaderboard}`;
+/** Simple hash of the fields that come from the API to detect structural changes.
+ *  Excludes `installs` — install count changes are handled via a lightweight
+ *  patch path to avoid expensive full-doc reads and junction table rewrites.
+ */
+function computeSyncHash(name: string, leaderboard: string) {
+  return `${name}|${leaderboard}`;
 }
 
 export const upsertSkillsBatch = internalMutation({
@@ -332,7 +364,7 @@ export const upsertSkillsBatch = internalMutation({
     const now = Date.now();
 
     for (const skill of skills) {
-      const newHash = computeSyncHash(skill.name, skill.installs, leaderboard);
+      const newHash = computeSyncHash(skill.name, leaderboard);
 
       // Phase 1: Lightweight check via summary (~200 bytes vs ~30KB full doc)
       const summary = await ctx.db
@@ -342,7 +374,7 @@ export const upsertSkillsBatch = internalMutation({
         )
         .unique();
 
-      // Hash unchanged — only patch the summary, skip full skill doc read
+      // Hash unchanged — handle with lightweight patches, skip full skill doc read
       if (summary && summary.syncHash === newHash) {
         // Relist if skill reappears (rare — requires full doc read)
         if (summary.isDelisted) {
@@ -373,8 +405,34 @@ export const upsertSkillsBatch = internalMutation({
               lastSeenInApi: now,
               isDelisted: false,
               technologies: relistTechs,
+              installs: skill.installs,
             });
           }
+        } else if (summary.installs !== skill.installs) {
+          // Installs changed but nothing structural — lightweight patch
+          // Patch skill doc by ID (no full doc read needed)
+          if (summary.skillDocId) {
+            await ctx.db.patch(summary.skillDocId, {
+              installs: skill.installs,
+              lastSeenInApi: now,
+            });
+            // Patch junction table installs in-place (no delete+reinsert)
+            const junctionEntries = await ctx.db
+              .query("skillTechnologies")
+              .withIndex("by_skillId", (q) =>
+                q.eq("skillId", summary.skillDocId!),
+              )
+              .collect();
+            for (const entry of junctionEntries) {
+              if (entry.installs !== skill.installs) {
+                await ctx.db.patch(entry._id, { installs: skill.installs });
+              }
+            }
+          }
+          await ctx.db.patch(summary._id, {
+            lastSeenInApi: now,
+            installs: skill.installs,
+          });
         } else {
           await ctx.db.patch(summary._id, { lastSeenInApi: now });
         }
@@ -417,7 +475,8 @@ export const upsertSkillsBatch = internalMutation({
           ...(existing.isDelisted && { isDelisted: false }),
         });
 
-        // Sync junction table if tags/installs changed, or if un-delisting
+        // Sync junction table — let skip-if-unchanged logic work
+        // (only force rewrite for relist scenarios above)
         if (
           tagsChanged ||
           existing.installs !== skill.installs ||
@@ -428,7 +487,6 @@ export const upsertSkillsBatch = internalMutation({
             skillDocId,
             tagResults,
             skill.installs,
-            true,
           );
         }
       } else {
@@ -454,7 +512,7 @@ export const upsertSkillsBatch = internalMutation({
         );
       }
 
-      // Update summary with new hash and data
+      // Update summary with new hash and data (include skillDocId + denormalized fields)
       await upsertSkillSummary(ctx, {
         source: skill.source,
         skillId: skill.skillId,
@@ -464,6 +522,17 @@ export const upsertSkillsBatch = internalMutation({
         technologies,
         syncHash: newHash,
         lastSeenInApi: now,
+        skillDocId,
+        ...(existing && {
+          contentFetchedAt: existing.contentFetchedAt,
+          skillMdUrl: existing.skillMdUrl,
+          needsContentFetch: existing.needsContentFetch,
+          needsDiscovery: existing.needsDiscovery,
+        }),
+        ...(!existing && {
+          needsDiscovery: true,
+          needsContentFetch: false,
+        }),
         ...(existing?.isDelisted && { isDelisted: false }),
       });
     }
@@ -526,8 +595,9 @@ export const listSourcesNeedingDiscovery = internalQuery({
     const paginationOpts = cursor
       ? { numItems: 500, cursor }
       : { numItems: 500, cursor: null };
+    // Scan summaries (~200 bytes) instead of skills (~30KB) to reduce bandwidth
     const result = await ctx.db
-      .query("skills")
+      .query("skillSummaries")
       .withIndex("by_needsDiscovery", (q) => q.eq("needsDiscovery", true))
       .paginate(paginationOpts);
 
@@ -537,8 +607,9 @@ export const listSourcesNeedingDiscovery = internalQuery({
       Array<{ docId: string; skillId: string }>
     >();
     for (const s of result.page) {
+      if (!s.skillDocId) continue;
       const list = bySource.get(s.source) ?? [];
-      list.push({ docId: s._id, skillId: s.skillId });
+      list.push({ docId: s.skillDocId, skillId: s.skillId });
       bySource.set(s.source, list);
     }
 
@@ -751,6 +822,8 @@ export const updateSkillMdUrl = internalMutation({
   },
   handler: async (ctx, { docId, skillMdUrl }) => {
     const hasUrl = skillMdUrl !== "";
+    const now = Date.now();
+    const skill = await ctx.db.get(docId);
     await ctx.db.patch(docId, {
       skillMdUrl,
       needsDiscovery: false,
@@ -758,8 +831,25 @@ export const updateSkillMdUrl = internalMutation({
       needsContentFetch: hasUrl,
       ...(hasUrl && { hasContentFetchError: false }),
       // Reset the timer so markStaleContent doesn't re-flag immediately
-      ...(!hasUrl && { contentFetchedAt: Date.now() }),
+      ...(!hasUrl && { contentFetchedAt: now }),
     });
+    // Sync summary
+    if (skill) {
+      const summary = await ctx.db
+        .query("skillSummaries")
+        .withIndex("by_source_skillId", (q) =>
+          q.eq("source", skill.source).eq("skillId", skill.skillId),
+        )
+        .unique();
+      if (summary) {
+        await ctx.db.patch(summary._id, {
+          skillMdUrl,
+          needsDiscovery: false,
+          needsContentFetch: hasUrl,
+          ...(!hasUrl && { contentFetchedAt: now }),
+        });
+      }
+    }
   },
 });
 
@@ -829,7 +919,7 @@ const CONTENT_REFRESH_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const REDISCOVERY_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 /** Mark skills whose content is stale (>7 days) or whose empty URL needs re-discovery (>7 days).
- *  Runs as a separate step after sync to avoid reading full skill docs in the hot upsert path.
+ *  Scans skillSummaries (~200 bytes each) instead of skills (~30KB each) to reduce bandwidth.
  */
 export const markStaleContentBatch = internalMutation({
   args: { cursor: v.optional(v.string()) },
@@ -837,13 +927,16 @@ export const markStaleContentBatch = internalMutation({
     const paginationOpts = cursor
       ? { numItems: 200, cursor }
       : { numItems: 200, cursor: null };
-    const result = await ctx.db.query("skills").paginate(paginationOpts);
+    const result = await ctx.db
+      .query("skillSummaries")
+      .paginate(paginationOpts);
 
     const now = Date.now();
     let marked = 0;
 
     for (const s of result.page) {
       if (s.isDelisted) continue;
+      if (!s.skillDocId) continue;
 
       // Content re-fetch: non-empty URL, >7 days since last fetch
       const contentStale =
@@ -859,9 +952,11 @@ export const markStaleContentBatch = internalMutation({
         now - (s.contentFetchedAt ?? 0) > REDISCOVERY_INTERVAL_MS;
 
       if (contentStale) {
+        await ctx.db.patch(s.skillDocId, { needsContentFetch: true });
         await ctx.db.patch(s._id, { needsContentFetch: true });
         marked++;
       } else if (needsRediscovery) {
+        await ctx.db.patch(s.skillDocId, { needsDiscovery: true });
         await ctx.db.patch(s._id, { needsDiscovery: true });
         marked++;
       }
@@ -906,18 +1001,25 @@ export const listSkillsNeedingContentFetch = internalQuery({
     const paginationOpts = cursor
       ? { numItems: 200, cursor }
       : { numItems: 200, cursor: null };
+    // Scan summaries (~200 bytes) instead of skills (~30KB) to reduce bandwidth
     const result = await ctx.db
-      .query("skills")
-      .withIndex("by_needsContentFetch", (q) => q.eq("needsContentFetch", true))
+      .query("skillSummaries")
+      .withIndex("by_needsContentFetch", (q) =>
+        q.eq("needsContentFetch", true),
+      )
       .paginate(paginationOpts);
 
-    // Filter to only skills that have a valid URL
-    const ids = result.page
-      .filter((s) => s.skillMdUrl && s.skillMdUrl !== "")
-      .map((s) => s._id);
+    // Filter to only skills that have a valid URL and a stored doc ID
+    const skills = result.page
+      .filter((s) => s.skillMdUrl && s.skillMdUrl !== "" && s.skillDocId)
+      .map((s) => ({
+        id: s.skillDocId!,
+        skillMdUrl: s.skillMdUrl!,
+        skillName: s.skillId,
+      }));
 
     return {
-      ids,
+      skills,
       nextCursor: result.continueCursor,
       isDone: result.isDone,
     };
@@ -925,18 +1027,20 @@ export const listSkillsNeedingContentFetch = internalQuery({
 });
 
 export const fetchSkillContent = internalAction({
-  args: { skillId: v.id("skills") },
-  handler: async (ctx, { skillId }) => {
-    const skill = await ctx.runQuery(internal.skills.getById, { skillId });
-    if (!skill || !skill.skillMdUrl) return;
-
+  args: {
+    skillId: v.id("skills"),
+    skillMdUrl: v.string(),
+    skillName: v.optional(v.string()),
+  },
+  handler: async (ctx, { skillId, skillMdUrl, skillName }) => {
+    const label = skillName ?? skillId;
     const MAX_RETRIES = 3;
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
-        const res = await fetch(skill.skillMdUrl);
+        const res = await fetch(skillMdUrl);
         if (!res.ok) {
           console.error(
-            `Failed to fetch content for ${skill.skillId}: ${res.status}`,
+            `Failed to fetch content for ${label}: ${res.status}`,
           );
           // Track failure — after 3 consecutive failures, re-discover the URL
           await ctx.runMutation(internal.skills.markContentFetchFailed, {
@@ -949,18 +1053,12 @@ export const fetchSkillContent = internalAction({
         const description = extractFrontmatterDescription(raw);
         const body = extractBodyContent(raw);
 
-        // Clear broken legacy descriptions ("|" or ">") when no valid description parsed
-        const isBrokenDesc =
-          skill.description === "|" || skill.description === ">";
-        const effectiveDescription =
-          description ?? (isBrokenDesc ? "" : undefined);
-
-        if (effectiveDescription !== undefined || body) {
+        if (description !== null || body) {
           await ctx.runMutation(internal.skills.updateDescription, {
             skillId,
-            description: effectiveDescription,
+            description: description ?? undefined,
             content: body ?? undefined,
-            skillMdUrl: skill.skillMdUrl,
+            skillMdUrl,
           });
         } else {
           // Content fetched but nothing parseable — still record the fetch time
@@ -972,12 +1070,12 @@ export const fetchSkillContent = internalAction({
       } catch (e) {
         if (attempt < MAX_RETRIES - 1) {
           console.warn(
-            `Retry ${attempt + 1}/${MAX_RETRIES} for ${skill.skillId}: ${e}`,
+            `Retry ${attempt + 1}/${MAX_RETRIES} for ${label}: ${e}`,
           );
           await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
         } else {
           console.error(
-            `Error fetching content for ${skill.skillId} after ${MAX_RETRIES} attempts:`,
+            `Error fetching content for ${label} after ${MAX_RETRIES} attempts:`,
             e,
           );
         }
@@ -996,19 +1094,25 @@ export const backfillFetchContent = internalAction({
       { cursor: cursor ?? undefined },
     );
 
-    if (result.ids.length > 0) {
-      console.log(`Scheduling content fetch for ${result.ids.length} skills`);
-      for (let i = 0; i < result.ids.length; i++) {
+    if (result.skills.length > 0) {
+      console.log(
+        `Scheduling content fetch for ${result.skills.length} skills`,
+      );
+      for (let i = 0; i < result.skills.length; i++) {
         await ctx.scheduler.runAfter(
           i * STAGGER_MS,
           internal.skills.fetchSkillContent,
-          { skillId: result.ids[i] },
+          {
+            skillId: result.skills[i].id,
+            skillMdUrl: result.skills[i].skillMdUrl,
+            skillName: result.skills[i].skillName,
+          },
         );
       }
     }
 
     if (!result.isDone) {
-      const delay = result.ids.length * STAGGER_MS + 5_000;
+      const delay = result.skills.length * STAGGER_MS + 5_000;
       await ctx.scheduler.runAfter(
         delay,
         internal.skills.backfillFetchContent,
@@ -1032,12 +1136,20 @@ export const updateDescription = internalMutation({
     if (!skill) return;
 
     const now = Date.now();
-    const newDescription = description ?? skill.description;
+
+    // Clear broken legacy descriptions ("|" or ">") when no valid description parsed
+    const isBrokenDesc =
+      skill.description === "|" || skill.description === ">";
+    const effectiveDescription =
+      description ?? (isBrokenDesc ? "" : undefined);
+
+    const newDescription = effectiveDescription ?? skill.description;
     const newContent = content ?? skill.content;
 
     // Detect if content actually changed
     const descriptionChanged =
-      description !== undefined && description !== skill.description;
+      effectiveDescription !== undefined &&
+      effectiveDescription !== skill.description;
     const contentChanged = content !== undefined && content !== skill.content;
     const hasActualChange = descriptionChanged || contentChanged;
 
@@ -1056,7 +1168,9 @@ export const updateDescription = internalMutation({
       JSON.stringify(technologies.slice().sort());
 
     await ctx.db.patch(skillId, {
-      ...(description !== undefined && { description }),
+      ...(effectiveDescription !== undefined && {
+        description: effectiveDescription,
+      }),
       ...(content !== undefined && { content }),
       skillMdUrl,
       ...(tagsChanged && { technologies }),
@@ -1071,26 +1185,46 @@ export const updateDescription = internalMutation({
       await syncSkillTechnologies(ctx, skillId, tagResults, skill.installs);
     }
 
-    if (descriptionChanged || tagsChanged) {
-      await upsertSkillSummary(ctx, {
-        source: skill.source,
-        skillId: skill.skillId,
-        name: skill.name,
-        description: newDescription,
-        installs: skill.installs,
-        technologies,
-      });
-    }
+    // Always sync summary with contentFetchedAt and needsContentFetch
+    await upsertSkillSummary(ctx, {
+      source: skill.source,
+      skillId: skill.skillId,
+      name: skill.name,
+      description: newDescription,
+      installs: skill.installs,
+      technologies,
+      skillDocId: skillId,
+      contentFetchedAt: now,
+      needsContentFetch: false,
+      skillMdUrl,
+    });
   },
 });
 
 export const markContentFetched = internalMutation({
   args: { skillId: v.id("skills") },
   handler: async (ctx, { skillId }) => {
+    const now = Date.now();
+    const skill = await ctx.db.get(skillId);
     await ctx.db.patch(skillId, {
-      contentFetchedAt: Date.now(),
+      contentFetchedAt: now,
       needsContentFetch: false,
     });
+    // Sync summary (infrequent call, so reading skill doc is acceptable)
+    if (skill) {
+      const summary = await ctx.db
+        .query("skillSummaries")
+        .withIndex("by_source_skillId", (q) =>
+          q.eq("source", skill.source).eq("skillId", skill.skillId),
+        )
+        .unique();
+      if (summary) {
+        await ctx.db.patch(summary._id, {
+          contentFetchedAt: now,
+          needsContentFetch: false,
+        });
+      }
+    }
   },
 });
 
@@ -1100,26 +1234,49 @@ export const markContentFetchFailed = internalMutation({
     const skill = await ctx.db.get(skillId);
     if (!skill) return;
 
+    const now = Date.now();
     const failCount = (skill.contentFetchFailCount ?? 0) + 1;
+
+    // Sync summary
+    const summary = await ctx.db
+      .query("skillSummaries")
+      .withIndex("by_source_skillId", (q) =>
+        q.eq("source", skill.source).eq("skillId", skill.skillId),
+      )
+      .unique();
 
     if (failCount >= 2) {
       // After 2 consecutive failures, clear the URL and re-discover
       await ctx.db.patch(skillId, {
-        contentFetchedAt: Date.now(),
+        contentFetchedAt: now,
         needsContentFetch: false,
         contentFetchFailCount: 0,
         hasContentFetchError: true,
         skillMdUrl: "",
         needsDiscovery: true,
       });
+      if (summary) {
+        await ctx.db.patch(summary._id, {
+          contentFetchedAt: now,
+          needsContentFetch: false,
+          skillMdUrl: "",
+          needsDiscovery: true,
+        });
+      }
     } else {
       // First failure: show warning immediately
       await ctx.db.patch(skillId, {
-        contentFetchedAt: Date.now(),
+        contentFetchedAt: now,
         needsContentFetch: false,
         contentFetchFailCount: failCount,
         hasContentFetchError: true,
       });
+      if (summary) {
+        await ctx.db.patch(summary._id, {
+          contentFetchedAt: now,
+          needsContentFetch: false,
+        });
+      }
     }
   },
 });
@@ -1484,6 +1641,14 @@ export const backfillSkillSummariesBatch = internalMutation({
         description: s.description,
         installs: s.installs,
         technologies: s.technologies,
+        syncHash: s.syncHash,
+        lastSeenInApi: s.lastSeenInApi,
+        isDelisted: s.isDelisted,
+        skillDocId: s._id,
+        contentFetchedAt: s.contentFetchedAt,
+        skillMdUrl: s.skillMdUrl,
+        needsContentFetch: s.needsContentFetch,
+        needsDiscovery: s.needsDiscovery,
       });
     }
 
@@ -1514,7 +1679,7 @@ export const backfillSyncFlags = internalMutation({
 
       // Set syncHash if missing
       if (s.syncHash === undefined) {
-        updates.syncHash = computeSyncHash(s.name, s.installs, s.leaderboard);
+        updates.syncHash = computeSyncHash(s.name, s.leaderboard);
       }
 
       // Set needsDiscovery if missing

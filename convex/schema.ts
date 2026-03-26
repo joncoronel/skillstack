@@ -48,9 +48,17 @@ export default defineSchema({
     syncHash: v.optional(v.string()),
     lastSeenInApi: v.optional(v.number()),
     isDelisted: v.optional(v.boolean()),
+    // Denormalized from skills table to avoid reading full 30KB+ skill docs
+    skillDocId: v.optional(v.id("skills")),
+    contentFetchedAt: v.optional(v.number()),
+    skillMdUrl: v.optional(v.string()),
+    needsContentFetch: v.optional(v.boolean()),
+    needsDiscovery: v.optional(v.boolean()),
   })
     .index("by_source_skillId", ["source", "skillId"])
-    .index("by_isDelisted", ["isDelisted"]),
+    .index("by_isDelisted", ["isDelisted"])
+    .index("by_needsContentFetch", ["needsContentFetch"])
+    .index("by_needsDiscovery", ["needsDiscovery"]),
 
   skillTechnologies: defineTable({
     skillId: v.id("skills"),
