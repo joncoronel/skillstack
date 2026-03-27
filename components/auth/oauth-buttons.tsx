@@ -49,14 +49,13 @@ export function OAuthButtons({ mode }: OAuthButtonsProps) {
   const { signIn } = useSignIn();
   const { signUp } = useSignUp();
 
-  const handleOAuth = (strategy: OAuthStrategy) => {
+  const handleOAuth = async (strategy: OAuthStrategy) => {
     const auth = mode === "sign-in" ? signIn : signUp;
-    if (!auth) return;
 
-    auth.authenticateWithRedirect({
+    await auth.sso({
       strategy,
-      redirectUrl: `/${mode === "sign-in" ? "sign-in" : "sign-up"}/sso-callback`,
-      redirectUrlComplete: "/",
+      redirectCallbackUrl: `/${mode === "sign-in" ? "sign-in" : "sign-up"}/sso-callback`,
+      redirectUrl: "/",
     });
   };
 

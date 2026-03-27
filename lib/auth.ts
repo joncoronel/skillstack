@@ -2,10 +2,16 @@ import "server-only";
 
 import { cache } from "react";
 import { auth } from "@clerk/nextjs/server";
+import { ClerkOfflineError } from "@clerk/nextjs/errors";
 import { redirect } from "next/navigation";
 
 export async function getAuthToken() {
-  return (await (await auth()).getToken({ template: "convex" })) ?? undefined;
+  try {
+    return (await (await auth()).getToken({ template: "convex" })) ?? undefined;
+  } catch (error) {
+    if (error instanceof ClerkOfflineError) return undefined;
+    throw error;
+  }
 }
 
 /**

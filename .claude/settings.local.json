@@ -42,7 +42,9 @@
       "Read(//c/Users/jonny/Documents/Projects/skillstack/lib/**)",
       "Read(//home/user/app/\\(main\\)/dev/**)",
       "Read(//Users/jonny/Documents/Projects/skillstack/app/\\(main\\)/dev/**)",
-      "Read(//c/Users/jonny/Documents/Projects/skillstack/app/\\(main\\)/dev/**)"
+      "Read(//c/Users/jonny/Documents/Projects/skillstack/app/\\(main\\)/dev/**)",
+      "Bash(grep -r import.*from /c/Users/jonny/Documents/Projects/skillstack/app --include=*.tsx --include=*.ts --include=*.jsx --include=*.js)",
+      "Bash(grep -r \"clerk\\\\|@clerk\\\\|useAuth\\\\|useUser\\\\|useClerk\\\\|ClerkProvider\\\\|SignedIn\\\\|SignedOut\\\\|getToken\\\\|currentUser\\\\|ConvexProviderWithClerk\" /c/Users/jonny/Documents/Projects/skillstack --include=*.tsx --include=*.ts --include=*.jsx --include=*.js --include=*.json ! -path */node_modules/* ! -path */.next/* ! -path */.git/*)"
     ],
     "additionalDirectories": [
       "c:\\Users\\jonny\\Documents\\Projects\\skillstack\\app\\api\\auth"

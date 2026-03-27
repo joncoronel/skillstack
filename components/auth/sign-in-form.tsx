@@ -16,39 +16,34 @@ import {
 } from "@/components/ui/cubby-ui/card";
 import { Separator } from "@/components/ui/cubby-ui/separator";
 import { OAuthButtons } from "./oauth-buttons";
-import { getClerkErrorMessage } from "@/lib/utils";
 
 export function SignInForm() {
-  const { isLoaded, signIn, setActive } = useSignIn();
+  const { signIn, errors, fetchStatus } = useSignIn();
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
-  const [error, setError] = React.useState("");
-  const [loading, setLoading] = React.useState(false);
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isLoaded) return;
 
-    setError("");
-    setLoading(true);
+    const { error } = await signIn.password({
+      identifier: email,
+      password,
+    });
+    if (error) return;
 
-    try {
-      const result = await signIn.create({
-        identifier: email,
-        password,
+    if (signIn.status === "complete") {
+      await signIn.finalize({
+        navigate: ({ session, decorateUrl }) => {
+          if (session?.currentTask) return;
+          const url = decorateUrl("/");
+          if (url.startsWith("http")) {
+            window.location.href = url;
+          } else {
+            router.push(url);
+          }
+        },
       });
-
-      if (result.status === "complete") {
-        await setActive({ session: result.createdSessionId });
-        router.push("/");
-      } else {
-        setError("Additional verification is required.");
-      }
-    } catch (err) {
-      setError(getClerkErrorMessage(err, "Sign in failed. Please try again."));
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -79,6 +74,11 @@ export function SignInForm() {
               required
               autoComplete="email"
             />
+            {errors?.fields?.identifier && (
+              <p className="text-destructive text-sm">
+                {errors.fields.identifier.message}
+              </p>
+            )}
           </div>
 
           <div className="flex flex-col gap-2">
@@ -91,14 +91,19 @@ export function SignInForm() {
               required
               autoComplete="current-password"
             />
+            {errors?.fields?.password && (
+              <p className="text-destructive text-sm">
+                {errors.fields.password.message}
+              </p>
+            )}
           </div>
 
-          {error && (
-            <p className="text-destructive text-sm">{error}</p>
-          )}
-
-          <Button type="submit" disabled={!isLoaded || loading} className="w-full">
-            {loading ? "Signing in..." : "Sign in"}
+          <Button
+            type="submit"
+            disabled={fetchStatus === "fetching"}
+            className="w-full"
+          >
+            {fetchStatus === "fetching" ? "Signing in..." : "Sign in"}
           </Button>
         </form>
 

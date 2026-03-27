@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useSignUp } from "@clerk/nextjs";
+import { useSignUp, useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/cubby-ui/button";
@@ -21,67 +21,58 @@ import {
   InputOTPSlot,
 } from "@/components/ui/cubby-ui/input-otp";
 import { OAuthButtons } from "./oauth-buttons";
-import { getClerkErrorMessage } from "@/lib/utils";
 
 export function SignUpForm() {
-  const { isLoaded, signUp, setActive } = useSignUp();
+  const { signUp, errors, fetchStatus } = useSignUp();
+  const { isSignedIn } = useAuth();
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [code, setCode] = React.useState("");
-  const [verifying, setVerifying] = React.useState(false);
-  const [error, setError] = React.useState("");
-  const [loading, setLoading] = React.useState(false);
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isLoaded) return;
 
-    setError("");
-    setLoading(true);
+    const { error } = await signUp.password({
+      emailAddress: email,
+      password,
+    });
+    if (error) return;
 
-    try {
-      await signUp.create({
-        emailAddress: email,
-        password,
-      });
-
-      await signUp.prepareEmailAddressVerification({
-        strategy: "email_code",
-      });
-
-      setVerifying(true);
-    } catch (err) {
-      setError(getClerkErrorMessage(err, "Sign up failed. Please try again."));
-    } finally {
-      setLoading(false);
-    }
+    await signUp.verifications.sendEmailCode();
   };
 
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isLoaded) return;
 
-    setError("");
-    setLoading(true);
+    await signUp.verifications.verifyEmailCode({ code });
 
-    try {
-      const result = await signUp.attemptEmailAddressVerification({ code });
-
-      if (result.status === "complete") {
-        await setActive({ session: result.createdSessionId });
-        router.push("/");
-      } else {
-        setError("Verification incomplete. Please try again.");
-      }
-    } catch (err) {
-      setError(getClerkErrorMessage(err, "Verification failed. Please try again."));
-    } finally {
-      setLoading(false);
+    if (signUp.status === "complete") {
+      await signUp.finalize({
+        navigate: ({ session, decorateUrl }) => {
+          if (session?.currentTask) return;
+          const url = decorateUrl("/");
+          if (url.startsWith("http")) {
+            window.location.href = url;
+          } else {
+            router.push(url);
+          }
+        },
+      });
     }
   };
 
-  if (verifying) {
+  if (signUp.status === "complete" || isSignedIn) {
+    return null;
+  }
+
+  // Show verification form when email needs verification
+  const needsVerification =
+    signUp.status === "missing_requirements" &&
+    signUp.unverifiedFields?.includes("email_address") &&
+    signUp.missingFields?.length === 0;
+
+  if (needsVerification) {
     return (
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
@@ -113,12 +104,18 @@ export function SignUpForm() {
               </InputOTPGroup>
             </InputOTP>
 
-            {error && (
-              <p className="text-destructive text-sm">{error}</p>
+            {errors?.fields?.code && (
+              <p className="text-destructive text-sm">
+                {errors.fields.code.message}
+              </p>
             )}
 
-            <Button type="submit" disabled={!isLoaded || loading} className="w-full">
-              {loading ? "Verifying..." : "Verify"}
+            <Button
+              type="submit"
+              disabled={fetchStatus === "fetching"}
+              className="w-full"
+            >
+              {fetchStatus === "fetching" ? "Verifying..." : "Verify"}
             </Button>
           </form>
         </CardContent>
@@ -153,6 +150,11 @@ export function SignUpForm() {
               required
               autoComplete="email"
             />
+            {errors?.fields?.emailAddress && (
+              <p className="text-destructive text-sm">
+                {errors.fields.emailAddress.message}
+              </p>
+            )}
           </div>
 
           <div className="flex flex-col gap-2">
@@ -165,16 +167,21 @@ export function SignUpForm() {
               required
               autoComplete="new-password"
             />
+            {errors?.fields?.password && (
+              <p className="text-destructive text-sm">
+                {errors.fields.password.message}
+              </p>
+            )}
           </div>
-
-          {error && (
-            <p className="text-destructive text-sm">{error}</p>
-          )}
 
           <div id="clerk-captcha" />
 
-          <Button type="submit" disabled={!isLoaded || loading} className="w-full">
-            {loading ? "Creating account..." : "Create account"}
+          <Button
+            type="submit"
+            disabled={fetchStatus === "fetching"}
+            className="w-full"
+          >
+            {fetchStatus === "fetching" ? "Creating account..." : "Create account"}
           </Button>
         </form>
 
