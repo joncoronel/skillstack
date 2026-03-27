@@ -10,11 +10,32 @@ import {
   CardTitle,
   CardContent,
 } from "@/components/ui/cubby-ui/card";
+import {
+  type ColumnDef,
+  DataTable,
+  DataTableToolbar,
+  DataTableToolbarSeparator,
+  DataTableSearch,
+  DataTableContent,
+  DataTableHeader,
+  DataTableBody,
+} from "@/components/ui/cubby-ui/data-table/data-table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/cubby-ui/select";
 import { Button } from "@/components/ui/cubby-ui/button";
 import { Badge } from "@/components/ui/cubby-ui/badge";
 import { Skeleton } from "@/components/ui/cubby-ui/skeleton";
-import { cn, formatInstalls, timeAgo } from "@/lib/utils";
+import { formatInstalls, timeAgo } from "@/lib/utils";
 import { toast } from "@/components/ui/cubby-ui/toast/toast";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 type ErrorFilter =
   | "contentFetchError"
@@ -30,6 +51,24 @@ const FILTER_LABELS: Record<ErrorFilter, string> = {
   noUrl: "No URL",
   delisted: "Delisted",
 };
+
+type SkillError = {
+  _id: Id<"skills">;
+  source: string;
+  skillId: string;
+  name: string;
+  installs: number;
+  hasContentFetchError?: boolean;
+  skillMdUrl?: string;
+  needsDiscovery?: boolean;
+  needsContentFetch?: boolean;
+  contentFetchedAt?: number;
+  isDelisted?: boolean;
+};
+
+// ---------------------------------------------------------------------------
+// Root
+// ---------------------------------------------------------------------------
 
 export function DevDashboardContent() {
   const admin = useQuery(api.devStats.isAdmin, {});
@@ -120,8 +159,8 @@ function StatsCards({
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
       {cards.map((card) => (
-        <Card key={card.label}>
-          <CardContent className="pt-4 pb-4">
+        <Card key={card.label} className="gap-0 py-0">
+          <div className="px-5 py-4">
             <p className="text-xs text-muted-foreground">{card.label}</p>
             <p className="mt-1 text-2xl font-bold tabular-nums">
               {loading ? "..." : card.value.toLocaleString()}
@@ -131,7 +170,7 @@ function StatsCards({
                 </Badge>
               )}
             </p>
-          </CardContent>
+          </div>
         </Card>
       ))}
     </div>
@@ -139,7 +178,7 @@ function StatsCards({
 }
 
 // ---------------------------------------------------------------------------
-// Error Skills List
+// Error Skills Table
 // ---------------------------------------------------------------------------
 
 function ErrorSkillsList({
@@ -167,6 +206,7 @@ function ErrorSkillsList({
   const retryFetch = useAction(api.devStats.callRetryContentFetch);
   const retryDiscovery = useAction(api.devStats.callRetryDiscovery);
   const retryBatch = useAction(api.devStats.callRetryBatch);
+  const probeUrl = useAction(api.devStats.probeSkillUrl);
   const [batchLoading, setBatchLoading] = useState(false);
 
   const filterCounts: Record<ErrorFilter, number> = {
@@ -207,245 +247,281 @@ function ErrorSkillsList({
     }
   };
 
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Skills by Status</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {/* Filter tabs */}
-        <div className="mb-4 flex flex-wrap gap-2">
-          {(Object.keys(FILTER_LABELS) as ErrorFilter[]).map((filter) => (
-            <button
-              key={filter}
-              onClick={() => {
-                onFilterChange(filter);
-                setCursor(undefined);
-              }}
-              className={cn(
-                "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                activeFilter === filter
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:bg-muted/80",
+  const columns: ColumnDef<SkillError, unknown>[] = [
+    {
+      accessorKey: "name",
+      header: "Skill",
+      cell: ({ row }) => {
+        const skill = row.original;
+        const hasUrl = skill.skillMdUrl && skill.skillMdUrl !== "";
+        const repoUrl = `https://github.com/${skill.source}`;
+        return (
+          <div className="min-w-0">
+            <span className="font-medium">{skill.name}</span>
+            <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+              <a
+                href={repoUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="truncate underline decoration-muted-foreground/40 hover:decoration-muted-foreground"
+              >
+                {skill.source}/{skill.skillId}
+              </a>
+              {hasUrl && (
+                <a
+                  href={skill.skillMdUrl!}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shrink-0 underline decoration-muted-foreground/40 hover:decoration-muted-foreground"
+                >
+                  SKILL.md
+                </a>
               )}
-            >
-              {FILTER_LABELS[filter]}
-              <span className="ml-1.5 opacity-70">
-                {filterCounts[filter].toLocaleString()}
-              </span>
-            </button>
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: "installs",
+      header: "Installs",
+      cell: ({ row }) => (
+        <span className="tabular-nums text-muted-foreground">
+          {formatInstalls(row.original.installs)}
+        </span>
+      ),
+    },
+    {
+      id: "fetched",
+      header: "Fetched",
+      cell: ({ row }) =>
+        row.original.contentFetchedAt ? (
+          <span className="text-xs text-muted-foreground">
+            {timeAgo(row.original.contentFetchedAt)}
+          </span>
+        ) : null,
+    },
+    {
+      id: "status",
+      header: "Status",
+      cell: ({ row }) => {
+        const skill = row.original;
+        return (
+          <div className="flex items-center gap-1.5">
+            {skill.hasContentFetchError && (
+              <Badge variant="warning">error</Badge>
+            )}
+            {skill.isDelisted && <Badge variant="secondary">delisted</Badge>}
+            {skill.skillMdUrl === "" && <Badge variant="outline">no url</Badge>}
+          </div>
+        );
+      },
+    },
+    {
+      id: "actions",
+      header: "",
+      cell: ({ row }) => (
+        <SkillActions
+          skill={row.original}
+          filter={activeFilter}
+          onRetryFetch={handleRetryFetch}
+          onRetryDiscovery={handleRetryDiscovery}
+          probeUrl={probeUrl}
+        />
+      ),
+    },
+  ];
+
+  const filterOptions = (Object.keys(FILTER_LABELS) as ErrorFilter[]).map(
+    (key) => ({
+      label: `${FILTER_LABELS[key]} (${filterCounts[key].toLocaleString()})`,
+      value: key,
+    }),
+  );
+
+  return (
+    <div>
+      {result === undefined ? (
+        <div className="space-y-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-12 rounded-lg" />
           ))}
         </div>
-
-        {/* Batch action */}
-        {(activeFilter === "contentFetchError" || activeFilter === "noUrl") && (
-          <div className="mb-4">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRetryBatch}
-              disabled={batchLoading}
-            >
-              {batchLoading
-                ? "Retrying..."
-                : `Retry All ${FILTER_LABELS[activeFilter]}`}
-            </Button>
-          </div>
-        )}
-
-        {/* Skills list */}
-        {result === undefined ? (
-          <div className="space-y-2">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-12 rounded-lg" />
-            ))}
-          </div>
-        ) : result.skills.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">
-            No skills in this category.
-          </p>
-        ) : (
-          <>
-            <div className="divide-y divide-border rounded-lg border">
-              {result.skills.map((skill) => (
-                <SkillRow
-                  key={skill._id}
-                  skill={skill}
-                  filter={activeFilter}
-                  onRetryFetch={handleRetryFetch}
-                  onRetryDiscovery={handleRetryDiscovery}
-                />
-              ))}
-            </div>
-
-            {/* Pagination */}
-            <div className="mt-4 flex items-center gap-2">
-              {cursor && (
-                <Button
-                  variant="outline"
+      ) : (
+        <>
+          <DataTable
+            columns={columns}
+            data={result.skills as SkillError[]}
+            enableSorting
+            enableFiltering
+            className="md:max-w-none"
+            getRowId={(row: SkillError) => row._id}
+          >
+            <DataTableToolbar variant="ghost">
+              <Select
+                items={filterOptions}
+                value={activeFilter}
+                onValueChange={(value) => {
+                  if (value) {
+                    onFilterChange(value as ErrorFilter);
+                    setCursor(undefined);
+                  }
+                }}
+              >
+                <SelectTrigger
                   size="sm"
-                  onClick={() => setCursor(undefined)}
+                  className="w-auto min-w-16 border-transparent bg-transparent shadow-none before:hidden dark:bg-transparent"
                 >
-                  First page
-                </Button>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent size="sm" alignItemWithTrigger>
+                  {filterOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {(activeFilter === "contentFetchError" ||
+                activeFilter === "noUrl") && (
+                <>
+                  <DataTableToolbarSeparator />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleRetryBatch}
+                    disabled={batchLoading}
+                  >
+                    {batchLoading ? "Retrying..." : "Retry All"}
+                  </Button>
+                </>
               )}
-              {!result.isDone && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCursor(result.nextCursor)}
-                >
-                  Next page
-                </Button>
-              )}
-              <span className="ml-auto text-xs text-muted-foreground">
-                {result.skills.length} shown
-              </span>
-            </div>
-          </>
-        )}
-      </CardContent>
-    </Card>
+              <DataTableToolbarSeparator />
+              <DataTableSearch placeholder="Search skills..." />
+            </DataTableToolbar>
+            <DataTableContent hoverable className=" md:max-w-none">
+              <DataTableHeader enableSorting />
+              <DataTableBody emptyState="No skills in this category." />
+            </DataTableContent>
+          </DataTable>
+
+          {/* Server-side pagination */}
+          <div className="mt-4 flex items-center gap-2">
+            {cursor && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCursor(undefined)}
+              >
+                First page
+              </Button>
+            )}
+            {!result.isDone && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCursor(result.nextCursor)}
+              >
+                Next page
+              </Button>
+            )}
+            <span className="ml-auto text-xs text-muted-foreground">
+              {result.skills.length} shown
+            </span>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
-function SkillRow({
+// ---------------------------------------------------------------------------
+// Skill Actions Cell (with probe state)
+// ---------------------------------------------------------------------------
+
+function SkillActions({
   skill,
   filter,
   onRetryFetch,
   onRetryDiscovery,
+  probeUrl,
 }: {
-  skill: {
-    _id: Id<"skills">;
-    source: string;
-    skillId: string;
-    name: string;
-    installs: number;
-    hasContentFetchError?: boolean;
-    skillMdUrl?: string;
-    needsDiscovery?: boolean;
-    needsContentFetch?: boolean;
-    contentFetchedAt?: number;
-    isDelisted?: boolean;
-  };
+  skill: SkillError;
   filter: ErrorFilter;
   onRetryFetch: (id: Id<"skills">) => void;
   onRetryDiscovery: (id: Id<"skills">) => void;
-}) {
-  const probeUrl = useAction(api.devStats.probeSkillUrl);
-  const [probeResult, setProbeResult] = useState<{
+  probeUrl: (args: { url: string }) => Promise<{
     status: number;
     ok: boolean;
     error?: string;
+  }>;
+}) {
+  const [probeResult, setProbeResult] = useState<{
+    status: number;
+    ok: boolean;
   } | null>(null);
   const [probing, setProbing] = useState(false);
 
   const hasUrl = skill.skillMdUrl && skill.skillMdUrl !== "";
-  const repoUrl = `https://github.com/${skill.source}`;
-  const skillMdLink = hasUrl ? skill.skillMdUrl! : null;
 
   const handleProbe = async () => {
-    if (!skillMdLink) return;
+    if (!hasUrl) return;
     setProbing(true);
     try {
-      const result = await probeUrl({ url: skillMdLink });
+      const result = await probeUrl({ url: skill.skillMdUrl! });
       setProbeResult(result);
     } catch {
-      setProbeResult({ status: 0, ok: false, error: "probe failed" });
+      setProbeResult({ status: 0, ok: false });
     } finally {
       setProbing(false);
     }
   };
 
   return (
-    <div className="flex items-center gap-3 px-3 py-2.5 text-sm">
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="truncate font-medium">{skill.name}</span>
-          <span className="shrink-0 text-xs text-muted-foreground">
-            {formatInstalls(skill.installs)}
-          </span>
-        </div>
-        <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
-          <a
-            href={repoUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="truncate underline decoration-muted-foreground/40 hover:decoration-muted-foreground"
-          >
-            {skill.source}/{skill.skillId}
-          </a>
-          {skillMdLink && (
-            <a
-              href={skillMdLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="shrink-0 underline decoration-muted-foreground/40 hover:decoration-muted-foreground"
-            >
-              SKILL.md
-            </a>
-          )}
-          {skill.contentFetchedAt && (
-            <span className="shrink-0">
-              fetched {timeAgo(skill.contentFetchedAt)}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Status badges */}
-      <div className="flex shrink-0 items-center gap-1.5">
-        {skill.hasContentFetchError && <Badge variant="warning">error</Badge>}
-        {skill.isDelisted && <Badge variant="secondary">delisted</Badge>}
-        {skill.skillMdUrl === "" && <Badge variant="outline">no url</Badge>}
-        {probeResult && (
-          <Badge variant={probeResult.ok ? "info" : "warning"}>
-            {probeResult.status || "err"}
-          </Badge>
-        )}
-      </div>
-
-      {/* Actions */}
-      <div className="flex shrink-0 items-center gap-1">
-        {skillMdLink && (
-          <Button
-            variant="ghost"
-            size="xs"
-            onClick={handleProbe}
-            disabled={probing}
-          >
-            {probing ? "..." : "Test"}
-          </Button>
-        )}
-        {(filter === "contentFetchError" || filter === "pendingContentFetch") &&
-          hasUrl && (
-            <Button
-              variant="outline"
-              size="xs"
-              onClick={() => onRetryFetch(skill._id)}
-            >
-              Retry Fetch
-            </Button>
-          )}
-        {(filter === "contentFetchError" || filter === "noUrl") && !hasUrl && (
+    <div className="flex items-center justify-end gap-1">
+      {probeResult && (
+        <Badge variant={probeResult.ok ? "info" : "warning"}>
+          {probeResult.status || "err"}
+        </Badge>
+      )}
+      {hasUrl && (
+        <Button
+          variant="ghost"
+          size="xs"
+          onClick={handleProbe}
+          disabled={probing}
+        >
+          {probing ? "..." : "Test"}
+        </Button>
+      )}
+      {(filter === "contentFetchError" || filter === "pendingContentFetch") &&
+        hasUrl && (
           <Button
             variant="outline"
             size="xs"
-            onClick={() => onRetryDiscovery(skill._id)}
+            onClick={() => onRetryFetch(skill._id)}
           >
-            Re-discover
+            Retry
           </Button>
         )}
-        {filter === "contentFetchError" && hasUrl && (
-          <Button
-            variant="ghost"
-            size="xs"
-            onClick={() => onRetryDiscovery(skill._id)}
-          >
-            Re-discover
-          </Button>
-        )}
-      </div>
+      {(filter === "contentFetchError" || filter === "noUrl") && !hasUrl && (
+        <Button
+          variant="outline"
+          size="xs"
+          onClick={() => onRetryDiscovery(skill._id)}
+        >
+          Re-discover
+        </Button>
+      )}
+      {filter === "contentFetchError" && hasUrl && (
+        <Button
+          variant="ghost"
+          size="xs"
+          onClick={() => onRetryDiscovery(skill._id)}
+        >
+          Re-discover
+        </Button>
+      )}
     </div>
   );
 }
