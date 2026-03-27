@@ -29,12 +29,14 @@ export default defineSchema({
     hasContentFetchError: v.optional(v.boolean()),
     lastSeenInApi: v.optional(v.number()),
     isDelisted: v.optional(v.boolean()),
+    discoveryFailCount: v.optional(v.number()),
   })
     .index("by_leaderboard", ["leaderboard"])
     .index("by_source_skillId", ["source", "skillId"])
     .index("by_needsDiscovery", ["needsDiscovery"])
     .index("by_needsContentFetch", ["needsContentFetch"])
     .index("by_isDelisted", ["isDelisted"])
+    .index("by_hasContentFetchError", ["hasContentFetchError"])
     .index("by_leaderboard_active", ["leaderboard", "isDelisted"])
     .searchIndex("search_name", { searchField: "name" }),
 
@@ -54,11 +56,16 @@ export default defineSchema({
     skillMdUrl: v.optional(v.string()),
     needsContentFetch: v.optional(v.boolean()),
     needsDiscovery: v.optional(v.boolean()),
+    hasContentFetchError: v.optional(v.boolean()),
+    hasSkillMdUrl: v.optional(v.boolean()),
+    discoveryFailCount: v.optional(v.number()),
   })
     .index("by_source_skillId", ["source", "skillId"])
     .index("by_isDelisted", ["isDelisted"])
     .index("by_needsContentFetch", ["needsContentFetch"])
-    .index("by_needsDiscovery", ["needsDiscovery"]),
+    .index("by_needsDiscovery", ["needsDiscovery"])
+    .index("by_hasContentFetchError", ["hasContentFetchError"])
+    .index("by_hasSkillMdUrl", ["hasSkillMdUrl"]),
 
   skillTechnologies: defineTable({
     skillId: v.id("skills"),
@@ -120,4 +127,14 @@ export default defineSchema({
   })
     .index("by_bundleId", ["bundleId"])
     .index("by_recentCopies", ["recentCopyCount"]),
+
+  syncStats: defineTable({
+    totalSkills: v.number(),
+    contentFetchErrors: v.number(),
+    pendingContentFetch: v.number(),
+    pendingDiscovery: v.number(),
+    noSkillMdUrl: v.number(),
+    delisted: v.number(),
+    recalculatedAt: v.number(),
+  }),
 });

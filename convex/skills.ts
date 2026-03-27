@@ -210,6 +210,13 @@ export const syncSkills = internalAction({
       internal.skills.backfillDiscoverUrls,
       {},
     );
+
+    // Recalculate dev dashboard stats after sync settles
+    await ctx.scheduler.runAfter(
+      20_000,
+      internal.devStats.recalculateStats,
+      {},
+    );
   },
 });
 
@@ -287,6 +294,9 @@ async function upsertSkillSummary(
     skillMdUrl?: string;
     needsContentFetch?: boolean;
     needsDiscovery?: boolean;
+    hasContentFetchError?: boolean;
+    hasSkillMdUrl?: boolean;
+    discoveryFailCount?: number;
   },
 ) {
   const existing = await ctx.db
@@ -320,6 +330,15 @@ async function upsertSkillSummary(
       ...(fields.needsDiscovery !== undefined && {
         needsDiscovery: fields.needsDiscovery,
       }),
+      ...(fields.hasContentFetchError !== undefined && {
+        hasContentFetchError: fields.hasContentFetchError,
+      }),
+      ...(fields.discoveryFailCount !== undefined && {
+        discoveryFailCount: fields.discoveryFailCount,
+      }),
+      ...(fields.hasSkillMdUrl !== undefined && {
+        hasSkillMdUrl: fields.hasSkillMdUrl,
+      }),
     });
   } else {
     await ctx.db.insert("skillSummaries", {
@@ -336,6 +355,9 @@ async function upsertSkillSummary(
       skillMdUrl: fields.skillMdUrl,
       needsContentFetch: fields.needsContentFetch,
       needsDiscovery: fields.needsDiscovery,
+      hasContentFetchError: fields.hasContentFetchError,
+      hasSkillMdUrl: fields.hasSkillMdUrl,
+      discoveryFailCount: fields.discoveryFailCount,
     });
   }
 }
@@ -415,6 +437,8 @@ export const upsertSkillsBatch = internalMutation({
             await ctx.db.patch(summary.skillDocId, {
               installs: skill.installs,
               lastSeenInApi: now,
+              // Reset discovery counter — active installs mean repo is worth re-checking
+              discoveryFailCount: 0,
             });
             // Patch junction table installs in-place (no delete+reinsert)
             const junctionEntries = await ctx.db
@@ -432,6 +456,7 @@ export const upsertSkillsBatch = internalMutation({
           await ctx.db.patch(summary._id, {
             lastSeenInApi: now,
             installs: skill.installs,
+            discoveryFailCount: 0,
           });
         } else {
           await ctx.db.patch(summary._id, { lastSeenInApi: now });
@@ -824,13 +849,15 @@ export const updateSkillMdUrl = internalMutation({
     const hasUrl = skillMdUrl !== "";
     const now = Date.now();
     const skill = await ctx.db.get(docId);
+    const newFailCount = hasUrl
+      ? 0
+      : ((skill?.discoveryFailCount ?? 0) + 1);
     await ctx.db.patch(docId, {
       skillMdUrl,
       needsDiscovery: false,
-      // If we found a URL, mark for content fetch; otherwise no
       needsContentFetch: hasUrl,
+      discoveryFailCount: newFailCount,
       ...(hasUrl && { hasContentFetchError: false }),
-      // Reset the timer so markStaleContent doesn't re-flag immediately
       ...(!hasUrl && { contentFetchedAt: now }),
     });
     // Sync summary
@@ -844,8 +871,10 @@ export const updateSkillMdUrl = internalMutation({
       if (summary) {
         await ctx.db.patch(summary._id, {
           skillMdUrl,
+          hasSkillMdUrl: hasUrl,
           needsDiscovery: false,
           needsContentFetch: hasUrl,
+          discoveryFailCount: newFailCount,
           ...(!hasUrl && { contentFetchedAt: now }),
         });
       }
@@ -945,10 +974,11 @@ export const markStaleContentBatch = internalMutation({
         !s.needsContentFetch &&
         now - (s.contentFetchedAt ?? 0) > CONTENT_REFRESH_INTERVAL_MS;
 
-      // URL re-discovery: empty URL, >7 days since last check
+      // URL re-discovery: empty URL, >7 days since last check, <3 failures
       const needsRediscovery =
         s.skillMdUrl === "" &&
         !s.needsDiscovery &&
+        (s.discoveryFailCount ?? 0) < 3 &&
         now - (s.contentFetchedAt ?? 0) > REDISCOVERY_INTERVAL_MS;
 
       if (contentStale) {
@@ -1196,7 +1226,9 @@ export const updateDescription = internalMutation({
       skillDocId: skillId,
       contentFetchedAt: now,
       needsContentFetch: false,
+      hasContentFetchError: false,
       skillMdUrl,
+      hasSkillMdUrl: !!skillMdUrl && skillMdUrl !== "",
     });
   },
 });
@@ -1259,7 +1291,9 @@ export const markContentFetchFailed = internalMutation({
         await ctx.db.patch(summary._id, {
           contentFetchedAt: now,
           needsContentFetch: false,
+          hasContentFetchError: true,
           skillMdUrl: "",
+          hasSkillMdUrl: false,
           needsDiscovery: true,
         });
       }
@@ -1274,6 +1308,7 @@ export const markContentFetchFailed = internalMutation({
       if (summary) {
         await ctx.db.patch(summary._id, {
           contentFetchedAt: now,
+          hasContentFetchError: true,
           needsContentFetch: false,
         });
       }
@@ -1649,6 +1684,9 @@ export const backfillSkillSummariesBatch = internalMutation({
         skillMdUrl: s.skillMdUrl,
         needsContentFetch: s.needsContentFetch,
         needsDiscovery: s.needsDiscovery,
+        hasContentFetchError: s.hasContentFetchError,
+        discoveryFailCount: s.discoveryFailCount,
+        hasSkillMdUrl: !!s.skillMdUrl && s.skillMdUrl !== "",
       });
     }
 

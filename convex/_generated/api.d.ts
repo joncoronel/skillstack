@@ -11,6 +11,7 @@
 import type * as bundleEvents from "../bundleEvents.js";
 import type * as bundles from "../bundles.js";
 import type * as crons from "../crons.js";
+import type * as devStats from "../devStats.js";
 import type * as github from "../github.js";
 import type * as githubCache from "../githubCache.js";
 import type * as http from "../http.js";
@@ -33,6 +34,7 @@ declare const fullApi: ApiFromModules<{
   bundleEvents: typeof bundleEvents;
   bundles: typeof bundles;
   crons: typeof crons;
+  devStats: typeof devStats;
   github: typeof github;
   githubCache: typeof githubCache;
   http: typeof http;
