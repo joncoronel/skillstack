@@ -3,9 +3,7 @@ import { verifySession } from "@/lib/auth";
 import { Skeleton } from "@/components/ui/cubby-ui/skeleton";
 import { DevDashboardContent } from "./dev-dashboard-content";
 
-export default async function DevDashboardPage() {
-  await verifySession();
-
+export default function DevDashboardPage() {
   return (
     <main className="mx-auto max-w-6xl px-4 pt-12 pb-20">
       <div className="mb-8">
@@ -18,10 +16,15 @@ export default async function DevDashboardPage() {
       </div>
 
       <Suspense fallback={<DashboardSkeleton />}>
-        <DevDashboardContent />
+        <DevLoader />
       </Suspense>
     </main>
   );
+}
+
+async function DevLoader() {
+  await verifySession();
+  return <DevDashboardContent />;
 }
 
 function DashboardSkeleton() {

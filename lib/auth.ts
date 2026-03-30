@@ -5,9 +5,15 @@ import { auth } from "@clerk/nextjs/server";
 import { ClerkOfflineError } from "@clerk/nextjs/errors";
 import { redirect } from "next/navigation";
 
+/**
+ * Cached wrapper around Clerk's auth().
+ * Dedupes multiple auth() calls within the same request/render pass.
+ */
+export const getAuth = cache(() => auth());
+
 export async function getAuthToken() {
   try {
-    return (await (await auth()).getToken({ template: "convex" })) ?? undefined;
+    return (await (await getAuth()).getToken({ template: "convex" })) ?? undefined;
   } catch (error) {
     if (error instanceof ClerkOfflineError) return undefined;
     throw error;
@@ -20,7 +26,7 @@ export async function getAuthToken() {
  * Cached per request to avoid duplicate auth checks in the same render pass.
  */
 export const verifySession = cache(async () => {
-  const { userId } = await auth();
+  const { userId } = await getAuth();
 
   if (!userId) {
     redirect("/sign-in");

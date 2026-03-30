@@ -1,10 +1,11 @@
 import { Suspense } from "react";
+import { preloadQuery } from "convex/nextjs";
+import { api } from "@/convex/_generated/api";
+import { verifySession, getAuthToken } from "@/lib/auth";
 import { Skeleton } from "@/components/ui/cubby-ui/skeleton";
-import { DashboardBundles } from "./dashboard-bundles";
-import { verifySession } from "@/lib/auth";
+import { DashboardContent } from "./dashboard-content";
 
-export default async function DashboardPage() {
-  await verifySession();
+export default function DashboardPage() {
   return (
     <main className="mx-auto max-w-5xl px-4 pt-12 pb-20">
       <div className="mb-8">
@@ -15,10 +16,20 @@ export default async function DashboardPage() {
       </div>
 
       <Suspense fallback={<BundleGridSkeleton />}>
-        <DashboardBundles />
+        <DashboardLoader />
       </Suspense>
     </main>
   );
+}
+
+async function DashboardLoader() {
+  const [, token] = await Promise.all([verifySession(), getAuthToken()]);
+  const preloadedBundles = await preloadQuery(
+    api.bundles.listByUser,
+    {},
+    { token },
+  );
+  return <DashboardContent preloadedBundles={preloadedBundles} />;
 }
 
 function BundleGridSkeleton() {

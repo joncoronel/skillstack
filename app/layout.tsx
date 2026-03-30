@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono, Bricolage_Grotesque } from "next/font/google";
 import { Providers } from "./providers";
 import "./globals.css";
+import { Suspense } from "react";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,13 +33,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} ${bricolageGrotesque.variable} font-sans antialiased`}
-      >
-        <div className="root">
-          <Providers>{children}</Providers>
-        </div>
-      </body>
+      <Suspense>
+        <body
+          className={`${geistSans.variable} ${geistMono.variable} ${bricolageGrotesque.variable} font-sans antialiased`}
+        >
+          <div className="root">
+            <Providers>{children}</Providers>
+          </div>
+        </body>
+      </Suspense>
     </html>
   );
 }

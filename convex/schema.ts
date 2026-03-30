@@ -102,7 +102,11 @@ export default defineSchema({
   })
     .index("by_userId", ["userId"])
     .index("by_urlId", ["urlId"])
-    .index("by_public_createdAt", ["isPublic", "createdAt"]),
+    .index("by_public_createdAt", ["isPublic", "createdAt"])
+    .searchIndex("search_name", {
+      searchField: "name",
+      filterFields: ["isPublic"],
+    }),
 
   bundleEvents: defineTable({
     bundleId: v.id("bundles"),
