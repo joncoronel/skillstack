@@ -223,7 +223,7 @@ export const verifySession = cache(async () => {
 
 ### Clerk middleware
 
-`proxy.ts` — Route-level auth protection:
+`proxy.ts` — Route-level auth protection. Define public routes and protect everything else:
 
 ```ts
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
@@ -232,17 +232,15 @@ const isPublicRoute = createRouteMatcher([
   "/",
   "/sign-in", "/sign-in/sso-callback",
   "/sign-up", "/sign-up/sso-callback",
-  "/stack/(.*)",
-  "/explore",
-  "/compare",
   "/pricing",
-  "/:org/:repo/:skillId",
+  // Add your public routes here
 ]);
 
 const isAuthRoute = createRouteMatcher(["/sign-in", "/sign-up"]);
 
 export default clerkMiddleware(async (auth, request) => {
   const { userId } = await auth();
+  // Redirect signed-in users away from auth pages
   if (isAuthRoute(request) && userId) {
     return Response.redirect(new URL("/", request.url));
   }
@@ -271,32 +269,32 @@ export default clerkMiddleware(async (auth, request) => {
 **Example: protected page with all three layers**
 
 ```tsx
-// proxy.ts — /dashboard is NOT in public routes, so middleware blocks unauthenticated users
+// proxy.ts — /protected-page is NOT in public routes, so middleware blocks unauthenticated users
 
-// app/(main)/dashboard/page.tsx — defense-in-depth with PPR
-export default function DashboardPage() {
+// page.tsx — defense-in-depth with PPR
+export default function ProtectedPage() {
   return (
     <main>
-      <h1>Your bundles</h1> {/* Static shell */}
-      <Suspense fallback={<BundleGridSkeleton />}>
-        <DashboardLoader />
+      <h1>Your items</h1> {/* Static shell */}
+      <Suspense fallback={<ListSkeleton />}>
+        <PageLoader />
       </Suspense>
     </main>
   );
 }
 
-async function DashboardLoader() {
+async function PageLoader() {
   const [, token] = await Promise.all([verifySession(), getAuthToken()]);
-  const preloadedBundles = await preloadQuery(api.bundles.listByUser, {}, { token });
-  return <DashboardContent preloadedBundles={preloadedBundles} />;
+  const preloaded = await preloadQuery(api.items.listByUser, {}, { token });
+  return <PageContent preloaded={preloaded} />;
 }
 
-// convex/bundles.ts — data-level protection
+// convex/items.ts — data-level protection
 export const listByUser = query({
   handler: async (ctx) => {
     const user = await getCurrentUser(ctx);
     if (!user) return [];
-    return ctx.db.query("bundles")
+    return ctx.db.query("items")
       .withIndex("by_userId", (q) => q.eq("userId", user._id))
       .collect();
   },
@@ -465,22 +463,22 @@ export function useUserPlan() {
 The core PPR pattern. The page component is sync (renders the static shell), an async loader inside Suspense preloads data on the server, and the client hydrates it into a live subscription.
 
 ```tsx
-// app/(main)/dashboard/page.tsx
-export default function DashboardPage() {
+// page.tsx — server component
+export default function ProtectedPage() {
   return (
     <main>
-      <h1>Your bundles</h1>                    {/* Static shell */}
-      <Suspense fallback={<BundleGridSkeleton />}>
-        <DashboardLoader />                     {/* Streams when ready */}
+      <h1>Your items</h1>                       {/* Static shell */}
+      <Suspense fallback={<ListSkeleton />}>
+        <PageLoader />                           {/* Streams when ready */}
       </Suspense>
     </main>
   );
 }
 
-async function DashboardLoader() {
+async function PageLoader() {
   const [, token] = await Promise.all([verifySession(), getAuthToken()]);
-  const preloadedBundles = await preloadQuery(api.bundles.listByUser, {}, { token });
-  return <DashboardContent preloadedBundles={preloadedBundles} />;
+  const preloaded = await preloadQuery(api.items.listByUser, {}, { token });
+  return <PageContent preloaded={preloaded} />;
 }
 ```
 
@@ -488,13 +486,13 @@ async function DashboardLoader() {
 // Client component — data is instant, then subscribes for real-time updates
 "use client";
 
-export function DashboardContent({
-  preloadedBundles,
+export function PageContent({
+  preloaded,
 }: {
-  preloadedBundles: Preloaded<typeof api.bundles.listByUser>;
+  preloaded: Preloaded<typeof api.items.listByUser>;
 }) {
-  const bundles = usePreloadedQuery(preloadedBundles);
-  // bundles is immediately available, and auto-updates via WebSocket
+  const items = usePreloadedQuery(preloaded);
+  // items is immediately available, and auto-updates via WebSocket
 }
 ```
 
@@ -503,16 +501,16 @@ export function DashboardContent({
 For pages with stable data that don't need auth, use `"use cache"` + `cacheLife()` instead of Suspense. Replaces the old `force-static` + `revalidate` config.
 
 ```tsx
-// app/(main)/[org]/[repo]/[skillId]/page.tsx
-export default async function SkillPage({ params }) {
+// page.tsx — cached public page
+export default async function CachedPage({ params }) {
   "use cache";
   cacheLife("days");
 
-  const { org, repo, skillId } = await params;
-  const skill = await getSkill(`${org}/${repo}`, skillId);
-  if (!skill) notFound();
+  const { id } = await params;
+  const item = await fetchQuery(api.items.getById, { id });
+  if (!item) notFound();
 
-  return <SkillPageContent skill={skill} />;
+  return <ItemPageContent item={item} />;
 }
 ```
 
@@ -538,24 +536,26 @@ export async function GET() {
 For searching Convex data, define a search index in the schema and use `withSearchIndex` in queries:
 
 ```ts
-// convex/schema.ts
-bundles: defineTable({ ... })
-  .searchIndex("search_name", {
-    searchField: "name",
-    filterFields: ["isPublic"],
-  }),
+// convex/schema.ts — define search index on the table
+items: defineTable({
+  name: v.string(),
+  isPublic: v.boolean(),
+  // ...
+}).searchIndex("search_name", {
+  searchField: "name",
+  filterFields: ["isPublic"],
+}),
 
-// convex/bundles.ts
+// convex/items.ts — query using the search index
 export const searchPublic = query({
   args: { query: v.string(), limit: v.optional(v.number()) },
   handler: async (ctx, { query, limit = 20 }) => {
-    const results = await ctx.db
-      .query("bundles")
+    return ctx.db
+      .query("items")
       .withSearchIndex("search_name", (q) =>
         q.search("name", query).eq("isPublic", true),
       )
       .take(limit);
-    return Promise.all(results.map((bundle) => enrichBundle(ctx, bundle)));
   },
 });
 ```
@@ -568,11 +568,11 @@ For queries that depend on client-side state (e.g. user selections, search filte
 import { useQuery } from "@tanstack/react-query";
 import { convexQuery } from "@convex-dev/react-query";
 
-const { data: skills, isPending } = useQuery(
+const { data, isPending } = useQuery(
   convexQuery(
-    api.skills.listByTechnologies,
-    selectedTechnologies.length > 0
-      ? { technologies: selectedTechnologies }
+    api.items.listByCategory,
+    selectedCategories.length > 0
+      ? { categories: selectedCategories }
       : "skip",
   ),
 );
@@ -581,15 +581,15 @@ const { data: skills, isPending } = useQuery(
 ### Pattern: Mutations with optimistic updates
 
 ```tsx
-const deleteBundle = useMutation(
-  api.bundles.deleteBundle,
-).withOptimisticUpdate((localStore, { bundleId }) => {
-  const current = localStore.getQuery(api.bundles.listByUser, {});
+const deleteItem = useMutation(
+  api.items.remove,
+).withOptimisticUpdate((localStore, { itemId }) => {
+  const current = localStore.getQuery(api.items.listByUser, {});
   if (current !== undefined) {
     localStore.setQuery(
-      api.bundles.listByUser,
+      api.items.listByUser,
       {},
-      current.filter((b) => b._id !== bundleId),
+      current.filter((item) => item._id !== itemId),
     );
   }
 });
@@ -622,9 +622,9 @@ getUserPlan() returns "pro"
 
 `convex/lib/plans.ts` — Server-side plan logic:
 
-- `getUserPlan(ctx)` — calls `polar.getCurrentSubscription()`, maps `productKey` to `"free"` or `"pro"`
-- `getPlanLimits(plan)` — returns feature limits per plan (bundle count, private bundles, etc.)
-- `FEATURE_GATING_ENABLED` — master switch. When `false` (MVP), all users get pro-level access. Flip to `true` to enforce limits.
+- `getUserPlan(ctx)` — calls `polar.getCurrentSubscription()`, maps `productKey` to a plan (e.g., `"free"` or `"pro"`)
+- `getPlanLimits(plan)` — returns feature limits per plan
+- `FEATURE_GATING_ENABLED` — master switch. When `false` (MVP), all users get full access. Flip to `true` to enforce limits.
 
 `convex/plans.ts` — exposes `currentPlan` query to the frontend.
 
@@ -632,7 +632,10 @@ getUserPlan() returns "pro"
 
 ### Feature gating
 
-Two-layer enforcement: server-side mutations/actions reject unauthorized operations, client-side UI disables controls and shows upgrade prompts.
+Two-layer enforcement:
+
+1. **Server-side** — Convex mutations/actions check plan limits before allowing operations (e.g., max item count, premium features)
+2. **Client-side** — UI disables controls, shows upgrade prompts, and uses `useUserPlan()` for gate checks
 
 ### Webhook routes
 
@@ -669,16 +672,17 @@ The loader has negligible cost — it parses a URL string with no network reques
 **Server side** — `lib/search-params.server.ts`:
 
 ```tsx
-export const loadHomeSearchParams = createLoader({
+// lib/search-params.server.ts
+export const loadPageSearchParams = createLoader({
   q: parseAsString.withDefault(""),
   tab: parseAsStringLiteral(["browse", "search"] as const).withDefault("browse"),
-  tech: parseAsArrayOf(parseAsString).withDefault([]),
+  filters: parseAsArrayOf(parseAsString).withDefault([]),
 });
 
-// app/(main)/page.tsx
-export default async function Home({ searchParams }) {
-  await loadHomeSearchParams(searchParams);
-  return <HomeContent />;
+// page.tsx
+export default async function Page({ searchParams }) {
+  await loadPageSearchParams(searchParams);
+  return <PageContent />;
 }
 ```
 
@@ -690,13 +694,13 @@ Parsers are defined separately and used with `useQueryState()` for reactive URL 
 const [tab, setTab] = useQueryState("tab", tabParser);
 ```
 
-### Current usage
+### When is the server loader required?
 
-| Page | Params | Server loader needed for `preloadQuery`? |
-| ---- | ------ | ------- |
-| Home (`/`) | `tab`, `q`, `tech` | No (no preloadQuery), but used for SSR correctness |
-| Explore (`/explore`) | `q` | Yes — `preloadQuery` for trending bundles requires prior `searchParams` access |
-| Settings (`/settings/custom`) | `tab` | No (no preloadQuery), page already dynamic from auth |
+| Scenario | Server loader needed? |
+| -------- | --------------------- |
+| Page uses `preloadQuery` after nuqs params | **Yes** — `preloadQuery` uses `Math.random()` which requires prior `searchParams` access |
+| Page needs SSR HTML to match URL state | **Recommended** — prevents flash of default values on initial render |
+| Page is already dynamic from auth and doesn't use `preloadQuery` | **Optional** — page works without it, loader just improves SSR correctness |
 
 ---
 
@@ -704,18 +708,18 @@ const [tab, setTab] = useQueryState("tab", tabParser);
 
 What happens when a user visits an authenticated page with `cacheComponents` enabled:
 
-```
+```text
 1. CDN / Edge
    └─ Static shell served immediately (prerendered HTML: <html>, <head>, headings, skeletons)
    └─ Browser starts parsing HTML, loading scripts/fonts
 
 2. Middleware (proxy.ts)
    └─ Clerk checks session cookie
-   └─ /dashboard is not public → auth.protect()
+   └─ Protected route → auth.protect()
    └─ If no session → redirect to Clerk sign-in
 
 3. Layout streams
-   └─ AppHeader's static parts (logo) already in shell
+   └─ Header static parts (logo) already in shell
    └─ HeaderAuth Suspense resolves → getAuth() reads cookie
    └─ Signed in → <UserMenu /> streams in
    └─ Nav links stream in (usePathname resolution)
@@ -723,10 +727,10 @@ What happens when a user visits an authenticated page with `cacheComponents` ena
 4. Page streams
    └─ Static content (headings) already in shell
    └─ Suspense boundary's skeleton already in shell
-   └─ DashboardLoader resolves:
+   └─ PageLoader resolves:
       └─ verifySession() + getAuthToken() in parallel
       └─ preloadQuery() fetches data with auth token
-      └─ <DashboardContent> streams in replacing skeleton
+      └─ <PageContent> streams in replacing skeleton
 
 5. Client hydration
    └─ ConvexProviderWithClerk fetches auth token via useAuth
@@ -765,31 +769,27 @@ The Convex `users` table contains `name`, `email`, `image` — a denormalized co
 
 ---
 
-## File Structure Reference
+## Recommended File Structure
 
 ```text
 lib/
   auth.ts                   # Server-side auth helpers (getAuth, getAuthToken, verifySession)
-  plans.ts                  # Frontend plan display data (names, prices, features)
-  search-params.ts          # nuqs client-side parsers (tab, tech, search, settings tab)
+  search-params.ts          # nuqs client-side parsers
   search-params.server.ts   # nuqs server-side loaders (createLoader)
-  utils.ts                  # cn() helper, getClerkErrorMessage()
+  utils.ts                  # Shared utilities (cn, error helpers)
 
 hooks/
-  use-user-plan.ts          # useUserPlan() hook — skips query for unauth users, handles auth loading
+  use-user-plan.ts          # Plan/limits hook — skips query for unauth, handles auth loading
 
 convex/
   convex.config.ts          # App config, registers @convex-dev/polar component
   auth.config.ts            # Clerk JWT issuer domain config
-  http.ts                   # Webhook handlers (Clerk + Polar)
-  schema.ts                 # Database schema (users, skills, bundles, search indexes)
+  http.ts                   # Webhook handlers (Clerk user sync + Polar billing)
+  schema.ts                 # Database schema with indexes and search indexes
   users.ts                  # User CRUD, getCurrentUser/getCurrentUserOrThrow
-  bundles.ts                # Bundle queries/mutations/search with auth
-  polar.ts                  # Polar client, getUserInfo, product config, API exports
+  polar.ts                  # Polar client config, product mapping, API exports
   plans.ts                  # currentPlan query (exposes plan to frontend)
   subscriptions.ts          # Subscription details query (billing UI)
-  skills.ts                 # Skill sync pipeline, queries
-  crons.ts                  # Daily skill sync at 06:00 UTC
   lib/
     plans.ts                # getUserPlan(), PlanLimits, FEATURE_GATING_ENABLED
 
@@ -798,43 +798,22 @@ app/
   providers.tsx             # Provider chain (NuqsAdapter → Clerk → Convex → Theme → Toast)
   ConvexClientProvider.tsx  # ConvexProviderWithClerk + TanStack Query setup
   (main)/
-    layout.tsx              # Main layout — renders AppHeader + children
-    page.tsx                # Home — async, loads searchParams, renders HomeContent
-    explore/
-      page.tsx              # Explore — Suspense + preloadQuery for trending bundles
-      explore-content.tsx   # Client — trending (preloaded) + search results (useQuery)
-    dashboard/
-      page.tsx              # Dashboard — Suspense + Promise.all(verifySession, getAuthToken)
-      dashboard-content.tsx # Client — usePreloadedQuery + mutations
-    stack/[id]/
-      page.tsx              # Bundle view — Suspense + parallel preloads
-      bundle-view.tsx       # Client — 2x usePreloadedQuery
-    dev/
-      page.tsx              # Dev dashboard — Suspense + verifySession
-    settings/
-      page.tsx              # Clerk UserProfile — Suspense + verifySession
-      custom/
-        page.tsx            # Custom settings — async, sessions promise
-    [org]/[repo]/[skillId]/
-      page.tsx              # Skill detail — "use cache" + cacheLife("days")
-    pricing/
-      page.tsx              # Static pricing page
-    compare/
-      page.tsx              # Compare — Suspense + client-side fetching
+    layout.tsx              # App layout — renders header + children
+    page.tsx                # Home — async with nuqs loader
+    [protected-route]/
+      page.tsx              # Suspense + loader pattern (verifySession + preloadQuery)
+    [cached-route]/
+      page.tsx              # "use cache" + cacheLife for stable public data
+    [static-route]/
+      page.tsx              # Fully static, no dynamic access
 
 components/
   app-header.tsx            # Server component — static shell + Suspense per sub-component
-  header-auth.tsx           # Server component — getAuth() for signed-in/signed-out decision
-  header-nav.tsx            # Client component — desktop nav links with usePathname
+  header-auth.tsx           # Async server component — getAuth() for signed-in/signed-out
+  header-nav.tsx            # Client component — nav links with usePathname
   mobile-nav.tsx            # Client component — hamburger + drawer
   auth/
     user-menu.tsx           # Client component — useUser() for data, useClerk() for signOut
-    settings/
-      billing-tab.tsx       # Billing tab — plan info, subscription details, manage link
-  bundle-bar.tsx            # Uses useConvexAuth() for auth state
-  explore/
-    trending-bundles.tsx    # Client — usePreloadedQuery for server-preloaded data
-    fork-bundle-button.tsx  # Fork button with bundle limit check
 
 proxy.ts                    # Clerk middleware (route protection)
 next.config.ts              # cacheComponents: true
