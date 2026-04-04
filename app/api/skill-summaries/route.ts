@@ -17,7 +17,7 @@ async function getSkillSearchIndex() {
     const page = (await fetchQuery(api.skills.listAllSkillSummaries, {
       paginationOpts: { numItems: 8000, cursor },
     })) as PaginationResult<Record<string, unknown>>;
-    skills.push(...page.page);
+    skills.push(...page.page.filter((s) => !s.isDelisted));
     isDone = page.isDone;
     cursor = page.continueCursor;
   }

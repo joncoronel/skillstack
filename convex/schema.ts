@@ -138,6 +138,7 @@ export default defineSchema({
     pendingContentFetch: v.number(),
     pendingDiscovery: v.number(),
     noSkillMdUrl: v.number(),
+    noUrlExhausted: v.optional(v.number()),
     delisted: v.number(),
     recalculatedAt: v.number(),
   }),

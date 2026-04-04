@@ -49,6 +49,7 @@ export const getSyncStats = query({
         pendingContentFetch: 0,
         pendingDiscovery: 0,
         noSkillMdUrl: 0,
+        noUrlExhausted: 0,
         delisted: 0,
         recalculatedAt: 0,
       }
@@ -72,6 +73,7 @@ export const recalculateStatsBatch = internalMutation({
     let pendingContentFetch = 0;
     let pendingDiscovery = 0;
     let noSkillMdUrl = 0;
+    let noUrlExhausted = 0;
     let delisted = 0;
 
     for (const s of result.page) {
@@ -79,7 +81,10 @@ export const recalculateStatsBatch = internalMutation({
       if (s.hasContentFetchError) contentFetchErrors++;
       if (s.needsContentFetch) pendingContentFetch++;
       if (s.needsDiscovery) pendingDiscovery++;
-      if (s.hasSkillMdUrl === false) noSkillMdUrl++;
+      if (s.hasSkillMdUrl === false) {
+        noSkillMdUrl++;
+        if ((s.discoveryFailCount ?? 0) >= 3) noUrlExhausted++;
+      }
       if (s.isDelisted) delisted++;
     }
 
@@ -89,6 +94,7 @@ export const recalculateStatsBatch = internalMutation({
       pendingContentFetch,
       pendingDiscovery,
       noSkillMdUrl,
+      noUrlExhausted,
       delisted,
       nextCursor: result.continueCursor,
       isDone: result.isDone,
@@ -107,6 +113,7 @@ export const recalculateStats = internalAction({
       pendingContentFetch: 0,
       pendingDiscovery: 0,
       noSkillMdUrl: 0,
+      noUrlExhausted: 0,
       delisted: 0,
     };
 
@@ -117,6 +124,7 @@ export const recalculateStats = internalAction({
         pendingContentFetch: number;
         pendingDiscovery: number;
         noSkillMdUrl: number;
+        noUrlExhausted: number;
         delisted: number;
         nextCursor: string;
         isDone: boolean;
@@ -129,6 +137,7 @@ export const recalculateStats = internalAction({
       totals.pendingContentFetch += result.pendingContentFetch;
       totals.pendingDiscovery += result.pendingDiscovery;
       totals.noSkillMdUrl += result.noSkillMdUrl;
+      totals.noUrlExhausted += result.noUrlExhausted;
       totals.delisted += result.delisted;
 
       cursor = result.nextCursor;
@@ -152,6 +161,7 @@ export const upsertStats = internalMutation({
     pendingContentFetch: v.number(),
     pendingDiscovery: v.number(),
     noSkillMdUrl: v.number(),
+    noUrlExhausted: v.number(),
     delisted: v.number(),
     recalculatedAt: v.number(),
   },
@@ -169,7 +179,8 @@ const errorFilterValidator = v.union(
   v.literal("contentFetchError"),
   v.literal("pendingContentFetch"),
   v.literal("pendingDiscovery"),
-  v.literal("noUrl"),
+  v.literal("noUrlRetrying"),
+  v.literal("noUrlExhausted"),
   v.literal("delisted"),
 );
 
@@ -199,6 +210,7 @@ export const listSkillsWithErrors = query({
         needsContentFetch: s.needsContentFetch as boolean | undefined,
         contentFetchedAt: s.contentFetchedAt as number | undefined,
         isDelisted: s.isDelisted as boolean | undefined,
+        discoveryFailCount: s.discoveryFailCount as number | undefined,
       };
     }
 
@@ -244,12 +256,26 @@ export const listSkillsWithErrors = query({
         isDone = result.isDone;
         break;
       }
-      case "noUrl": {
+      case "noUrlRetrying": {
         const result = await ctx.db
           .query("skillSummaries")
           .withIndex("by_hasSkillMdUrl", (q) => q.eq("hasSkillMdUrl", false))
           .paginate(paginationOpts);
-        skills = result.page.filter((s) => s.skillDocId).map(mapSummary);
+        skills = result.page
+          .filter((s) => s.skillDocId && (s.discoveryFailCount ?? 0) < 3)
+          .map(mapSummary);
+        nextCursor = result.continueCursor;
+        isDone = result.isDone;
+        break;
+      }
+      case "noUrlExhausted": {
+        const result = await ctx.db
+          .query("skillSummaries")
+          .withIndex("by_hasSkillMdUrl", (q) => q.eq("hasSkillMdUrl", false))
+          .paginate(paginationOpts);
+        skills = result.page
+          .filter((s) => s.skillDocId && (s.discoveryFailCount ?? 0) >= 3)
+          .map(mapSummary);
         nextCursor = result.continueCursor;
         isDone = result.isDone;
         break;
@@ -338,7 +364,13 @@ export const retryDiscovery = internalMutation({
 });
 
 export const retryBatch = internalMutation({
-  args: { filter: v.union(v.literal("contentFetchError"), v.literal("noUrl")) },
+  args: {
+    filter: v.union(
+      v.literal("contentFetchError"),
+      v.literal("noUrlRetrying"),
+      v.literal("noUrlExhausted"),
+    ),
+  },
   handler: async (ctx, { filter }) => {
     let count = 0;
 
@@ -351,20 +383,25 @@ export const retryBatch = internalMutation({
         .take(200);
 
       for (const summary of summaries) {
+        const hasUrl = summary.skillMdUrl && summary.skillMdUrl !== "";
         if (summary.skillDocId) {
           await ctx.db.patch(summary.skillDocId, {
-            needsContentFetch: true,
             hasContentFetchError: false,
             contentFetchFailCount: 0,
+            ...(hasUrl
+              ? { needsContentFetch: true }
+              : { needsDiscovery: true, discoveryFailCount: 0 }),
           });
         }
         await ctx.db.patch(summary._id, {
-          needsContentFetch: true,
           hasContentFetchError: false,
+          ...(hasUrl
+            ? { needsContentFetch: true }
+            : { needsDiscovery: true, discoveryFailCount: 0 }),
         });
         count++;
       }
-    } else if (filter === "noUrl") {
+    } else if (filter === "noUrlRetrying" || filter === "noUrlExhausted") {
       const summaries = await ctx.db
         .query("skillSummaries")
         .withIndex("by_hasSkillMdUrl", (q) => q.eq("hasSkillMdUrl", false))
@@ -416,7 +453,13 @@ export const callRetryDiscovery = action({
 });
 
 export const callRetryBatch = action({
-  args: { filter: v.union(v.literal("contentFetchError"), v.literal("noUrl")) },
+  args: {
+    filter: v.union(
+      v.literal("contentFetchError"),
+      v.literal("noUrlRetrying"),
+      v.literal("noUrlExhausted"),
+    ),
+  },
   handler: async (ctx, { filter }): Promise<{ count: number }> => {
     await assertAdmin(ctx);
     return await ctx.runMutation(internal.devStats.retryBatch, { filter });
@@ -462,6 +505,66 @@ export const triggerBackfill = action({
         break;
     }
     return { scheduled: true, type };
+  },
+});
+
+// One-time cleanup: fix skills stuck with needsContentFetch but no URL
+export const cleanupOrphanedFetchFlags = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    let fixed = 0;
+    let cursor: string | undefined;
+    let isDone = false;
+
+    while (!isDone) {
+      const paginationOpts = cursor
+        ? { numItems: 200, cursor }
+        : { numItems: 200, cursor: null };
+      const result = await ctx.db
+        .query("skillSummaries")
+        .withIndex("by_needsContentFetch", (q) =>
+          q.eq("needsContentFetch", true),
+        )
+        .paginate(paginationOpts);
+
+      for (const s of result.page) {
+        const hasUrl = s.skillMdUrl && s.skillMdUrl !== "";
+        if (!hasUrl) {
+          if (s.skillDocId) {
+            await ctx.db.patch(s.skillDocId, {
+              needsContentFetch: false,
+              needsDiscovery: true,
+              discoveryFailCount: 0,
+              hasContentFetchError: false,
+            });
+          }
+          await ctx.db.patch(s._id, {
+            needsContentFetch: false,
+            needsDiscovery: true,
+            discoveryFailCount: 0,
+            hasContentFetchError: false,
+          });
+          fixed++;
+        }
+      }
+
+      cursor = result.continueCursor;
+      isDone = result.isDone;
+    }
+
+    console.log(`Cleaned up ${fixed} orphaned fetch flags`);
+    return { fixed };
+  },
+});
+
+export const callCleanupOrphanedFetchFlags = action({
+  args: {},
+  handler: async (ctx): Promise<{ fixed: number }> => {
+    await assertAdmin(ctx);
+    return await ctx.runMutation(
+      internal.devStats.cleanupOrphanedFetchFlags,
+      {},
+    );
   },
 });
 
