@@ -187,13 +187,9 @@ const errorFilterValidator = v.union(
 export const listSkillsWithErrors = query({
   args: {
     filter: errorFilterValidator,
-    cursor: v.optional(v.string()),
   },
-  handler: async (ctx, { filter, cursor }) => {
+  handler: async (ctx, { filter }) => {
     await assertAdmin(ctx);
-    const paginationOpts = cursor
-      ? { numItems: 50, cursor }
-      : { numItems: 50, cursor: null };
 
     // All queries use summaries (~200 bytes) instead of skills (~30KB)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -216,87 +212,69 @@ export const listSkillsWithErrors = query({
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let skills: any[];
-    let nextCursor: string;
-    let isDone: boolean;
 
     switch (filter) {
       case "contentFetchError": {
-        const result = await ctx.db
+        const results = await ctx.db
           .query("skillSummaries")
           .withIndex("by_hasContentFetchError", (q) =>
             q.eq("hasContentFetchError", true),
           )
-          .paginate(paginationOpts);
-        skills = result.page.filter((s) => s.skillDocId).map(mapSummary);
-        nextCursor = result.continueCursor;
-        isDone = result.isDone;
+          .collect();
+        skills = results.filter((s) => s.skillDocId).map(mapSummary);
         break;
       }
       case "pendingContentFetch": {
-        const result = await ctx.db
+        const results = await ctx.db
           .query("skillSummaries")
           .withIndex("by_needsContentFetch", (q) =>
             q.eq("needsContentFetch", true),
           )
-          .paginate(paginationOpts);
-        skills = result.page.filter((s) => s.skillDocId).map(mapSummary);
-        nextCursor = result.continueCursor;
-        isDone = result.isDone;
+          .collect();
+        skills = results.filter((s) => s.skillDocId).map(mapSummary);
         break;
       }
       case "pendingDiscovery": {
-        const result = await ctx.db
+        const results = await ctx.db
           .query("skillSummaries")
           .withIndex("by_needsDiscovery", (q) =>
             q.eq("needsDiscovery", true),
           )
-          .paginate(paginationOpts);
-        skills = result.page.filter((s) => s.skillDocId).map(mapSummary);
-        nextCursor = result.continueCursor;
-        isDone = result.isDone;
+          .collect();
+        skills = results.filter((s) => s.skillDocId).map(mapSummary);
         break;
       }
       case "noUrlRetrying": {
-        const result = await ctx.db
+        const results = await ctx.db
           .query("skillSummaries")
           .withIndex("by_hasSkillMdUrl", (q) => q.eq("hasSkillMdUrl", false))
-          .paginate(paginationOpts);
-        skills = result.page
+          .collect();
+        skills = results
           .filter((s) => s.skillDocId && (s.discoveryFailCount ?? 0) < 3)
           .map(mapSummary);
-        nextCursor = result.continueCursor;
-        isDone = result.isDone;
         break;
       }
       case "noUrlExhausted": {
-        const result = await ctx.db
+        const results = await ctx.db
           .query("skillSummaries")
           .withIndex("by_hasSkillMdUrl", (q) => q.eq("hasSkillMdUrl", false))
-          .paginate(paginationOpts);
-        skills = result.page
+          .collect();
+        skills = results
           .filter((s) => s.skillDocId && (s.discoveryFailCount ?? 0) >= 3)
           .map(mapSummary);
-        nextCursor = result.continueCursor;
-        isDone = result.isDone;
         break;
       }
       case "delisted": {
-        const result = await ctx.db
+        const results = await ctx.db
           .query("skillSummaries")
           .withIndex("by_isDelisted", (q) => q.eq("isDelisted", true))
-          .paginate(paginationOpts);
-        skills = result.page.filter((s) => s.skillDocId).map(mapSummary);
-        nextCursor = result.continueCursor;
-        isDone = result.isDone;
+          .collect();
+        skills = results.filter((s) => s.skillDocId).map(mapSummary);
         break;
       }
     }
 
-    return {
-      skills,
-      nextCursor,
-      isDone,
-    };
+    return { skills };
   },
 });
 

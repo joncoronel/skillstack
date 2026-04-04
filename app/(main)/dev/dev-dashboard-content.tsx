@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery, useAction } from "convex/react";
+import { useQuery } from "@tanstack/react-query";
+import { convexQuery } from "@convex-dev/react-query";
+import { useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import {
@@ -12,6 +14,7 @@ import {
 } from "@/components/ui/cubby-ui/card";
 import {
   type ColumnDef,
+  type PaginationState,
   DataTable,
   DataTableToolbar,
   DataTableToolbarSeparator,
@@ -19,6 +22,7 @@ import {
   DataTableContent,
   DataTableHeader,
   DataTableBody,
+  DataTablePagination,
 } from "@/components/ui/cubby-ui/data-table/data-table";
 import {
   Select,
@@ -79,8 +83,11 @@ type SkillError = {
 // ---------------------------------------------------------------------------
 
 export function DevDashboardContent() {
-  const admin = useQuery(api.devStats.isAdmin, {});
-  const syncStats = useQuery(api.devStats.getSyncStats, admin ? {} : "skip");
+  const { data: admin } = useQuery(convexQuery(api.devStats.isAdmin, {}));
+  const { data: syncStats } = useQuery({
+    ...convexQuery(api.devStats.getSyncStats, {}),
+    enabled: !!admin,
+  });
 
   const [activeFilter, setActiveFilter] =
     useState<ErrorFilter>("contentFetchError");
@@ -232,12 +239,13 @@ function ErrorSkillsList({
     delisted: number;
   };
 }) {
-  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 50 });
 
-  const result = useQuery(api.devStats.listSkillsWithErrors, {
-    filter: activeFilter,
-    cursor,
-  });
+  const { data: result } = useQuery(
+    convexQuery(api.devStats.listSkillsWithErrors, {
+      filter: activeFilter,
+    }),
+  );
 
   const retryFetch = useAction(api.devStats.callRetryContentFetch);
   const retryDiscovery = useAction(api.devStats.callRetryDiscovery);
@@ -395,6 +403,9 @@ function ErrorSkillsList({
             data={result.skills as SkillError[]}
             enableSorting
             enableFiltering
+            enablePagination
+            pagination={pagination}
+            onPaginationChange={setPagination}
             className="md:max-w-none"
             getRowId={(row: SkillError) => row._id}
           >
@@ -405,7 +416,7 @@ function ErrorSkillsList({
                 onValueChange={(value) => {
                   if (value) {
                     onFilterChange(value as ErrorFilter);
-                    setCursor(undefined);
+                    setPagination((p) => ({ ...p, pageIndex: 0 }));
                   }
                 }}
               >
@@ -441,36 +452,12 @@ function ErrorSkillsList({
               <DataTableToolbarSeparator />
               <DataTableSearch placeholder="Search skills..." />
             </DataTableToolbar>
-            <DataTableContent hoverable className=" md:max-w-none">
+            <DataTableContent hoverable className="max-h-[600px] overflow-y-auto md:max-w-none">
               <DataTableHeader enableSorting />
               <DataTableBody emptyState="No skills in this category." />
             </DataTableContent>
+            <DataTablePagination showSelectedCount={false} />
           </DataTable>
-
-          {/* Server-side pagination */}
-          <div className="mt-4 flex items-center gap-2">
-            {cursor && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCursor(undefined)}
-              >
-                First page
-              </Button>
-            )}
-            {!result.isDone && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCursor(result.nextCursor)}
-              >
-                Next page
-              </Button>
-            )}
-            <span className="ml-auto text-xs text-muted-foreground">
-              {result.skills.length} shown
-            </span>
-          </div>
         </>
       )}
     </div>
