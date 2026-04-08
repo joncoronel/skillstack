@@ -392,7 +392,9 @@ export const retryBatch = internalMutation({
         count++;
       }
     } else if (filter === "noUrlExhausted") {
-      // Reset skills that have given up on discovery (failCount >= 3) so they retry
+      // Reset skills that have given up on discovery (failCount >= MAX_DISCOVERY_FAILURES)
+      // TODO: .collect() is unbounded — risks Convex's 16k doc limit if the no-URL set
+      // grows large. Consider an index on (hasSkillMdUrl, discoveryFailCount) or paginating.
       const summaries = await ctx.db
         .query("skillSummaries")
         .withIndex("by_hasSkillMdUrl", (q) => q.eq("hasSkillMdUrl", false))

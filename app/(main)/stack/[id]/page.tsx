@@ -26,6 +26,10 @@ async function BundleLoader({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ share?: string }>;
 }) {
+  // Note: this Promise.all works because params, searchParams, and getAuthToken()
+  // all access dynamic data (route params, search params, cookies) which "unlocks"
+  // Math.random() for the preloadQuery calls below. If you ever add another
+  // preloadQuery to this top group, it will fail with cacheComponents enabled.
   const [{ id }, { share }, token] = await Promise.all([
     params,
     searchParams,

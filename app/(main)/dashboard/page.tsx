@@ -23,6 +23,9 @@ export default function DashboardPage() {
 }
 
 async function DashboardLoader() {
+  // Note: verifySession() + getAuthToken() both access cookies, which "unlocks"
+  // Math.random() for the preloadQuery below. cacheComponents requires dynamic
+  // data access before any code that uses Math.random().
   const [, token] = await Promise.all([verifySession(), getAuthToken()]);
   const preloadedBundles = await preloadQuery(
     api.bundles.listByUser,

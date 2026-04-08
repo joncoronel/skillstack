@@ -31,6 +31,9 @@ export default function ExplorePage({ searchParams }: ExplorePageProps) {
 }
 
 async function ExploreLoader({ searchParams }: ExplorePageProps) {
+  // Note: loadExploreSearchParams must run BEFORE preloadQuery. Convex's preloadQuery
+  // uses Math.random() internally, which cacheComponents disallows before any dynamic
+  // data access. Accessing searchParams here unlocks it. Don't Promise.all these.
   await loadExploreSearchParams(searchParams);
   const preloadedTrending = await preloadQuery(
     api.bundleEvents.getTrendingBundles,
