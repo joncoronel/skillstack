@@ -283,7 +283,6 @@ function ErrorSkillsList({
   const handleRetryBatch = async () => {
     if (
       activeFilter !== "contentFetchError" &&
-      activeFilter !== "noUrlRetrying" &&
       activeFilter !== "noUrlExhausted"
     )
       return;
@@ -435,7 +434,6 @@ function ErrorSkillsList({
                 </SelectContent>
               </Select>
               {(activeFilter === "contentFetchError" ||
-                activeFilter === "noUrlRetrying" ||
                 activeFilter === "noUrlExhausted") && (
                 <>
                   <DataTableToolbarSeparator />

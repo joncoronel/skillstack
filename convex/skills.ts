@@ -18,6 +18,7 @@ import {
   buildTechKeywords,
   buildContentKeywords,
 } from "./lib/technologyRegistry";
+import { MAX_DISCOVERY_FAILURES } from "./devStats";
 
 // ---------------------------------------------------------------------------
 // Technology tagging
@@ -966,11 +967,11 @@ export const markStaleContentBatch = internalMutation({
         !s.needsContentFetch &&
         now - (s.contentFetchedAt ?? 0) > CONTENT_REFRESH_INTERVAL_MS;
 
-      // URL re-discovery: empty URL, >7 days since last check, <3 failures
+      // URL re-discovery: empty URL, >7 days since last check, under failure limit
       const needsRediscovery =
         s.skillMdUrl === "" &&
         !s.needsDiscovery &&
-        (s.discoveryFailCount ?? 0) < 3 &&
+        (s.discoveryFailCount ?? 0) < MAX_DISCOVERY_FAILURES &&
         now - (s.contentFetchedAt ?? 0) > REDISCOVERY_INTERVAL_MS;
 
       if (contentStale) {

@@ -8,6 +8,10 @@ import type { QueryCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 
+// Number of discovery attempts before a skill is considered exhausted
+// and stops being retried automatically.
+export const MAX_DISCOVERY_FAILURES = 3;
+
 // ---------------------------------------------------------------------------
 // Admin guard — checks caller's email against ADMIN_EMAILS env var
 // ---------------------------------------------------------------------------
@@ -83,7 +87,8 @@ export const recalculateStatsBatch = internalMutation({
       if (s.needsDiscovery) pendingDiscovery++;
       if (s.hasSkillMdUrl === false) {
         noSkillMdUrl++;
-        if ((s.discoveryFailCount ?? 0) >= 3) noUrlExhausted++;
+        if ((s.discoveryFailCount ?? 0) >= MAX_DISCOVERY_FAILURES)
+          noUrlExhausted++;
       }
       if (s.isDelisted) delisted++;
     }
@@ -250,7 +255,11 @@ export const listSkillsWithErrors = query({
           .withIndex("by_hasSkillMdUrl", (q) => q.eq("hasSkillMdUrl", false))
           .collect();
         skills = results
-          .filter((s) => s.skillDocId && (s.discoveryFailCount ?? 0) < 3)
+          .filter(
+            (s) =>
+              s.skillDocId &&
+              (s.discoveryFailCount ?? 0) < MAX_DISCOVERY_FAILURES,
+          )
           .map(mapSummary);
         break;
       }
@@ -260,7 +269,11 @@ export const listSkillsWithErrors = query({
           .withIndex("by_hasSkillMdUrl", (q) => q.eq("hasSkillMdUrl", false))
           .collect();
         skills = results
-          .filter((s) => s.skillDocId && (s.discoveryFailCount ?? 0) >= 3)
+          .filter(
+            (s) =>
+              s.skillDocId &&
+              (s.discoveryFailCount ?? 0) >= MAX_DISCOVERY_FAILURES,
+          )
           .map(mapSummary);
         break;
       }
@@ -345,7 +358,6 @@ export const retryBatch = internalMutation({
   args: {
     filter: v.union(
       v.literal("contentFetchError"),
-      v.literal("noUrlRetrying"),
       v.literal("noUrlExhausted"),
     ),
   },
@@ -379,13 +391,18 @@ export const retryBatch = internalMutation({
         });
         count++;
       }
-    } else if (filter === "noUrlRetrying" || filter === "noUrlExhausted") {
+    } else if (filter === "noUrlExhausted") {
+      // Reset skills that have given up on discovery (failCount >= 3) so they retry
       const summaries = await ctx.db
         .query("skillSummaries")
         .withIndex("by_hasSkillMdUrl", (q) => q.eq("hasSkillMdUrl", false))
-        .take(200);
+        .collect();
 
-      for (const summary of summaries) {
+      const exhausted = summaries
+        .filter((s) => (s.discoveryFailCount ?? 0) >= MAX_DISCOVERY_FAILURES)
+        .slice(0, 200);
+
+      for (const summary of exhausted) {
         if (summary.skillDocId) {
           await ctx.db.patch(summary.skillDocId, {
             needsDiscovery: true,
@@ -434,7 +451,6 @@ export const callRetryBatch = action({
   args: {
     filter: v.union(
       v.literal("contentFetchError"),
-      v.literal("noUrlRetrying"),
       v.literal("noUrlExhausted"),
     ),
   },
@@ -483,66 +499,6 @@ export const triggerBackfill = action({
         break;
     }
     return { scheduled: true, type };
-  },
-});
-
-// One-time cleanup: fix skills stuck with needsContentFetch but no URL
-export const cleanupOrphanedFetchFlags = internalMutation({
-  args: {},
-  handler: async (ctx) => {
-    let fixed = 0;
-    let cursor: string | undefined;
-    let isDone = false;
-
-    while (!isDone) {
-      const paginationOpts = cursor
-        ? { numItems: 200, cursor }
-        : { numItems: 200, cursor: null };
-      const result = await ctx.db
-        .query("skillSummaries")
-        .withIndex("by_needsContentFetch", (q) =>
-          q.eq("needsContentFetch", true),
-        )
-        .paginate(paginationOpts);
-
-      for (const s of result.page) {
-        const hasUrl = s.skillMdUrl && s.skillMdUrl !== "";
-        if (!hasUrl) {
-          if (s.skillDocId) {
-            await ctx.db.patch(s.skillDocId, {
-              needsContentFetch: false,
-              needsDiscovery: true,
-              discoveryFailCount: 0,
-              hasContentFetchError: false,
-            });
-          }
-          await ctx.db.patch(s._id, {
-            needsContentFetch: false,
-            needsDiscovery: true,
-            discoveryFailCount: 0,
-            hasContentFetchError: false,
-          });
-          fixed++;
-        }
-      }
-
-      cursor = result.continueCursor;
-      isDone = result.isDone;
-    }
-
-    console.log(`Cleaned up ${fixed} orphaned fetch flags`);
-    return { fixed };
-  },
-});
-
-export const callCleanupOrphanedFetchFlags = action({
-  args: {},
-  handler: async (ctx): Promise<{ fixed: number }> => {
-    await assertAdmin(ctx);
-    return await ctx.runMutation(
-      internal.devStats.cleanupOrphanedFetchFlags,
-      {},
-    );
   },
 });
 
