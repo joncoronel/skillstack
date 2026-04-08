@@ -1,16 +1,10 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { fetchQuery } from "convex/nextjs";
+import { cacheLife } from "next/cache";
 import { cache } from "react";
 import { api } from "@/convex/_generated/api";
 import { SkillPageContent } from "./skill-page-content";
-
-export const dynamic = "force-static";
-export const revalidate = 86400; // 24 hours
-
-export async function generateStaticParams() {
-  return [];
-}
 
 type Params = Promise<{ org: string; repo: string; skillId: string }>;
 
@@ -23,6 +17,9 @@ export async function generateMetadata({
 }: {
   params: Params;
 }): Promise<Metadata> {
+  "use cache";
+  cacheLife("days");
+
   const { org, repo, skillId } = await params;
   const source = `${org}/${repo}`;
 
@@ -48,6 +45,9 @@ export async function generateMetadata({
 }
 
 export default async function SkillPage({ params }: { params: Params }) {
+  "use cache";
+  cacheLife("days");
+
   const { org, repo, skillId } = await params;
   const source = `${org}/${repo}`;
 

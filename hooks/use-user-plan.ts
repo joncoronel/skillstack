@@ -5,7 +5,7 @@ import { api } from "@/convex/_generated/api";
 import type { Plan } from "@/lib/plans";
 
 export function useUserPlan() {
-  const { isAuthenticated } = useConvexAuth();
+  const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
   const result = useQuery(
     api.plans.currentPlan,
     isAuthenticated ? {} : "skip",
@@ -15,6 +15,6 @@ export function useUserPlan() {
     plan: (result?.plan ?? "free") as Plan,
     limits: result?.limits ?? null,
     gatingEnabled: result?.gatingEnabled ?? false,
-    isLoading: isAuthenticated && result === undefined,
+    isLoading: authLoading || (isAuthenticated && result === undefined),
   };
 }

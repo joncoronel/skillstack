@@ -312,10 +312,6 @@ export const listByUser = query({
   },
 });
 
-// ---------------------------------------------------------------------------
-// Paginated public bundles (for explore page infinite scroll)
-// ---------------------------------------------------------------------------
-
 export async function enrichBundle(
   ctx: QueryCtx,
   bundle: {
@@ -367,6 +363,10 @@ export async function enrichBundle(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Paginated public bundles (for explore page infinite scroll)
+// ---------------------------------------------------------------------------
+
 export const listPublicPaginated = query({
   args: {
     paginationOpts: paginationOptsValidator,
@@ -386,6 +386,23 @@ export const listPublicPaginated = query({
       ...result,
       page: enriched,
     };
+  },
+});
+
+export const searchPublic = query({
+  args: {
+    query: v.string(),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, { query, limit = 20 }) => {
+    const results = await ctx.db
+      .query("bundles")
+      .withSearchIndex("search_name", (q) =>
+        q.search("name", query).eq("isPublic", true),
+      )
+      .take(limit);
+
+    return Promise.all(results.map((bundle) => enrichBundle(ctx, bundle)));
   },
 });
 

@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery, useAction } from "convex/react";
+import { useQuery } from "@tanstack/react-query";
+import { convexQuery } from "@convex-dev/react-query";
+import { useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import {
@@ -12,6 +14,7 @@ import {
 } from "@/components/ui/cubby-ui/card";
 import {
   type ColumnDef,
+  type PaginationState,
   DataTable,
   DataTableToolbar,
   DataTableToolbarSeparator,
@@ -19,6 +22,7 @@ import {
   DataTableContent,
   DataTableHeader,
   DataTableBody,
+  DataTablePagination,
 } from "@/components/ui/cubby-ui/data-table/data-table";
 import {
   Select,
@@ -32,6 +36,11 @@ import { Badge } from "@/components/ui/cubby-ui/badge";
 import { Skeleton } from "@/components/ui/cubby-ui/skeleton";
 import { formatInstalls, timeAgo } from "@/lib/utils";
 import { toast } from "@/components/ui/cubby-ui/toast/toast";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/cubby-ui/tooltip";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -41,14 +50,16 @@ type ErrorFilter =
   | "contentFetchError"
   | "pendingContentFetch"
   | "pendingDiscovery"
-  | "noUrl"
+  | "noUrlRetrying"
+  | "noUrlExhausted"
   | "delisted";
 
 const FILTER_LABELS: Record<ErrorFilter, string> = {
   contentFetchError: "Content Errors",
   pendingContentFetch: "Pending Fetch",
   pendingDiscovery: "Pending Discovery",
-  noUrl: "No URL",
+  noUrlRetrying: "No URL (retrying)",
+  noUrlExhausted: "No URL (exhausted)",
   delisted: "Delisted",
 };
 
@@ -64,6 +75,7 @@ type SkillError = {
   needsContentFetch?: boolean;
   contentFetchedAt?: number;
   isDelisted?: boolean;
+  discoveryFailCount?: number;
 };
 
 // ---------------------------------------------------------------------------
@@ -71,8 +83,11 @@ type SkillError = {
 // ---------------------------------------------------------------------------
 
 export function DevDashboardContent() {
-  const admin = useQuery(api.devStats.isAdmin, {});
-  const syncStats = useQuery(api.devStats.getSyncStats, admin ? {} : "skip");
+  const { data: admin } = useQuery(convexQuery(api.devStats.isAdmin, {}));
+  const { data: syncStats } = useQuery({
+    ...convexQuery(api.devStats.getSyncStats, {}),
+    enabled: !!admin,
+  });
 
   const [activeFilter, setActiveFilter] =
     useState<ErrorFilter>("contentFetchError");
@@ -91,6 +106,7 @@ export function DevDashboardContent() {
     pendingContentFetch: syncStats?.pendingContentFetch ?? 0,
     pendingDiscovery: syncStats?.pendingDiscovery ?? 0,
     noSkillMdUrl: syncStats?.noSkillMdUrl ?? 0,
+    noUrlExhausted: syncStats?.noUrlExhausted ?? 0,
     delisted: syncStats?.delisted ?? 0,
   };
 
@@ -123,36 +139,52 @@ function StatsCards({
     pendingContentFetch: number;
     pendingDiscovery: number;
     noSkillMdUrl: number;
+    noUrlExhausted: number;
     delisted: number;
   };
   loading?: boolean;
 }) {
   const cards = [
-    { label: "Total Skills", value: stats.totalSkills, warn: false },
+    {
+      label: "Total Skills",
+      value: stats.totalSkills,
+      warn: false,
+      tooltip: "Total number of skills synced from skills.sh",
+    },
     {
       label: "Content Errors",
       value: stats.contentFetchErrors,
       warn: stats.contentFetchErrors > 0,
+      tooltip:
+        "Skills with a URL that failed content fetch. After 2 failures the URL is cleared and the skill is sent back to discovery.",
     },
     {
       label: "Pending Fetch",
       value: stats.pendingContentFetch,
       warn: stats.pendingContentFetch > 50,
+      tooltip:
+        "Skills queued for content download. Should drain to 0 after each sync.",
     },
     {
       label: "Pending Discovery",
       value: stats.pendingDiscovery,
       warn: stats.pendingDiscovery > 50,
+      tooltip:
+        "Skills queued for URL discovery. Should drain to 0 after each sync.",
     },
     {
       label: "No URL",
       value: stats.noSkillMdUrl,
       warn: false,
+      tooltip:
+        "Skills where discovery couldn't find a SKILL.md URL. Retried every 7 days, gives up after 3 failures.",
     },
     {
       label: "Delisted",
       value: stats.delisted,
       warn: false,
+      tooltip:
+        "Skills not seen in the skills.sh API for 30+ days. Excluded from search results.",
     },
   ];
 
@@ -161,7 +193,17 @@ function StatsCards({
       {cards.map((card) => (
         <Card key={card.label} className="gap-0 py-0">
           <div className="px-5 py-4">
-            <p className="text-xs text-muted-foreground">{card.label}</p>
+            <Tooltip>
+              <TooltipTrigger
+                render={<p />}
+                className="text-xs text-muted-foreground cursor-help decoration-dashed decoration-muted-foreground/40 underline underline-offset-2"
+              >
+                {card.label}
+              </TooltipTrigger>
+              <TooltipContent className="max-w-56">
+                {card.tooltip}
+              </TooltipContent>
+            </Tooltip>
             <p className="mt-1 text-2xl font-bold tabular-nums">
               {loading ? "..." : card.value.toLocaleString()}
               {card.warn && (
@@ -193,15 +235,17 @@ function ErrorSkillsList({
     pendingContentFetch: number;
     pendingDiscovery: number;
     noSkillMdUrl: number;
+    noUrlExhausted: number;
     delisted: number;
   };
 }) {
-  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 50 });
 
-  const result = useQuery(api.devStats.listSkillsWithErrors, {
-    filter: activeFilter,
-    cursor,
-  });
+  const { data: result } = useQuery(
+    convexQuery(api.devStats.listSkillsWithErrors, {
+      filter: activeFilter,
+    }),
+  );
 
   const retryFetch = useAction(api.devStats.callRetryContentFetch);
   const retryDiscovery = useAction(api.devStats.callRetryDiscovery);
@@ -213,7 +257,8 @@ function ErrorSkillsList({
     contentFetchError: stats.contentFetchErrors,
     pendingContentFetch: stats.pendingContentFetch,
     pendingDiscovery: stats.pendingDiscovery,
-    noUrl: stats.noSkillMdUrl,
+    noUrlRetrying: stats.noSkillMdUrl - stats.noUrlExhausted,
+    noUrlExhausted: stats.noUrlExhausted,
     delisted: stats.delisted,
   };
 
@@ -236,7 +281,10 @@ function ErrorSkillsList({
   };
 
   const handleRetryBatch = async () => {
-    if (activeFilter !== "contentFetchError" && activeFilter !== "noUrl")
+    if (
+      activeFilter !== "contentFetchError" &&
+      activeFilter !== "noUrlExhausted"
+    )
       return;
     setBatchLoading(true);
     try {
@@ -354,6 +402,9 @@ function ErrorSkillsList({
             data={result.skills as SkillError[]}
             enableSorting
             enableFiltering
+            enablePagination
+            pagination={pagination}
+            onPaginationChange={setPagination}
             className="md:max-w-none"
             getRowId={(row: SkillError) => row._id}
           >
@@ -364,7 +415,7 @@ function ErrorSkillsList({
                 onValueChange={(value) => {
                   if (value) {
                     onFilterChange(value as ErrorFilter);
-                    setCursor(undefined);
+                    setPagination((p) => ({ ...p, pageIndex: 0 }));
                   }
                 }}
               >
@@ -383,7 +434,7 @@ function ErrorSkillsList({
                 </SelectContent>
               </Select>
               {(activeFilter === "contentFetchError" ||
-                activeFilter === "noUrl") && (
+                activeFilter === "noUrlExhausted") && (
                 <>
                   <DataTableToolbarSeparator />
                   <Button
@@ -399,36 +450,12 @@ function ErrorSkillsList({
               <DataTableToolbarSeparator />
               <DataTableSearch placeholder="Search skills..." />
             </DataTableToolbar>
-            <DataTableContent hoverable className=" md:max-w-none">
+            <DataTableContent hoverable className="max-h-[600px] overflow-y-auto md:max-w-none">
               <DataTableHeader enableSorting />
               <DataTableBody emptyState="No skills in this category." />
             </DataTableContent>
+            <DataTablePagination showSelectedCount={false} />
           </DataTable>
-
-          {/* Server-side pagination */}
-          <div className="mt-4 flex items-center gap-2">
-            {cursor && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCursor(undefined)}
-              >
-                First page
-              </Button>
-            )}
-            {!result.isDone && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCursor(result.nextCursor)}
-              >
-                Next page
-              </Button>
-            )}
-            <span className="ml-auto text-xs text-muted-foreground">
-              {result.skills.length} shown
-            </span>
-          </div>
         </>
       )}
     </div>
@@ -504,7 +531,10 @@ function SkillActions({
             Retry
           </Button>
         )}
-      {(filter === "contentFetchError" || filter === "noUrl") && !hasUrl && (
+      {(filter === "contentFetchError" ||
+        filter === "noUrlRetrying" ||
+        filter === "noUrlExhausted") &&
+        !hasUrl && (
         <Button
           variant="outline"
           size="xs"

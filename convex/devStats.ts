@@ -8,6 +8,10 @@ import type { QueryCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 
+// Number of discovery attempts before a skill is considered exhausted
+// and stops being retried automatically.
+export const MAX_DISCOVERY_FAILURES = 3;
+
 // ---------------------------------------------------------------------------
 // Admin guard — checks caller's email against ADMIN_EMAILS env var
 // ---------------------------------------------------------------------------
@@ -49,6 +53,7 @@ export const getSyncStats = query({
         pendingContentFetch: 0,
         pendingDiscovery: 0,
         noSkillMdUrl: 0,
+        noUrlExhausted: 0,
         delisted: 0,
         recalculatedAt: 0,
       }
@@ -72,6 +77,7 @@ export const recalculateStatsBatch = internalMutation({
     let pendingContentFetch = 0;
     let pendingDiscovery = 0;
     let noSkillMdUrl = 0;
+    let noUrlExhausted = 0;
     let delisted = 0;
 
     for (const s of result.page) {
@@ -79,7 +85,11 @@ export const recalculateStatsBatch = internalMutation({
       if (s.hasContentFetchError) contentFetchErrors++;
       if (s.needsContentFetch) pendingContentFetch++;
       if (s.needsDiscovery) pendingDiscovery++;
-      if (s.hasSkillMdUrl === false) noSkillMdUrl++;
+      if (s.hasSkillMdUrl === false) {
+        noSkillMdUrl++;
+        if ((s.discoveryFailCount ?? 0) >= MAX_DISCOVERY_FAILURES)
+          noUrlExhausted++;
+      }
       if (s.isDelisted) delisted++;
     }
 
@@ -89,6 +99,7 @@ export const recalculateStatsBatch = internalMutation({
       pendingContentFetch,
       pendingDiscovery,
       noSkillMdUrl,
+      noUrlExhausted,
       delisted,
       nextCursor: result.continueCursor,
       isDone: result.isDone,
@@ -107,6 +118,7 @@ export const recalculateStats = internalAction({
       pendingContentFetch: 0,
       pendingDiscovery: 0,
       noSkillMdUrl: 0,
+      noUrlExhausted: 0,
       delisted: 0,
     };
 
@@ -117,6 +129,7 @@ export const recalculateStats = internalAction({
         pendingContentFetch: number;
         pendingDiscovery: number;
         noSkillMdUrl: number;
+        noUrlExhausted: number;
         delisted: number;
         nextCursor: string;
         isDone: boolean;
@@ -129,6 +142,7 @@ export const recalculateStats = internalAction({
       totals.pendingContentFetch += result.pendingContentFetch;
       totals.pendingDiscovery += result.pendingDiscovery;
       totals.noSkillMdUrl += result.noSkillMdUrl;
+      totals.noUrlExhausted += result.noUrlExhausted;
       totals.delisted += result.delisted;
 
       cursor = result.nextCursor;
@@ -152,6 +166,7 @@ export const upsertStats = internalMutation({
     pendingContentFetch: v.number(),
     pendingDiscovery: v.number(),
     noSkillMdUrl: v.number(),
+    noUrlExhausted: v.number(),
     delisted: v.number(),
     recalculatedAt: v.number(),
   },
@@ -169,20 +184,17 @@ const errorFilterValidator = v.union(
   v.literal("contentFetchError"),
   v.literal("pendingContentFetch"),
   v.literal("pendingDiscovery"),
-  v.literal("noUrl"),
+  v.literal("noUrlRetrying"),
+  v.literal("noUrlExhausted"),
   v.literal("delisted"),
 );
 
 export const listSkillsWithErrors = query({
   args: {
     filter: errorFilterValidator,
-    cursor: v.optional(v.string()),
   },
-  handler: async (ctx, { filter, cursor }) => {
+  handler: async (ctx, { filter }) => {
     await assertAdmin(ctx);
-    const paginationOpts = cursor
-      ? { numItems: 50, cursor }
-      : { numItems: 50, cursor: null };
 
     // All queries use summaries (~200 bytes) instead of skills (~30KB)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -199,78 +211,83 @@ export const listSkillsWithErrors = query({
         needsContentFetch: s.needsContentFetch as boolean | undefined,
         contentFetchedAt: s.contentFetchedAt as number | undefined,
         isDelisted: s.isDelisted as boolean | undefined,
+        discoveryFailCount: s.discoveryFailCount as number | undefined,
       };
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let skills: any[];
-    let nextCursor: string;
-    let isDone: boolean;
 
     switch (filter) {
       case "contentFetchError": {
-        const result = await ctx.db
+        const results = await ctx.db
           .query("skillSummaries")
           .withIndex("by_hasContentFetchError", (q) =>
             q.eq("hasContentFetchError", true),
           )
-          .paginate(paginationOpts);
-        skills = result.page.filter((s) => s.skillDocId).map(mapSummary);
-        nextCursor = result.continueCursor;
-        isDone = result.isDone;
+          .collect();
+        skills = results.filter((s) => s.skillDocId).map(mapSummary);
         break;
       }
       case "pendingContentFetch": {
-        const result = await ctx.db
+        const results = await ctx.db
           .query("skillSummaries")
           .withIndex("by_needsContentFetch", (q) =>
             q.eq("needsContentFetch", true),
           )
-          .paginate(paginationOpts);
-        skills = result.page.filter((s) => s.skillDocId).map(mapSummary);
-        nextCursor = result.continueCursor;
-        isDone = result.isDone;
+          .collect();
+        skills = results.filter((s) => s.skillDocId).map(mapSummary);
         break;
       }
       case "pendingDiscovery": {
-        const result = await ctx.db
+        const results = await ctx.db
           .query("skillSummaries")
           .withIndex("by_needsDiscovery", (q) =>
             q.eq("needsDiscovery", true),
           )
-          .paginate(paginationOpts);
-        skills = result.page.filter((s) => s.skillDocId).map(mapSummary);
-        nextCursor = result.continueCursor;
-        isDone = result.isDone;
+          .collect();
+        skills = results.filter((s) => s.skillDocId).map(mapSummary);
         break;
       }
-      case "noUrl": {
-        const result = await ctx.db
+      case "noUrlRetrying": {
+        const results = await ctx.db
           .query("skillSummaries")
           .withIndex("by_hasSkillMdUrl", (q) => q.eq("hasSkillMdUrl", false))
-          .paginate(paginationOpts);
-        skills = result.page.filter((s) => s.skillDocId).map(mapSummary);
-        nextCursor = result.continueCursor;
-        isDone = result.isDone;
+          .collect();
+        skills = results
+          .filter(
+            (s) =>
+              s.skillDocId &&
+              (s.discoveryFailCount ?? 0) < MAX_DISCOVERY_FAILURES,
+          )
+          .map(mapSummary);
+        break;
+      }
+      case "noUrlExhausted": {
+        const results = await ctx.db
+          .query("skillSummaries")
+          .withIndex("by_hasSkillMdUrl", (q) => q.eq("hasSkillMdUrl", false))
+          .collect();
+        skills = results
+          .filter(
+            (s) =>
+              s.skillDocId &&
+              (s.discoveryFailCount ?? 0) >= MAX_DISCOVERY_FAILURES,
+          )
+          .map(mapSummary);
         break;
       }
       case "delisted": {
-        const result = await ctx.db
+        const results = await ctx.db
           .query("skillSummaries")
           .withIndex("by_isDelisted", (q) => q.eq("isDelisted", true))
-          .paginate(paginationOpts);
-        skills = result.page.filter((s) => s.skillDocId).map(mapSummary);
-        nextCursor = result.continueCursor;
-        isDone = result.isDone;
+          .collect();
+        skills = results.filter((s) => s.skillDocId).map(mapSummary);
         break;
       }
     }
 
-    return {
-      skills,
-      nextCursor,
-      isDone,
-    };
+    return { skills };
   },
 });
 
@@ -338,7 +355,12 @@ export const retryDiscovery = internalMutation({
 });
 
 export const retryBatch = internalMutation({
-  args: { filter: v.union(v.literal("contentFetchError"), v.literal("noUrl")) },
+  args: {
+    filter: v.union(
+      v.literal("contentFetchError"),
+      v.literal("noUrlExhausted"),
+    ),
+  },
   handler: async (ctx, { filter }) => {
     let count = 0;
 
@@ -351,26 +373,38 @@ export const retryBatch = internalMutation({
         .take(200);
 
       for (const summary of summaries) {
+        const hasUrl = summary.skillMdUrl && summary.skillMdUrl !== "";
         if (summary.skillDocId) {
           await ctx.db.patch(summary.skillDocId, {
-            needsContentFetch: true,
             hasContentFetchError: false,
             contentFetchFailCount: 0,
+            ...(hasUrl
+              ? { needsContentFetch: true }
+              : { needsDiscovery: true, discoveryFailCount: 0 }),
           });
         }
         await ctx.db.patch(summary._id, {
-          needsContentFetch: true,
           hasContentFetchError: false,
+          ...(hasUrl
+            ? { needsContentFetch: true }
+            : { needsDiscovery: true, discoveryFailCount: 0 }),
         });
         count++;
       }
-    } else if (filter === "noUrl") {
+    } else if (filter === "noUrlExhausted") {
+      // Reset skills that have given up on discovery (failCount >= MAX_DISCOVERY_FAILURES)
+      // TODO: .collect() is unbounded — risks Convex's 16k doc limit if the no-URL set
+      // grows large. Consider an index on (hasSkillMdUrl, discoveryFailCount) or paginating.
       const summaries = await ctx.db
         .query("skillSummaries")
         .withIndex("by_hasSkillMdUrl", (q) => q.eq("hasSkillMdUrl", false))
-        .take(200);
+        .collect();
 
-      for (const summary of summaries) {
+      const exhausted = summaries
+        .filter((s) => (s.discoveryFailCount ?? 0) >= MAX_DISCOVERY_FAILURES)
+        .slice(0, 200);
+
+      for (const summary of exhausted) {
         if (summary.skillDocId) {
           await ctx.db.patch(summary.skillDocId, {
             needsDiscovery: true,
@@ -416,7 +450,12 @@ export const callRetryDiscovery = action({
 });
 
 export const callRetryBatch = action({
-  args: { filter: v.union(v.literal("contentFetchError"), v.literal("noUrl")) },
+  args: {
+    filter: v.union(
+      v.literal("contentFetchError"),
+      v.literal("noUrlExhausted"),
+    ),
+  },
   handler: async (ctx, { filter }): Promise<{ count: number }> => {
     await assertAdmin(ctx);
     return await ctx.runMutation(internal.devStats.retryBatch, { filter });

@@ -18,6 +18,7 @@ import {
   buildTechKeywords,
   buildContentKeywords,
 } from "./lib/technologyRegistry";
+import { MAX_DISCOVERY_FAILURES } from "./devStats";
 
 // ---------------------------------------------------------------------------
 // Technology tagging
@@ -201,22 +202,8 @@ export const syncSkills = internalAction({
     // Mark skills not seen in the API for 30+ days as delisted
     await ctx.scheduler.runAfter(5_000, internal.skills.markDelistedSkills, {});
 
-    // Mark skills with stale content or empty URLs for re-fetch/re-discovery
+    // markStaleContent → backfillDiscoverUrls → backfillFetchContent → recalculateStats
     await ctx.scheduler.runAfter(8_000, internal.skills.markStaleContent, {});
-
-    // Schedule two-phase content backfill (URL discovery → content fetch)
-    await ctx.scheduler.runAfter(
-      15_000,
-      internal.skills.backfillDiscoverUrls,
-      {},
-    );
-
-    // Recalculate dev dashboard stats after sync settles
-    await ctx.scheduler.runAfter(
-      20_000,
-      internal.devStats.recalculateStats,
-      {},
-    );
   },
 });
 
@@ -732,6 +719,9 @@ export const discoverSkillMdUrls = internalAction({
       console.log(
         `${source} (fallback): ${matchedSkillIds.size} matched, ${unmatched.length} not found`,
       );
+      for (const s of unmatched) {
+        console.log(`  ✗ ${s.skillId}`);
+      }
       return;
     }
 
@@ -837,6 +827,9 @@ export const discoverSkillMdUrls = internalAction({
       `${source}: ${matchedSkillIds.size} matched, ${finalUnmatched.length} not found` +
         (tree.truncated ? " (tree truncated)" : ""),
     );
+    for (const s of finalUnmatched) {
+      console.log(`  ✗ ${s.skillId}`);
+    }
   },
 });
 
@@ -974,11 +967,11 @@ export const markStaleContentBatch = internalMutation({
         !s.needsContentFetch &&
         now - (s.contentFetchedAt ?? 0) > CONTENT_REFRESH_INTERVAL_MS;
 
-      // URL re-discovery: empty URL, >7 days since last check, <3 failures
+      // URL re-discovery: empty URL, >7 days since last check, under failure limit
       const needsRediscovery =
         s.skillMdUrl === "" &&
         !s.needsDiscovery &&
-        (s.discoveryFailCount ?? 0) < 3 &&
+        (s.discoveryFailCount ?? 0) < MAX_DISCOVERY_FAILURES &&
         now - (s.contentFetchedAt ?? 0) > REDISCOVERY_INTERVAL_MS;
 
       if (contentStale) {
@@ -1022,6 +1015,9 @@ export const markStaleContent = internalAction({
         `Marked ${total} skills for content re-fetch or URL re-discovery`,
       );
     }
+
+    // Chain into URL discovery
+    await ctx.scheduler.runAfter(0, internal.skills.backfillDiscoverUrls, {});
   },
 });
 
@@ -1149,7 +1145,15 @@ export const backfillFetchContent = internalAction({
         { cursor: result.nextCursor },
       );
     } else {
-      console.log("Content backfill complete");
+      const statsDelay = result.skills.length * STAGGER_MS + 30_000;
+      console.log(
+        `Content backfill complete — recalculating stats in ${Math.round(statsDelay / 1000)}s`,
+      );
+      await ctx.scheduler.runAfter(
+        statsDelay,
+        internal.devStats.recalculateStats,
+        {},
+      );
     }
   },
 });
@@ -1283,7 +1287,7 @@ export const markContentFetchFailed = internalMutation({
         contentFetchedAt: now,
         needsContentFetch: false,
         contentFetchFailCount: 0,
-        hasContentFetchError: true,
+        hasContentFetchError: false,
         skillMdUrl: "",
         needsDiscovery: true,
       });
@@ -1291,7 +1295,7 @@ export const markContentFetchFailed = internalMutation({
         await ctx.db.patch(summary._id, {
           contentFetchedAt: now,
           needsContentFetch: false,
-          hasContentFetchError: true,
+          hasContentFetchError: false,
           skillMdUrl: "",
           hasSkillMdUrl: false,
           needsDiscovery: true,
@@ -1577,7 +1581,7 @@ export const listByTechnologies = query({
         let skill = cache.get(id);
         if (!skill) {
           const doc = await ctx.db.get(entry.skillId);
-          if (!doc) continue;
+          if (!doc || doc.isDelisted) continue;
           skill = {
             _id: doc._id,
             _creationTime: doc._creationTime,
@@ -1602,29 +1606,6 @@ export const listByTechnologies = query({
     }
 
     return { groups };
-  },
-});
-
-export const list = query({
-  args: {
-    leaderboard: v.optional(v.string()),
-    limit: v.optional(v.number()),
-  },
-  handler: async (ctx, { leaderboard, limit = 50 }) => {
-    // Convex orders: undefined < false < true — lt(true) includes active + never-flagged skills
-    const skills = leaderboard
-      ? await ctx.db
-          .query("skills")
-          .withIndex("by_leaderboard_active", (q) =>
-            q.eq("leaderboard", leaderboard).lt("isDelisted", true),
-          )
-          .take(limit)
-      : await ctx.db
-          .query("skills")
-          .withIndex("by_isDelisted", (q) => q.lt("isDelisted", true))
-          .take(limit);
-
-    return skills.sort((a, b) => b.installs - a.installs);
   },
 });
 
