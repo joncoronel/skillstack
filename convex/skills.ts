@@ -1982,13 +1982,17 @@ export const searchSkills = query({
     query: v.string(),
     paginationOpts: paginationOptsValidator,
   },
+  // Reads from skillSummaries (~200 bytes/row) instead of skills (~25 KB/row)
+  // so each page of results is ~5 KB on the wire instead of ~625 KB. The
+  // frontend only needs source/skillId/name/description/installs/isDelisted/
+  // hasContentFetchError, all of which are mirrored on the summary.
   handler: async (ctx, { query: searchQuery, paginationOpts }) => {
     const trimmed = searchQuery.trim();
     if (!trimmed) {
       return { page: [], isDone: true, continueCursor: "" };
     }
     return ctx.db
-      .query("skills")
+      .query("skillSummaries")
       .withSearchIndex("search_name", (q) =>
         q.search("name", trimmed).eq("isDelisted", false),
       )

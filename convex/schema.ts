@@ -57,10 +57,6 @@ export default defineSchema({
     .index("by_hasContentFetchError", ["hasContentFetchError"])
     .index("by_leaderboard_active", ["leaderboard", "isDelisted"])
     .index("by_needsEmbedding", ["needsEmbedding"])
-    .searchIndex("search_name", {
-      searchField: "name",
-      filterFields: ["isDelisted"],
-    })
     .vectorIndex("by_embedding", {
       vectorField: "embedding",
       dimensions: 1536,
@@ -104,7 +100,14 @@ export default defineSchema({
     // Both columns are mostly undefined in steady state, so equality queries
     // through these indexes touch only the few rows that match.
     .index("by_embeddingSkipReason", ["embeddingSkipReason"])
-    .index("by_embeddingMode", ["embeddingMode"]),
+    .index("by_embeddingMode", ["embeddingMode"])
+    // Full-text search index for the home page text search. Lives on
+    // skillSummaries (~200 bytes/row) instead of skills (~25 KB/row) so each
+    // page of search results is ~5 KB on the wire instead of ~625 KB.
+    .searchIndex("search_name", {
+      searchField: "name",
+      filterFields: ["isDelisted"],
+    }),
 
   githubTreeCache: defineTable({
     repo: v.string(),
