@@ -18,10 +18,16 @@ import {
 import { BundleSelectionProvider } from "@/lib/bundle-selection-context";
 import { Input } from "@/components/ui/cubby-ui/input";
 import { Button } from "@/components/ui/cubby-ui/button";
+import {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsPanels,
+  TabsContent,
+} from "@/components/ui/cubby-ui/tabs";
 import { SkillSearchResults } from "@/components/skill-search";
 import { RepoAnalysisResults } from "@/components/repo-url-input";
 import { BundleBar } from "@/components/bundle-bar";
-import { cn } from "@/lib/utils";
 
 interface SkillExplorerProps {
   canAutoDetect: boolean;
@@ -38,12 +44,17 @@ export function SkillExplorer({ canAutoDetect }: SkillExplorerProps) {
   const [repoTriggerKey, setRepoTriggerKey] = useState(repoUrl ? 1 : 0);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Debounce text query (300ms)
+  // Debounce text query (300ms) — only for non-empty values. An empty input
+  // is read directly from `textQuery` below so clearing the field wipes
+  // results instantly instead of lingering for 300ms.
   useEffect(() => {
     const trimmed = textQuery.trim();
+    if (!trimmed) return;
     const id = setTimeout(() => setDebouncedText(trimmed), TEXT_DEBOUNCE_MS);
     return () => clearTimeout(id);
   }, [textQuery]);
+
+  const effectiveTextQuery = textQuery.trim() ? debouncedText : "";
 
   // Keyboard shortcut: focus on /
   useEffect(() => {
@@ -63,12 +74,6 @@ export function SkillExplorer({ canAutoDetect }: SkillExplorerProps) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  function handleModeChange(next: ModeValue) {
-    setMode(next);
-    // Re-focus the input so the user can keep typing immediately
-    setTimeout(() => inputRef.current?.focus(), 0);
-  }
-
   function handleRepoSubmit() {
     const trimmed = repoUrl.trim();
     if (!trimmed) return;
@@ -84,50 +89,32 @@ export function SkillExplorer({ canAutoDetect }: SkillExplorerProps) {
 
   return (
     <BundleSelectionProvider>
-      <div>
-        {/* Mode toggle */}
-        <div className="mb-3 flex items-center gap-1 rounded-full border bg-muted/30 p-0.5 w-fit">
-          <button
-            type="button"
-            onClick={() => handleModeChange("text")}
-            className={cn(
-              "px-3 py-1 text-xs font-medium rounded-full transition-colors",
-              isText
-                ? "bg-background shadow-sm text-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <span className="inline-flex items-center gap-1.5">
-              <HugeiconsIcon
-                icon={Search01Icon}
-                strokeWidth={2}
-                className="size-3.5"
-              />
-              Text
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => handleModeChange("repo")}
-            className={cn(
-              "px-3 py-1 text-xs font-medium rounded-full transition-colors",
-              !isText
-                ? "bg-background shadow-sm text-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <span className="inline-flex items-center gap-1.5">
-              <HugeiconsIcon
-                icon={GithubIcon}
-                strokeWidth={2}
-                className="size-3.5"
-              />
-              Repo
-            </span>
-          </button>
-        </div>
+      <Tabs
+        value={mode}
+        onValueChange={(value) => setMode(value as ModeValue)}
+      >
+        <TabsList variant="underline" className="mb-3">
+          <TabsTrigger value="text">
+            <HugeiconsIcon
+              icon={Search01Icon}
+              strokeWidth={2}
+              className="size-3.5"
+            />
+            Text
+          </TabsTrigger>
+          <TabsTrigger value="repo">
+            <HugeiconsIcon
+              icon={GithubIcon}
+              strokeWidth={2}
+              className="size-3.5"
+            />
+            Repo
+          </TabsTrigger>
+        </TabsList>
 
-        {/* Unified input */}
+        {/* Unified input — lives inside Tabs root but outside TabsPanels so
+            it doesn't animate on mode change. State (mode) drives which
+            input/placeholder/icon renders. */}
         <div className="flex gap-2">
           <div className="relative flex-1">
             <HugeiconsIcon
@@ -140,8 +127,14 @@ export function SkillExplorer({ canAutoDetect }: SkillExplorerProps) {
               placeholder={placeholder}
               value={inputValue}
               onChange={(e) => {
-                if (isText) setTextQuery(e.target.value);
-                else setRepoUrl(e.target.value);
+                if (isText) {
+                  setTextQuery(e.target.value);
+                  // Reset debounced value when clearing so the next keystroke
+                  // doesn't briefly resurface stale results.
+                  if (!e.target.value.trim()) setDebouncedText("");
+                } else {
+                  setRepoUrl(e.target.value);
+                }
               }}
               onKeyDown={(e) => {
                 if (!isText && e.key === "Enter") handleRepoSubmit();
@@ -152,8 +145,12 @@ export function SkillExplorer({ canAutoDetect }: SkillExplorerProps) {
               <button
                 type="button"
                 onClick={() => {
-                  if (isText) setTextQuery("");
-                  else setRepoUrl("");
+                  if (isText) {
+                    setTextQuery("");
+                    setDebouncedText("");
+                  } else {
+                    setRepoUrl("");
+                  }
                 }}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
               >
@@ -183,18 +180,21 @@ export function SkillExplorer({ canAutoDetect }: SkillExplorerProps) {
           )}
         </div>
 
-        {/* Results region — swaps based on mode, each mode keeps its own state */}
-        <div hidden={!isText}>
-          <SkillSearchResults query={debouncedText} />
-        </div>
-        <div hidden={isText}>
-          <RepoAnalysisResults
-            repoUrl={repoUrl}
-            triggerKey={repoTriggerKey}
-            canAutoDetect={canAutoDetect}
-          />
-        </div>
-      </div>
+        {/* Results region — each panel keeps mounted so per-mode state
+            (search results, repo analysis) survives mode switches. */}
+        <TabsPanels>
+          <TabsContent value="text" keepMounted>
+            <SkillSearchResults query={effectiveTextQuery} />
+          </TabsContent>
+          <TabsContent value="repo" keepMounted>
+            <RepoAnalysisResults
+              repoUrl={repoUrl}
+              triggerKey={repoTriggerKey}
+              canAutoDetect={canAutoDetect}
+            />
+          </TabsContent>
+        </TabsPanels>
+      </Tabs>
 
       <BundleBar />
     </BundleSelectionProvider>
