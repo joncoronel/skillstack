@@ -17,7 +17,19 @@ const OPENAI_EMBEDDINGS_URL = "https://api.openai.com/v1/embeddings";
  * but pathological content (base64, dense unicode, walls of identifiers) can
  * exceed 1 token/char. 6000 chars covers the long tail safely; the rare skill
  * that still exceeds the per-input limit gets caught by `embedSkillsBatch`
- * and marked unembeddable rather than killing the chain.
+ * and falls back to name+description-only ("minimal" mode).
+ *
+ * Future improvement: replace this character heuristic with real token
+ * counting via `tiktoken` (or `js-tiktoken` for the WASM-free version).
+ * Tradeoffs:
+ *   - Adds a ~1-2 MB dependency to the Convex bundle
+ *   - May need bundling tweaks if WASM doesn't load cleanly in the Convex
+ *     runtime — `js-tiktoken` is the safer fallback
+ *   - Recovers ~100% of skills instead of the long tail this heuristic loses
+ *
+ * Worth doing if/when the dev dashboard's "Minimal-mode skills" list grows
+ * past a few % of total. Until then this heuristic is fine and adds no
+ * dependencies.
  */
 const MAX_INPUT_CHARS = 6_000;
 
