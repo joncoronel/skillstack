@@ -15,10 +15,12 @@ import {
   CollapsibleTrigger,
   CollapsibleContent,
 } from "@/components/ui/cubby-ui/collapsible";
-import { cn, formatInstalls } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 type AnalyzeRepoResult = Awaited<
-  ReturnType<ReturnType<typeof useAction<typeof api.recommendations.analyzeRepo>>>
+  ReturnType<
+    ReturnType<typeof useAction<typeof api.recommendations.analyzeRepo>>
+  >
 >;
 type GroupedRecommendation = AnalyzeRepoResult["recommendations"][number];
 type Variant = GroupedRecommendation["variants"][number];
@@ -245,7 +247,23 @@ function SkillGroupRow({
     <Collapsible
       className={cn(
         "text-card-foreground flex flex-col bg-card rounded-2xl border dark:border-border/50",
-        "transition-colors hover:border-border/20",
+        // overflow-hidden lets the outer rounded-2xl clip the inner muted
+        // section's square corners, so we don't need to round each child.
+        "overflow-hidden",
+        "transition-colors",
+        // Selection-border continuity at group boundaries:
+        //
+        // 1) Color the group's bottom border when followed by a checked
+        //    singleton. The singleton has border-t-0 in the outer-list merge,
+        //    so its visual top edge IS the group's bottom edge.
+        "[&:has(+_label_[data-checked])]:border-b-primary/30",
+        // 2) Color the group's left + right borders when ANY variant inside
+        //    it is checked. Variants have border-x-0 (no horizontal borders
+        //    of their own), so the only paintable L/R edges in this region
+        //    belong to the outer Collapsible. The orange tints the whole
+        //    group's sides, signaling "a variant inside this group is
+        //    selected" — without introducing any new borders.
+        "has-[label[data-checked]]:border-x-primary/30 dark:has-[label[data-checked]]:border-x-primary/30",
         className,
       )}
     >
@@ -268,26 +286,44 @@ function SkillGroupRow({
         </div>
       </CollapsibleTrigger>
       <CollapsibleContent className="max-sm:duration-0">
-        <div className="border-t dark:border-border/50">
-          {group.variants.map((variant) => (
-            <button
-              key={`${variant.source}/${variant.skillId}`}
-              type="button"
-              onClick={() => onSelectVariant(variant)}
-              className={cn(
-                "flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm",
-                "border-b last:border-b-0 dark:border-border/50",
-                "hover:bg-muted/50 transition-colors",
-              )}
-            >
-              <span className="text-muted-foreground truncate">
-                {variant.source}
-              </span>
-              <span className="ml-auto text-xs font-mono tabular-nums text-muted-foreground shrink-0">
-                {formatInstalls(variant.installs)}
-              </span>
-            </button>
-          ))}
+        {/* Nested section: muted background visually shows that variants
+            are children of the group row above. Each variant is rendered
+            as a SkillCard so it inherits the same checkbox + click-row vs
+            click-name behavior the singleton rows use.
+
+            The `border-t` is the visual top edge of the first variant
+            (since variants have border-t-0). Color it orange when the
+            first variant is selected so the selection's top edge visually
+            connects to the rest of its border. */}
+        <div className="border-t bg-muted dark:border-border/50 [&:has(>_label:first-child[data-checked])]:border-t-primary/30">
+          {group.variants.map((variant, i) => {
+            const skill: SkillData = {
+              source: variant.source,
+              skillId: variant.skillId,
+              name: group.name,
+              description: variant.description,
+              installs: variant.installs,
+              technologies: [],
+            };
+            const isLast = i === group.variants.length - 1;
+            return (
+              <SkillCard
+                key={`${variant.source}/${variant.skillId}`}
+                skill={skill}
+                selectable
+                variant="row"
+                onViewDetail={() => onSelectVariant(variant)}
+                className={cn(
+                  // Square the corners and remove the standalone card border
+                  // so variants render as one continuous list inside the
+                  // expanded section. The bottom-most variant retains the
+                  // bottom-rounding from the wrapper div.
+                  "rounded-none border-x-0 border-t-0 bg-transparent",
+                  isLast && cappedRemainder === 0 && "border-b-0",
+                )}
+              />
+            );
+          })}
           {cappedRemainder > 0 && (
             <div className="px-4 py-2 text-xs text-muted-foreground">
               showing {visibleCount} of {group.variantCount} versions
@@ -298,4 +334,3 @@ function SkillGroupRow({
     </Collapsible>
   );
 }
-
