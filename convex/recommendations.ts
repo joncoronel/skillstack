@@ -202,8 +202,11 @@ export const analyzeRepo = action({
       });
     }
 
-    // Vector search over the skills index
-    const results = await ctx.vectorSearch("skills", "by_embedding", {
+    // Vector search over the skillEmbeddings table. Returns embedding-row
+    // IDs paired with cosine-similarity scores. We translate those IDs back
+    // to summary metadata via the by_skillEmbeddingId index — never reading
+    // the heavy embedding rows themselves.
+    const results = await ctx.vectorSearch("skillEmbeddings", "by_embedding", {
       vector: queryEmbedding,
       limit: SEARCH_LIMIT,
       filter: (q) => q.eq("isDelisted", false),
@@ -218,18 +221,22 @@ export const analyzeRepo = action({
       };
     }
 
-    // Load summary metadata for each ranked skill. We use summaries
-    // (~200 bytes/row) instead of full skill docs (~25 KB/row) because the
-    // re-rank loop below only reads small fields, all of which are mirrored.
-    const ids = results.map((r) => r._id as Id<"skills">);
-    const entries = await ctx.runQuery(internal.skills.getSummariesByIds, {
-      ids,
-    });
+    // Load summary metadata for each ranked embedding. The summaries table
+    // has a `skillEmbeddingId` back-reference so we can look up summaries
+    // directly from the embedding IDs returned by vector search, without
+    // ever reading the embedding rows themselves (each is ~12 KB).
+    const embeddingIds = results.map(
+      (r) => r._id as Id<"skillEmbeddings">,
+    );
+    const entries = await ctx.runQuery(
+      internal.skills.getSummariesByEmbeddingIds,
+      { ids: embeddingIds },
+    );
 
-    // Index summaries by their owning skill _id so we can preserve the
-    // vector-search ranking when looping over results below.
-    const summaryByDocId = new Map(
-      entries.map((e) => [e.skillDocId, e.summary]),
+    // Index summaries by their corresponding skillEmbedding _id so we can
+    // preserve the vector-search ranking when looping over results below.
+    const summaryByEmbeddingId = new Map(
+      entries.map((e) => [e.skillEmbeddingId, e.summary]),
     );
 
     // ---------------------------------------------------------------------
@@ -294,7 +301,9 @@ export const analyzeRepo = action({
     const groupsByName = new Map<string, PendingGroup>();
 
     for (const result of results) {
-      const summary = summaryByDocId.get(result._id as Id<"skills">);
+      const summary = summaryByEmbeddingId.get(
+        result._id as Id<"skillEmbeddings">,
+      );
       if (!summary) continue;
 
       const variant = {

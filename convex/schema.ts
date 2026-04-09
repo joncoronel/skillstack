@@ -29,20 +29,10 @@ export default defineSchema({
     lastSeenInApi: v.optional(v.number()),
     isDelisted: v.optional(v.boolean()),
     discoveryFailCount: v.optional(v.number()),
-    // Embedding fields for semantic search
-    embedding: v.optional(v.array(v.float64())),
-    embeddedAt: v.optional(v.number()),
-    embeddingVersion: v.optional(v.number()),
+    // Embedding pipeline state. The actual vector lives in the
+    // `skillEmbeddings` table — these fields are just bookkeeping for the
+    // daily cron worker that populates it.
     needsEmbedding: v.optional(v.boolean()),
-    // How the embedding input was constructed:
-    //   "full"    — name + description + content (the happy path)
-    //   "minimal" — name + description only (fallback because content tokenized
-    //               too densely to fit OpenAI's per-input limit even after
-    //               truncation)
-    // Lets us measure what fraction of skills are using degraded embeddings.
-    // If "minimal" grows past a few %, that's a signal to improve truncation
-    // strategy (chunking, tiktoken, smarter content extraction, etc).
-    embeddingMode: v.optional(v.string()),
     // Set when the worker gives up on a skill (e.g. content too dense to fit
     // OpenAI's per-input token limit even after truncation). Non-destructive:
     // a future migration can re-flag these by reason and try a smarter
@@ -56,7 +46,26 @@ export default defineSchema({
     .index("by_isDelisted", ["isDelisted"])
     .index("by_hasContentFetchError", ["hasContentFetchError"])
     .index("by_leaderboard_active", ["leaderboard", "isDelisted"])
-    .index("by_needsEmbedding", ["needsEmbedding"])
+    .index("by_needsEmbedding", ["needsEmbedding"]),
+
+  // Embedding vectors live in their own table to keep `skills` row reads
+  // cheap. A skill row averages ~13 KB without the embedding vs ~25 KB with
+  // it. The recommendation pipeline reaches summaries by `skillEmbeddingId`
+  // (back-reference on skillSummaries), so vector search results don't need
+  // to be translated through the heavy embedding rows themselves.
+  //
+  // The vector index lives here because Convex requires the vector index to
+  // be on the table that owns the vector field.
+  skillEmbeddings: defineTable({
+    skillId: v.id("skills"),
+    embedding: v.array(v.float64()),
+    // Mirrored from the parent skill row so the vector index filter
+    // (`q.eq("isDelisted", false)`) works without a join. Set explicitly to
+    // false on insert and patched in lockstep with the skill row's flag.
+    isDelisted: v.boolean(),
+    embeddingMode: v.optional(v.string()),
+  })
+    .index("by_skillId", ["skillId"])
     .vectorIndex("by_embedding", {
       vectorField: "embedding",
       dimensions: 1536,
@@ -85,13 +94,21 @@ export default defineSchema({
     // Embedding state mirrored from the skills table so coverage stats and
     // unembeddable-skill listings can be computed from this small summary
     // table (~200 bytes/row) instead of scanning full skill docs (~25 KB/row).
-    // The actual embedding vector itself stays only on the skills table.
+    // The actual embedding vector lives in the skillEmbeddings table.
     hasEmbedding: v.optional(v.boolean()),
     embeddingMode: v.optional(v.string()),
     embeddingSkipReason: v.optional(v.string()),
     needsEmbedding: v.optional(v.boolean()),
+    // Back-reference to the skillEmbeddings row that holds this skill's
+    // vector. Vector search returns Id<"skillEmbeddings"> values; the
+    // recommendation pipeline maps those back to summaries via the
+    // by_skillEmbeddingId index, avoiding any read of the heavy embedding
+    // rows themselves. Optional because legacy summaries (from before the
+    // table split) won't have it set until the backfill runs.
+    skillEmbeddingId: v.optional(v.id("skillEmbeddings")),
   })
     .index("by_source_skillId", ["source", "skillId"])
+    .index("by_skillEmbeddingId", ["skillEmbeddingId"])
     .index("by_isDelisted", ["isDelisted"])
     .index("by_needsContentFetch", ["needsContentFetch"])
     .index("by_needsDiscovery", ["needsDiscovery"])

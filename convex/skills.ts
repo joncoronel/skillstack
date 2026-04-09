@@ -16,7 +16,6 @@ import {
 } from "./lib/github";
 import {
   embedTexts,
-  EMBEDDING_VERSION,
   truncateForEmbedding,
   EmbeddingInputTooLongError,
 } from "./lib/embeddings";
@@ -253,6 +252,15 @@ export const upsertSkillsBatch = internalMutation({
               isDelisted: false,
               installs: skill.installs,
             });
+            // Mirror the relist into skillEmbeddings so the vector index
+            // filter starts including this row again.
+            const skillEmbedding = await ctx.db
+              .query("skillEmbeddings")
+              .withIndex("by_skillId", (q) => q.eq("skillId", existing._id))
+              .unique();
+            if (skillEmbedding) {
+              await ctx.db.patch(skillEmbedding._id, { isDelisted: false });
+            }
           }
         } else if (summary.installs !== skill.installs) {
           // Installs changed but nothing structural — lightweight patch
@@ -1161,6 +1169,16 @@ export const delistSkillsBatch = internalMutation({
         .unique();
       if (skill && !skill.isDelisted) {
         await ctx.db.patch(skill._id, { isDelisted: true });
+
+        // Mirror the delisted state into skillEmbeddings so the vector
+        // index filter (`q.eq("isDelisted", false)`) excludes this row.
+        const skillEmbedding = await ctx.db
+          .query("skillEmbeddings")
+          .withIndex("by_skillId", (q) => q.eq("skillId", skill._id))
+          .unique();
+        if (skillEmbedding) {
+          await ctx.db.patch(skillEmbedding._id, { isDelisted: true });
+        }
       }
     }
   },
@@ -1244,38 +1262,89 @@ export const writeEmbeddingsBatch = internalMutation({
       }),
     ),
   },
+  /**
+   * Canonical write path for skill embeddings. ALL embedding writes must go
+   * through this function. It atomically:
+   *   1. Reads the parent skill row + the corresponding summary row
+   *   2. Inserts (or patches) a row in `skillEmbeddings` with the vector
+   *   3. Patches the parent skill row's bookkeeping fields
+   *   4. Patches the summary row to mirror the new embedding state and
+   *      set `skillEmbeddingId` so the recommendation pipeline can find
+   *      the summary from a vector-search result
+   *
+   * Convex mutations are transactional — all operations either fully commit
+   * or fully roll back, so we can't end up with a half-written embedding.
+   *
+   * If a skill has no corresponding summary (which should never happen in
+   * practice — every skill insert in `upsertSkillsBatch` is paired with a
+   * summary upsert), we log loudly and skip the embedding write entirely
+   * rather than orphaning the row.
+   *
+   * If you add a new code path that needs to write embeddings, call this
+   * function instead of writing the table directly.
+   */
   handler: async (ctx, { entries }) => {
-    const now = Date.now();
     for (const { skillId, embedding, mode } of entries) {
       const skill = await ctx.db.get(skillId);
       if (!skill) continue;
-      await ctx.db.patch(skillId, {
-        embedding,
-        embeddedAt: now,
-        embeddingVersion: EMBEDDING_VERSION,
-        embeddingMode: mode,
-        needsEmbedding: false,
-        // Clear any stale skip reason if a previously-skipped skill is being
-        // successfully re-embedded (e.g. after a content update).
-        embeddingSkipReason: undefined,
-      });
 
-      // Mirror embedding state to the summary row so coverage stats and
-      // listings can be computed cheaply without scanning full skill docs.
+      // Look up the summary first so we can fail loudly if missing.
       const summary = await ctx.db
         .query("skillSummaries")
         .withIndex("by_source_skillId", (q) =>
           q.eq("source", skill.source).eq("skillId", skill.skillId),
         )
         .unique();
-      if (summary) {
-        await ctx.db.patch(summary._id, {
-          hasEmbedding: true,
+      if (!summary) {
+        console.error(
+          `writeEmbeddingsBatch: no summary for skill ${skillId} (${skill.source}/${skill.skillId}) — skipping embedding write to avoid orphaning a row`,
+        );
+        continue;
+      }
+
+      const isDelisted = skill.isDelisted ?? false;
+
+      // Insert or update the embedding row.
+      let embeddingDocId;
+      const existingEmbedding = await ctx.db
+        .query("skillEmbeddings")
+        .withIndex("by_skillId", (q) => q.eq("skillId", skillId))
+        .unique();
+      if (existingEmbedding) {
+        await ctx.db.patch(existingEmbedding._id, {
+          embedding,
+          isDelisted,
           embeddingMode: mode,
-          needsEmbedding: false,
-          embeddingSkipReason: undefined,
+        });
+        embeddingDocId = existingEmbedding._id;
+      } else {
+        embeddingDocId = await ctx.db.insert("skillEmbeddings", {
+          skillId,
+          embedding,
+          isDelisted,
+          embeddingMode: mode,
         });
       }
+
+      // Patch the parent skill row to clear pipeline flags. The vector and
+      // its bookkeeping metadata (embeddedAt/embeddingVersion/embeddingMode)
+      // live on the embedding row now — only the queue flags remain here.
+      await ctx.db.patch(skillId, {
+        needsEmbedding: false,
+        // Clear any stale skip reason if a previously-skipped skill is being
+        // successfully re-embedded (e.g. after a content update).
+        embeddingSkipReason: undefined,
+      });
+
+      // Patch the summary: mirror the embedding state and set the
+      // back-reference that the recommendation pipeline uses.
+      await ctx.db.patch(summary._id, {
+        hasEmbedding: true,
+        embeddingMode: mode,
+        needsEmbedding: false,
+        embeddingSkipReason: undefined,
+        skillEmbeddingId: embeddingDocId,
+      });
     }
   },
 });
@@ -1406,154 +1475,6 @@ export const backfillIsDelistedFalse = internalAction({
       isDone = result.isDone;
     }
     console.log(`Set isDelisted=false on ${summaryTotal} skillSummary rows`);
-  },
-});
-
-/**
- * One-shot backfill: copy embedding state (hasEmbedding, embeddingMode,
- * embeddingSkipReason, needsEmbedding) from the skills table to the
- * corresponding skillSummaries rows. Run this once after adding the embedding
- * fields to the skillSummaries schema, so existing rows are populated and
- * coverage queries can be served from summaries instead of full skill docs.
- *
- * Run via:
- *   npx convex run skills:backfillSummaryEmbeddingState
- *
- * Idempotent — safe to re-run.
- */
-export const backfillSummaryEmbeddingStateBatch = internalMutation({
-  args: { cursor: v.optional(v.string()) },
-  handler: async (ctx, { cursor }) => {
-    // 100 docs × ~25 KB ≈ 2.5 MB per page — under the 16 MB read budget.
-    const result = await ctx.db
-      .query("skills")
-      .paginate({ numItems: 100, cursor: cursor ?? null });
-
-    let patched = 0;
-    for (const skill of result.page) {
-      const summary = await ctx.db
-        .query("skillSummaries")
-        .withIndex("by_source_skillId", (q) =>
-          q.eq("source", skill.source).eq("skillId", skill.skillId),
-        )
-        .unique();
-      if (!summary) continue;
-
-      const update: {
-        hasEmbedding?: boolean;
-        embeddingMode?: string;
-        embeddingSkipReason?: string;
-        needsEmbedding?: boolean;
-      } = {};
-
-      const expectedHasEmbedding = !!skill.embedding;
-      if (summary.hasEmbedding !== expectedHasEmbedding) {
-        update.hasEmbedding = expectedHasEmbedding;
-      }
-      if (summary.embeddingMode !== skill.embeddingMode && skill.embeddingMode) {
-        update.embeddingMode = skill.embeddingMode;
-      }
-      if (
-        summary.embeddingSkipReason !== skill.embeddingSkipReason &&
-        skill.embeddingSkipReason
-      ) {
-        update.embeddingSkipReason = skill.embeddingSkipReason;
-      }
-      if (summary.needsEmbedding !== skill.needsEmbedding) {
-        update.needsEmbedding = skill.needsEmbedding;
-      }
-
-      if (Object.keys(update).length > 0) {
-        await ctx.db.patch(summary._id, update);
-        patched++;
-      }
-    }
-
-    return {
-      nextCursor: result.continueCursor,
-      isDone: result.isDone,
-      patched,
-    };
-  },
-});
-
-export const backfillSummaryEmbeddingState = internalAction({
-  args: {},
-  handler: async (ctx) => {
-    let cursor: string | undefined;
-    let isDone = false;
-    let total = 0;
-    while (!isDone) {
-      const result: { nextCursor: string; isDone: boolean; patched: number } =
-        await ctx.runMutation(
-          internal.skills.backfillSummaryEmbeddingStateBatch,
-          { cursor },
-        );
-      total += result.patched;
-      cursor = result.nextCursor;
-      isDone = result.isDone;
-    }
-    console.log(`Mirrored embedding state to ${total} skillSummary rows`);
-  },
-});
-
-/**
- * One-shot backfill: set `embeddingMode = "full"` on every skill that has an
- * embedding but no mode set yet. Use this after deploying the embeddingMode
- * field to label legacy embeddings, IF you can verify the historical embedding
- * runs only ever used the happy path (i.e. the EmbeddingInputTooLongError
- * fallback never fired and no skills were marked unembeddable).
- *
- * Verify safety first by checking the historical run logs for any:
- *   - "Marking skill ... as unembeddable"
- *   - "falling back to per-skill embedding"
- * If either appears, DO NOT run this — some skills are actually "minimal"
- * mode and would be mislabeled. Instead, re-embed them via seedEmbeddingQueue.
- *
- * Run via:
- *   npx convex run skills:backfillEmbeddingModeFull
- */
-export const backfillEmbeddingModeFullBatch = internalMutation({
-  args: { cursor: v.optional(v.string()) },
-  handler: async (ctx, { cursor }) => {
-    // Skill docs are ~25 KB each (content + 12 KB embedding vector). 100 docs
-    // ≈ 2.5 MB per page — well under the 16 MB per-function read limit, with
-    // headroom for the patch writes.
-    const result = await ctx.db
-      .query("skills")
-      .paginate({ numItems: 100, cursor: cursor ?? null });
-    let patched = 0;
-    for (const s of result.page) {
-      if (s.embedding && !s.embeddingMode) {
-        await ctx.db.patch(s._id, { embeddingMode: "full" });
-        patched++;
-      }
-    }
-    return {
-      nextCursor: result.continueCursor,
-      isDone: result.isDone,
-      patched,
-    };
-  },
-});
-
-export const backfillEmbeddingModeFull = internalAction({
-  args: {},
-  handler: async (ctx) => {
-    let cursor: string | undefined;
-    let isDone = false;
-    let total = 0;
-    while (!isDone) {
-      const result: { nextCursor: string; isDone: boolean; patched: number } =
-        await ctx.runMutation(
-          internal.skills.backfillEmbeddingModeFullBatch,
-          { cursor },
-        );
-      total += result.patched;
-      cursor = result.nextCursor;
-      isDone = result.isDone;
-    }
-    console.log(`Labeled ${total} legacy embeddings as embeddingMode: "full"`);
   },
 });
 
@@ -1902,52 +1823,6 @@ export const backfillEmbeddings = internalAction({
   },
 });
 
-/**
- * Mark every skill (with content) as needing an embedding. Use this once after
- * deploying the embedding flow to seed the queue. Idempotent — already-embedded
- * skills with `needsEmbedding: true` will just be re-embedded.
- */
-export const markAllSkillsForEmbedding = internalMutation({
-  args: { cursor: v.optional(v.string()) },
-  handler: async (ctx, { cursor }) => {
-    const result = await ctx.db
-      .query("skills")
-      .paginate({ numItems: 200, cursor: cursor ?? null });
-    let marked = 0;
-    for (const s of result.page) {
-      if (s.isDelisted) continue;
-      if (!s.content && !s.description) continue;
-      if (s.embedding && !s.needsEmbedding) continue;
-      await ctx.db.patch(s._id, { needsEmbedding: true });
-      marked++;
-    }
-    return {
-      nextCursor: result.continueCursor,
-      isDone: result.isDone,
-      marked,
-    };
-  },
-});
-
-export const seedEmbeddingQueue = internalAction({
-  args: {},
-  handler: async (ctx) => {
-    let cursor: string | undefined;
-    let isDone = false;
-    let total = 0;
-    while (!isDone) {
-      const result: { nextCursor: string; isDone: boolean; marked: number } =
-        await ctx.runMutation(internal.skills.markAllSkillsForEmbedding, {
-          cursor,
-        });
-      total += result.marked;
-      cursor = result.nextCursor;
-      isDone = result.isDone;
-    }
-    console.log(`Marked ${total} skills as needsEmbedding`);
-  },
-});
-
 // ---------------------------------------------------------------------------
 // Queries
 // ---------------------------------------------------------------------------
@@ -2022,6 +1897,35 @@ export const getSummariesByIds = internalQuery({
           .withIndex("by_skillDocId", (q) => q.eq("skillDocId", id))
           .unique();
         return summary ? { skillDocId: id, summary } : null;
+      }),
+    );
+    return summaries.filter(
+      (s): s is NonNullable<typeof s> => s !== null,
+    );
+  },
+});
+
+/**
+ * Like getSummariesByIds, but takes Id<"skillEmbeddings"> values from a
+ * vector search on the skillEmbeddings table. Looks up summaries via the
+ * by_skillEmbeddingId back-reference index, so we never read the heavy
+ * embedding rows themselves.
+ *
+ * Returns the embedding doc id alongside the summary so callers can preserve
+ * the vector-search ranking when iterating results.
+ */
+export const getSummariesByEmbeddingIds = internalQuery({
+  args: { ids: v.array(v.id("skillEmbeddings")) },
+  handler: async (ctx, { ids }) => {
+    const summaries = await Promise.all(
+      ids.map(async (id) => {
+        const summary = await ctx.db
+          .query("skillSummaries")
+          .withIndex("by_skillEmbeddingId", (q) =>
+            q.eq("skillEmbeddingId", id),
+          )
+          .unique();
+        return summary ? { skillEmbeddingId: id, summary } : null;
       }),
     );
     return summaries.filter(
@@ -2156,14 +2060,27 @@ export const cosineSimilarityBetween = internalQuery({
     if (!skillB) {
       return { error: `Skill B not found: ${b.source}/${b.skillId}` };
     }
-    if (!skillA.embedding) {
+
+    const embeddingA = await ctx.db
+      .query("skillEmbeddings")
+      .withIndex("by_skillId", (q) => q.eq("skillId", skillA._id))
+      .unique();
+    const embeddingB = await ctx.db
+      .query("skillEmbeddings")
+      .withIndex("by_skillId", (q) => q.eq("skillId", skillB._id))
+      .unique();
+
+    if (!embeddingA) {
       return { error: `Skill A has no embedding: ${a.source}/${a.skillId}` };
     }
-    if (!skillB.embedding) {
+    if (!embeddingB) {
       return { error: `Skill B has no embedding: ${b.source}/${b.skillId}` };
     }
 
-    const similarity = cosineSimilarity(skillA.embedding, skillB.embedding);
+    const similarity = cosineSimilarity(
+      embeddingA.embedding,
+      embeddingB.embedding,
+    );
 
     return {
       similarity,
