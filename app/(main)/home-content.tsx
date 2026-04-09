@@ -1,12 +1,7 @@
 "use client";
 
-import { useQueryState } from "nuqs";
+import { useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
-import {
-  modeParser,
-  searchQueryParser,
-  repoUrlParser,
-} from "@/lib/search-params";
 import { SkillExplorer } from "@/components/skill-explorer";
 // import useMeasure from "react-use-measure";
 import { useCollapsibleHeight } from "@/hooks/cubby-ui/use-collapsible-height";
@@ -14,9 +9,15 @@ import { useUserPlan } from "@/hooks/use-user-plan";
 
 export function HomeContent() {
   const { limits } = useUserPlan();
-  const [mode] = useQueryState("mode", modeParser);
-  const [query] = useQueryState("q", searchQueryParser);
-  const [repoUrl] = useQueryState("repo", repoUrlParser);
+  // Read URL state via Next's router-tied hook (not nuqs) so the very first
+  // render after navigating back to `/` reflects the actual URL instead of
+  // nuqs's internal store, which can lag for one render after a Link
+  // navigation. SkillExplorer still uses `useQueryState` for the input/write
+  // path — they stay in sync because nuqs writes go through Next's router.
+  const searchParams = useSearchParams();
+  const mode = searchParams.get("mode") ?? "text";
+  const query = searchParams.get("q") ?? "";
+  const repoUrl = searchParams.get("repo") ?? "";
   const searchActive =
     mode === "text"
       ? query.trim().length > 0
