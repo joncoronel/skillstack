@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useQueryState } from "nuqs";
+import type { FunctionReturnType } from "convex/server";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Search01Icon,
@@ -26,22 +27,29 @@ import {
   TabsContent,
 } from "@/components/ui/cubby-ui/tabs";
 import { SkillSearchResults } from "@/components/skill-search";
+import { DefaultSkillsList } from "@/components/default-skills-list";
 import { RepoAnalysisResults } from "@/components/repo-url-input";
 import { BundleBar } from "@/components/bundle-bar";
+import type { api } from "@/convex/_generated/api";
 
 interface SkillExplorerProps {
   canAutoDetect: boolean;
+  initialPopularSkills: FunctionReturnType<typeof api.skills.listPopularSkills>;
 }
 
 const TEXT_DEBOUNCE_MS = 300;
 
-export function SkillExplorer({ canAutoDetect }: SkillExplorerProps) {
+export function SkillExplorer({
+  canAutoDetect,
+  initialPopularSkills,
+}: SkillExplorerProps) {
   const [mode, setMode] = useQueryState("mode", modeParser);
   const [textQuery, setTextQuery] = useQueryState("q", searchQueryParser);
   const [repoUrl, setRepoUrl] = useQueryState("repo", repoUrlParser);
 
   const [debouncedText, setDebouncedText] = useState(textQuery.trim());
-  const [repoTriggerKey, setRepoTriggerKey] = useState(repoUrl ? 1 : 0);
+  // Local input state for the repo field — only pushed to the URL on submit.
+  const [repoInput, setRepoInput] = useState(repoUrl);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Debounce text query (300ms) — only for non-empty values. An empty input
@@ -75,13 +83,13 @@ export function SkillExplorer({ canAutoDetect }: SkillExplorerProps) {
   }, []);
 
   function handleRepoSubmit() {
-    const trimmed = repoUrl.trim();
+    const trimmed = repoInput.trim();
     if (!trimmed) return;
-    setRepoTriggerKey((k) => k + 1);
+    setRepoUrl(trimmed);
   }
 
   const isText = mode === "text";
-  const inputValue = isText ? textQuery : repoUrl;
+  const inputValue = isText ? textQuery : repoInput;
   const placeholder = isText
     ? "Search skills by name…"
     : "https://github.com/owner/repo";
@@ -89,10 +97,7 @@ export function SkillExplorer({ canAutoDetect }: SkillExplorerProps) {
 
   return (
     <BundleSelectionProvider>
-      <Tabs
-        value={mode}
-        onValueChange={(value) => setMode(value as ModeValue)}
-      >
+      <Tabs value={mode} onValueChange={(value) => setMode(value as ModeValue)}>
         <TabsList variant="underline" className="mb-3">
           <TabsTrigger value="text">
             <HugeiconsIcon
@@ -133,7 +138,7 @@ export function SkillExplorer({ canAutoDetect }: SkillExplorerProps) {
                   // doesn't briefly resurface stale results.
                   if (!e.target.value.trim()) setDebouncedText("");
                 } else {
-                  setRepoUrl(e.target.value);
+                  setRepoInput(e.target.value);
                 }
               }}
               onKeyDown={(e) => {
@@ -149,6 +154,7 @@ export function SkillExplorer({ canAutoDetect }: SkillExplorerProps) {
                     setTextQuery("");
                     setDebouncedText("");
                   } else {
+                    setRepoInput("");
                     setRepoUrl("");
                   }
                 }}
@@ -166,7 +172,7 @@ export function SkillExplorer({ canAutoDetect }: SkillExplorerProps) {
             <Button
               variant="outline"
               onClick={handleRepoSubmit}
-              disabled={!repoUrl.trim() || !canAutoDetect}
+              disabled={!repoInput.trim() || !canAutoDetect}
               leftSection={
                 <HugeiconsIcon
                   icon={FlashIcon}
@@ -183,13 +189,22 @@ export function SkillExplorer({ canAutoDetect }: SkillExplorerProps) {
         {/* Results region — each panel keeps mounted so per-mode state
             (search results, repo analysis) survives mode switches. */}
         <TabsPanels>
-          <TabsContent value="text" keepMounted>
-            <SkillSearchResults query={effectiveTextQuery} />
+          <TabsContent value="text">
+            {/* Both lists stay mounted so the default list preserves scroll
+                + pagination state across type-and-clear. `hidden` maps to
+                display:none, which makes the IntersectionObserver sentinel
+                non-intersecting while the user is searching — no spurious
+                background fetches. */}
+            <div hidden={!!effectiveTextQuery}>
+              <DefaultSkillsList initialPage={initialPopularSkills} />
+            </div>
+            <div hidden={!effectiveTextQuery}>
+              <SkillSearchResults query={effectiveTextQuery} />
+            </div>
           </TabsContent>
-          <TabsContent value="repo" keepMounted>
+          <TabsContent value="repo">
             <RepoAnalysisResults
               repoUrl={repoUrl}
-              triggerKey={repoTriggerKey}
               canAutoDetect={canAutoDetect}
             />
           </TabsContent>

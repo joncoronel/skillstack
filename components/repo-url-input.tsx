@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useAction } from "convex/react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useConvex } from "convex/react";
 import Link from "next/link";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
 import { api } from "@/convex/_generated/api";
+import type { AnalyzeRepoResult } from "@/convex/recommendations";
 import { SkillCard, type SkillData } from "@/components/skill-card";
 import { SkillDetailSheet } from "@/components/skill-detail-sheet";
 import { Skeleton } from "@/components/ui/cubby-ui/skeleton";
@@ -16,71 +18,41 @@ import {
   CollapsibleContent,
 } from "@/components/ui/cubby-ui/collapsible";
 import { cn } from "@/lib/utils";
-
-type AnalyzeRepoResult = Awaited<
-  ReturnType<
-    ReturnType<typeof useAction<typeof api.recommendations.analyzeRepo>>
-  >
->;
 type GroupedRecommendation = AnalyzeRepoResult["recommendations"][number];
 type Variant = GroupedRecommendation["variants"][number];
 
 interface RepoAnalysisResultsProps {
-  /** Trimmed repo URL — empty string disables the analysis. */
+  /** The repo URL from the URL param. Empty = no analysis yet. */
   repoUrl: string;
-  /** When the URL changes, the parent should bump this signal to re-trigger. */
-  triggerKey: number;
   canAutoDetect: boolean;
 }
 
 /**
- * Calls the Convex `analyzeRepo` action when `triggerKey` changes (the parent
- * controls submission timing). Displays the fingerprint chips and ranked
- * recommendations.
+ * Fetches repo analysis results via TanStack Query, keyed on the repo URL
+ * param. The URL is only set when the user clicks Analyze, so typing in the
+ * input doesn't trigger fetches. Tab switches don't re-fetch, and
+ * re-analyzing the same repo is a cache hit.
  */
 export function RepoAnalysisResults({
   repoUrl,
-  triggerKey,
   canAutoDetect,
 }: RepoAnalysisResultsProps) {
-  const analyzeRepo = useAction(api.recommendations.analyzeRepo);
-  const [result, setResult] = useState<AnalyzeRepoResult | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const convex = useConvex();
   const [activeSkill, setActiveSkill] = useState<SkillData | null>(null);
 
-  useEffect(() => {
-    if (triggerKey === 0) return; // Initial mount — don't auto-run
-    const trimmed = repoUrl.trim();
-    if (!trimmed) return;
+  const trimmedUrl = repoUrl.trim();
 
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-
-    analyzeRepo({ repoUrl: trimmed })
-      .then((res) => {
-        if (cancelled) return;
-        if (res.error) {
-          setError(res.error);
-          setResult(null);
-        } else {
-          setResult(res);
-        }
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setError("Failed to analyze repository. Please check the URL.");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [triggerKey]);
+  const { data, isPending, error } = useQuery<AnalyzeRepoResult>({
+    queryKey: ["repo", "analyze", trimmedUrl],
+    queryFn: () =>
+      convex.action(api.recommendations.analyzeRepo, {
+        repoUrl: trimmedUrl,
+      }),
+    enabled: !!trimmedUrl,
+    staleTime: 10 * 60_000,
+    gcTime: 10 * 60_000,
+    retry: false,
+  });
 
   if (!canAutoDetect) {
     return (
@@ -93,6 +65,11 @@ export function RepoAnalysisResults({
     );
   }
 
+  const loading = isPending && !!trimmedUrl;
+  const actionError = error
+    ? "Failed to analyze repository. Please check the URL."
+    : data?.error ?? null;
+
   if (loading) {
     return (
       <div className="mt-4 grid gap-3">
@@ -103,10 +80,11 @@ export function RepoAnalysisResults({
     );
   }
 
-  if (error) {
-    return <p className="mt-4 text-sm text-destructive">{error}</p>;
+  if (actionError) {
+    return <p className="mt-4 text-sm text-destructive">{actionError}</p>;
   }
 
+  const result = data;
   if (!result) return null;
 
   const recs = result.recommendations;

@@ -1,13 +1,21 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
+import type { FunctionReturnType } from "convex/server";
 import { cn } from "@/lib/utils";
 import { SkillExplorer } from "@/components/skill-explorer";
 // import useMeasure from "react-use-measure";
 import { useCollapsibleHeight } from "@/hooks/cubby-ui/use-collapsible-height";
 import { useUserPlan } from "@/hooks/use-user-plan";
+import type { api } from "@/convex/_generated/api";
 
-export function HomeContent() {
+type HomeContentProps = {
+  initialPopularSkills: FunctionReturnType<
+    typeof api.skills.listPopularSkills
+  >;
+};
+
+export function HomeContent({ initialPopularSkills }: HomeContentProps) {
   const { limits } = useUserPlan();
   // Read URL state via Next's router-tied hook (not nuqs) so the very first
   // render after navigating back to `/` reflects the actual URL instead of
@@ -58,7 +66,10 @@ export function HomeContent() {
           searchActive ? "pt-6" : "pt-0",
         )}
       >
-        <SkillExplorer canAutoDetect={limits?.canAutoDetect ?? true} />
+        <SkillExplorer
+          canAutoDetect={limits?.canAutoDetect ?? true}
+          initialPopularSkills={initialPopularSkills}
+        />
       </main>
     </>
   );

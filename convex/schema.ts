@@ -110,6 +110,11 @@ export default defineSchema({
     .index("by_source_skillId", ["source", "skillId"])
     .index("by_skillEmbeddingId", ["skillEmbeddingId"])
     .index("by_isDelisted", ["isDelisted"])
+    // Powers the home page's default "popular skills" list. Queried with
+    // q.eq("isDelisted", false).order("desc") to walk non-delisted rows from
+    // highest installs to lowest. Every insert path sets isDelisted explicitly
+    // to false, so undefined rows (should be none) are silently excluded.
+    .index("by_isDelisted_installs", ["isDelisted", "installs"])
     .index("by_needsContentFetch", ["needsContentFetch"])
     .index("by_needsDiscovery", ["needsDiscovery"])
     .index("by_hasContentFetchError", ["hasContentFetchError"])

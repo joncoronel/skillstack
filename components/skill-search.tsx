@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { usePaginatedQuery } from "convex/react";
+import { useQuery } from "@tanstack/react-query";
+import { convexQuery } from "@convex-dev/react-query";
 import { api } from "@/convex/_generated/api";
 import { SkillCard, type SkillData } from "@/components/skill-card";
 import { SkillDetailSheet } from "@/components/skill-detail-sheet";
 import { Skeleton } from "@/components/ui/cubby-ui/skeleton";
-import { Button } from "@/components/ui/cubby-ui/button";
 import { cn } from "@/lib/utils";
 
 interface SkillSearchResultsProps {
@@ -16,22 +16,21 @@ interface SkillSearchResultsProps {
 
 /**
  * Renders results for a Convex full-text search over skill names.
+ * Uses TanStack Query (via convexQuery) for caching + live reactivity.
  * Driven by an external query prop — the input itself lives in the parent
  * (skill-explorer) so the same input can swap between text + repo modes.
  */
 export function SkillSearchResults({ query }: SkillSearchResultsProps) {
   const [activeSkill, setActiveSkill] = useState<SkillData | null>(null);
 
-  const { results, status, loadMore } = usePaginatedQuery(
-    api.skills.searchSkills,
-    query ? { query } : "skip",
-    { initialNumItems: 25 },
-  );
+  const { data, isPending } = useQuery({
+    ...convexQuery(api.skills.searchSkills, query ? { query } : "skip"),
+    gcTime: 5 * 60_000,
+  });
 
   if (!query) return null;
 
-  const isLoading = status === "LoadingFirstPage";
-  const skills: SkillData[] = results.map((r) => ({
+  const skills: SkillData[] = (data ?? []).map((r) => ({
     source: r.source,
     skillId: r.skillId,
     name: r.name,
@@ -44,7 +43,7 @@ export function SkillSearchResults({ query }: SkillSearchResultsProps) {
 
   return (
     <div className="mt-4">
-      {isLoading ? (
+      {isPending ? (
         <>
           <Skeleton className="h-4 w-20 mb-3" />
           <div className="grid">
@@ -95,22 +94,6 @@ export function SkillSearchResults({ query }: SkillSearchResultsProps) {
               );
             })}
           </div>
-          {status === "CanLoadMore" && (
-            <div className="flex justify-center mt-4">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => loadMore(25)}
-              >
-                Load more
-              </Button>
-            </div>
-          )}
-          {status === "LoadingMore" && (
-            <div className="flex justify-center mt-4">
-              <span className="text-xs text-muted-foreground">Loading…</span>
-            </div>
-          )}
         </>
       ) : (
         <p className="text-sm text-muted-foreground text-center py-8">
