@@ -5,8 +5,12 @@ import Link from "next/link";
 import { usePreloadedQuery, useMutation, type Preloaded } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
-import { SkillCard, type SkillData } from "@/components/skill-card";
-import { SkillDetailSheet } from "@/components/skill-detail-sheet";
+import { SkillCard } from "@/components/skill-card";
+import {
+  SkillDetailSheet,
+  createSkillDetailHandle,
+} from "@/components/skill-detail-sheet";
+
 import { InstallCommands } from "@/components/install-commands";
 import { Button } from "@/components/ui/cubby-ui/button";
 import { Switch } from "@/components/ui/cubby-ui/switch";
@@ -32,7 +36,12 @@ import {
 } from "@/components/ui/cubby-ui/popover";
 import { ForkBundleButton } from "@/components/explore/fork-bundle-button";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Share01Icon, Loading03Icon, Edit01Icon, Cancel01Icon } from "@hugeicons/core-free-icons";
+import {
+  Share01Icon,
+  Loading03Icon,
+  Edit01Icon,
+  Cancel01Icon,
+} from "@hugeicons/core-free-icons";
 
 interface BundleViewProps {
   preloadedBundle: Preloaded<typeof api.bundles.getByUrlId>;
@@ -41,7 +50,7 @@ interface BundleViewProps {
   shareToken?: string;
 }
 
-type SkillInfo = SkillData;
+const skillDetailHandle = createSkillDetailHandle();
 
 export function BundleView({
   preloadedBundle,
@@ -51,7 +60,6 @@ export function BundleView({
 }: BundleViewProps) {
   const bundle = usePreloadedQuery(preloadedBundle);
   const planData = usePreloadedQuery(preloadedPlan);
-  const [activeSkill, setActiveSkill] = useState<SkillInfo | null>(null);
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const queryArgs = { urlId, shareToken };
   const recordEvent = useMutation(api.bundleEvents.recordEvent);
@@ -118,7 +126,9 @@ export function BundleView({
           by {bundle.creatorName} &middot; {bundle.skills.length} skill
           {bundle.skills.length !== 1 ? "s" : ""}
         </p>
-        {(bundle.viewCount > 0 || bundle.copyCount > 0 || bundle.forkCount > 0) && (
+        {(bundle.viewCount > 0 ||
+          bundle.copyCount > 0 ||
+          bundle.forkCount > 0) && (
           <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
             {bundle.viewCount > 0 && (
               <span className="font-mono tabular-nums">
@@ -145,8 +155,8 @@ export function BundleView({
               className="underline hover:text-foreground"
             >
               {bundle.forkedFrom.name}
-            </Link>
-            {" "}by {bundle.forkedFrom.creatorName}
+            </Link>{" "}
+            by {bundle.forkedFrom.creatorName}
           </p>
         )}
         {!bundle.isOwner && (
@@ -161,7 +171,13 @@ export function BundleView({
               variant="outline"
               size="sm"
               onClick={() => setRenameDialogOpen(true)}
-              leftSection={<HugeiconsIcon icon={Edit01Icon} strokeWidth={2} className="size-3.5" />}
+              leftSection={
+                <HugeiconsIcon
+                  icon={Edit01Icon}
+                  strokeWidth={2}
+                  className="size-3.5"
+                />
+              }
             >
               Rename
             </Button>
@@ -205,19 +221,13 @@ export function BundleView({
             <SkillCard
               key={`${skill.source}/${skill.skillId}`}
               skill={skill}
-              onViewDetail={() => setActiveSkill(skill)}
+              sheetHandle={skillDetailHandle}
             />
           ))}
         </div>
       </section>
 
-      <SkillDetailSheet
-        open={activeSkill !== null}
-        onOpenChange={(open) => {
-          if (!open) setActiveSkill(null);
-        }}
-        skill={activeSkill}
-      />
+      <SkillDetailSheet handle={skillDetailHandle} />
 
       {bundle.isOwner && (
         <RenameBundleDialog
@@ -293,7 +303,13 @@ function SharePopover({
                   size="xs"
                   className="text-destructive"
                   onClick={() => onRevoke({ bundleId })}
-                  leftSection={<HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="size-3.5" />}
+                  leftSection={
+                    <HugeiconsIcon
+                      icon={Cancel01Icon}
+                      strokeWidth={2}
+                      className="size-3.5"
+                    />
+                  }
                 >
                   Revoke
                 </Button>
@@ -340,7 +356,10 @@ function VisibilityToggle({
   bundleId: Id<"bundles">;
   isPublic: boolean;
   canMakePrivate: boolean;
-  updateVisibility: (args: { bundleId: Id<"bundles">; isPublic: boolean }) => void;
+  updateVisibility: (args: {
+    bundleId: Id<"bundles">;
+    isPublic: boolean;
+  }) => void;
 }) {
   const disabled = isPublic && !canMakePrivate;
 

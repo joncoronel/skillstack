@@ -1,6 +1,5 @@
 "use client";
 
-import { useRef } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { convexQuery } from "@convex-dev/react-query";
@@ -14,6 +13,7 @@ import {
   SheetFooter,
   SheetTitle,
   SheetDescription,
+  createSheetHandle,
 } from "@/components/ui/cubby-ui/sheet";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
@@ -27,129 +27,125 @@ import { useBundleSelection } from "@/lib/bundle-selection-context";
 import { formatInstalls } from "@/lib/utils";
 import type { SkillData } from "@/components/skill-card";
 
-interface SkillDetailSheetProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  skill: SkillData | null;
+export type SkillDetailHandle = ReturnType<typeof createSheetHandle<SkillData>>;
+
+export function createSkillDetailHandle() {
+  return createSheetHandle<SkillData>();
 }
 
-export function SkillDetailSheet({
-  open,
-  onOpenChange,
-  skill,
-}: SkillDetailSheetProps) {
-  // Keep the last non-null skill so content stays visible during exit animation
-  const displaySkillRef = useRef<SkillData | null>(null);
-  if (skill) {
-    displaySkillRef.current = skill;
-  }
-  const shownSkill = skill ?? displaySkillRef.current;
+interface SkillDetailSheetProps {
+  handle: SkillDetailHandle;
+}
 
+export function SkillDetailSheet({ handle }: SkillDetailSheetProps) {
+  return (
+    <Sheet handle={handle}>
+      {({ payload: skill }) => (
+        <SheetContent side="right" variant="floating" className="sm:max-w-lg">
+          {skill && <SkillDetailSheetContent skill={skill} handle={handle} />}
+        </SheetContent>
+      )}
+    </Sheet>
+  );
+}
+
+function SkillDetailSheetContent({
+  skill,
+  handle,
+}: {
+  skill: SkillData;
+  handle: SkillDetailHandle;
+}) {
   const { data: content, isPending: contentLoading } = useQuery(
-    convexQuery(
-      api.skills.getContent,
-      shownSkill
-        ? { source: shownSkill.source, skillId: shownSkill.skillId }
-        : "skip",
-    ),
+    convexQuery(api.skills.getContent, {
+      source: skill.source,
+      skillId: skill.skillId,
+    }),
   );
 
   const selection = useBundleSelection();
-  const isSelected =
-    shownSkill && selection
-      ? selection.isSelected(shownSkill.source, shownSkill.skillId)
-      : false;
+  const isSelected = selection
+    ? selection.isSelected(skill.source, skill.skillId)
+    : false;
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" variant="floating" className="sm:max-w-lg">
-        {shownSkill && (
-          <>
-            <SheetHeader>
-              <SheetTitle className="font-display">
-                {shownSkill.name}
-              </SheetTitle>
-              <SheetDescription>
-                <span className="tabular-nums">
-                  {formatInstalls(shownSkill.installs)} installs
-                </span>
-                {" · "}
-                <a
-                  href={`https://github.com/${shownSkill.source}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:underline"
-                >
-                  {shownSkill.source}
-                </a>
-              </SheetDescription>
-            </SheetHeader>
-            <SheetBody>
-              {contentLoading ? (
-                <div className="space-y-3">
-                  <Skeleton className="h-4 w-3/4" />
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-4 w-5/6" />
-                  <Skeleton className="h-4 w-2/3" />
-                </div>
-              ) : content ? (
-                <div className="prose prose-sm dark:prose-invert max-w-none">
-                  {shownSkill.description && (
-                    <p className="lead text-muted-foreground">
-                      {shownSkill.description}
-                    </p>
-                  )}
-                  <Markdown>{content}</Markdown>
-                </div>
-              ) : shownSkill.description ? (
-                <p className="text-sm text-muted-foreground">
-                  {shownSkill.description}
-                </p>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  No detailed content available for this skill.
-                </p>
-              )}
-            </SheetBody>
-            <SheetFooter>
-              <Link
-                href={`/${shownSkill.source}/${shownSkill.skillId}`}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-                onNavigate={() => onOpenChange(false)}
-              >
-                View full page
-                <HugeiconsIcon
-                  icon={ArrowRight01Icon}
-                  strokeWidth={2}
-                  className="size-3.5"
-                />
-              </Link>
-              {selection && (
-                <Button
-                  variant={isSelected ? "outline" : "primary"}
-                  size="sm"
-                  leftSection={
-                    <HugeiconsIcon
-                      icon={isSelected ? MinusSignIcon : PlusSignIcon}
-                      strokeWidth={2}
-                      className="size-3.5"
-                    />
-                  }
-                  onClick={() =>
-                    selection.toggleSkill({
-                      source: shownSkill.source,
-                      skillId: shownSkill.skillId,
-                      name: shownSkill.name,
-                    })
-                  }
-                >
-                  {isSelected ? "Remove from bundle" : "Add to bundle"}
-                </Button>
-              )}
-            </SheetFooter>
-          </>
+    <>
+      <SheetHeader>
+        <SheetTitle className="font-display">{skill.name}</SheetTitle>
+        <SheetDescription>
+          <span className="tabular-nums">
+            {formatInstalls(skill.installs)} installs
+          </span>
+          {" · "}
+          <a
+            href={`https://github.com/${skill.source}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:underline"
+          >
+            {skill.source}
+          </a>
+        </SheetDescription>
+      </SheetHeader>
+      <SheetBody>
+        {contentLoading ? (
+          <div className="space-y-3">
+            <Skeleton className="h-4 w-3/4" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-5/6" />
+            <Skeleton className="h-4 w-2/3" />
+          </div>
+        ) : content ? (
+          <div className="prose prose-sm dark:prose-invert max-w-none">
+            {skill.description && (
+              <p className="lead text-muted-foreground">{skill.description}</p>
+            )}
+            <Markdown>{content}</Markdown>
+          </div>
+        ) : skill.description ? (
+          <p className="text-sm text-muted-foreground">{skill.description}</p>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            No detailed content available for this skill.
+          </p>
         )}
-      </SheetContent>
-    </Sheet>
+      </SheetBody>
+      <SheetFooter>
+        <Link
+          href={`/${skill.source}/${skill.skillId}`}
+          className={buttonVariants({ variant: "outline", size: "sm" })}
+          onNavigate={() => handle.close()}
+        >
+          View full page
+          <HugeiconsIcon
+            icon={ArrowRight01Icon}
+            strokeWidth={2}
+            className="size-3.5"
+          />
+        </Link>
+        {selection && (
+          <Button
+            variant={isSelected ? "outline" : "primary"}
+            size="sm"
+            leftSection={
+              <HugeiconsIcon
+                icon={isSelected ? MinusSignIcon : PlusSignIcon}
+                strokeWidth={2}
+                className="size-3.5"
+              />
+            }
+            onClick={() =>
+              selection.toggleSkill({
+                source: skill.source,
+                skillId: skill.skillId,
+                name: skill.name,
+              })
+            }
+          >
+            {isSelected ? "Remove from bundle" : "Add to bundle"}
+          </Button>
+        )}
+      </SheetFooter>
+    </>
   );
 }

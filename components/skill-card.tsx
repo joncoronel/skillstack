@@ -13,8 +13,10 @@ import {
 import { Badge } from "@/components/ui/cubby-ui/badge";
 import { Checkbox } from "@/components/ui/cubby-ui/checkbox";
 import { Label } from "@/components/ui/cubby-ui/label";
+import { SheetTrigger } from "@/components/ui/cubby-ui/sheet";
 import { useBundleSelection } from "@/lib/bundle-selection-context";
 import { cn, formatInstalls, timeAgo } from "@/lib/utils";
+import type { SkillDetailHandle } from "@/components/skill-detail-sheet";
 
 type SkillStatus = "delisted" | "fetch-error" | "updated" | null;
 
@@ -66,7 +68,7 @@ export interface SkillData {
 interface SkillCardProps {
   skill: SkillData;
   selectable?: boolean;
-  onViewDetail?: () => void;
+  sheetHandle?: SkillDetailHandle;
   className?: string;
   variant?: "card" | "row";
 }
@@ -74,7 +76,7 @@ interface SkillCardProps {
 export function SkillCard({
   skill,
   selectable = false,
-  onViewDetail,
+  sheetHandle,
   className,
   variant = "card",
 }: SkillCardProps) {
@@ -109,31 +111,25 @@ export function SkillCard({
             id={checkboxId}
             checked={selected}
             onCheckedChange={() => {
-              if (selection)
-                selection.toggleSkill({ source, skillId, name });
+              if (selection) selection.toggleSkill({ source, skillId, name });
             }}
             className="shrink-0"
           />
         )}
         <div className="flex flex-wrap items-baseline gap-x-2 min-w-0">
           <span className="text-sm font-semibold">
-            {onViewDetail ? (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onViewDetail();
-                }}
+            {sheetHandle ? (
+              <SheetTrigger
+                handle={sheetHandle}
+                payload={skill}
                 className="hover:underline text-left"
               >
                 {name}
-              </button>
+              </SheetTrigger>
             ) : (
               <Link
                 href={`/${source}/${skillId}`}
                 className="hover:underline text-left"
-                onClick={(e) => e.stopPropagation()}
                 prefetch={false}
               >
                 {name}
@@ -144,7 +140,11 @@ export function SkillCard({
         </div>
         <div className="ml-auto flex items-center gap-1.5 shrink-0">
           <SkillStatusBadge
-            status={deriveSkillStatus({ isDelisted, hasContentFetchError, updatedSinceAdded })}
+            status={deriveSkillStatus({
+              isDelisted,
+              hasContentFetchError,
+              updatedSinceAdded,
+            })}
           />
           <span className="text-xs font-mono tabular-nums text-muted-foreground">
             {formatInstalls(installs)}
@@ -194,23 +194,18 @@ export function SkillCard({
             />
           )}
           <CardTitle className="text-sm leading-snug flex items-center">
-            {onViewDetail ? (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onViewDetail();
-                }}
+            {sheetHandle ? (
+              <SheetTrigger
+                handle={sheetHandle}
+                payload={skill}
                 className="hover:underline text-left [text-box:trim-both_cap_alphabetic]"
               >
                 {name}
-              </button>
+              </SheetTrigger>
             ) : (
               <Link
                 href={`/${source}/${skillId}`}
                 className="hover:underline text-left"
-                onClick={(e) => e.stopPropagation()}
               >
                 {name}
               </Link>
@@ -220,7 +215,11 @@ export function SkillCard({
         <CardAction>
           <div className="flex items-center gap-1.5">
             <SkillStatusBadge
-              status={deriveSkillStatus({ isDelisted, hasContentFetchError, updatedSinceAdded })}
+              status={deriveSkillStatus({
+                isDelisted,
+                hasContentFetchError,
+                updatedSinceAdded,
+              })}
             />
             <span className="text-xs font-mono tabular-nums text-muted-foreground">
               {formatInstalls(installs)} installs

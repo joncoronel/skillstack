@@ -1,18 +1,19 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useConvex } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "@/convex/_generated/api";
 import { SkillCard, type SkillData } from "@/components/skill-card";
-import { SkillDetailSheet } from "@/components/skill-detail-sheet";
+import type { SkillDetailHandle } from "@/components/skill-detail-sheet";
 
 type Page = FunctionReturnType<typeof api.skills.listPopularSkills>;
 
 interface DefaultSkillsListProps {
   /** First page fetched on the server and passed in as initialData. */
   initialPage: Page;
+  sheetHandle: SkillDetailHandle;
 }
 
 /**
@@ -26,9 +27,11 @@ interface DefaultSkillsListProps {
  * We lose live reactivity on the popular list, which is fine — installs
  * update via a daily sync, not per interaction.
  */
-export function DefaultSkillsList({ initialPage }: DefaultSkillsListProps) {
+export function DefaultSkillsList({
+  initialPage,
+  sheetHandle,
+}: DefaultSkillsListProps) {
   const convex = useConvex();
-  const [activeSkill, setActiveSkill] = useState<SkillData | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage } =
@@ -97,7 +100,7 @@ export function DefaultSkillsList({ initialPage }: DefaultSkillsListProps) {
               skill={skill}
               selectable
               variant="row"
-              onViewDetail={() => setActiveSkill(skill)}
+              sheetHandle={sheetHandle}
               className={
                 isSolo
                   ? undefined
@@ -118,13 +121,6 @@ export function DefaultSkillsList({ initialPage }: DefaultSkillsListProps) {
         </div>
       )}
 
-      <SkillDetailSheet
-        open={activeSkill !== null}
-        onOpenChange={(open) => {
-          if (!open) setActiveSkill(null);
-        }}
-        skill={activeSkill}
-      />
     </div>
   );
 }

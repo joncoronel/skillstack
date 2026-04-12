@@ -1,17 +1,17 @@
 "use client";
 
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { convexQuery } from "@convex-dev/react-query";
 import { api } from "@/convex/_generated/api";
 import { SkillCard, type SkillData } from "@/components/skill-card";
-import { SkillDetailSheet } from "@/components/skill-detail-sheet";
+import type { SkillDetailHandle } from "@/components/skill-detail-sheet";
 import { Skeleton } from "@/components/ui/cubby-ui/skeleton";
 import { cn } from "@/lib/utils";
 
 interface SkillSearchResultsProps {
   /** Trimmed query string driving the search. Empty string = no search. */
   query: string;
+  sheetHandle: SkillDetailHandle;
 }
 
 /**
@@ -20,8 +20,10 @@ interface SkillSearchResultsProps {
  * Driven by an external query prop — the input itself lives in the parent
  * (skill-explorer) so the same input can swap between text + repo modes.
  */
-export function SkillSearchResults({ query }: SkillSearchResultsProps) {
-  const [activeSkill, setActiveSkill] = useState<SkillData | null>(null);
+export function SkillSearchResults({
+  query,
+  sheetHandle,
+}: SkillSearchResultsProps) {
 
   const { data, isPending } = useQuery({
     ...convexQuery(api.skills.searchSkills, query ? { query } : "skip"),
@@ -80,7 +82,7 @@ export function SkillSearchResults({ query }: SkillSearchResultsProps) {
                   skill={skill}
                   selectable
                   variant="row"
-                  onViewDetail={() => setActiveSkill(skill)}
+                  sheetHandle={sheetHandle}
                   className={
                     isSolo
                       ? undefined
@@ -101,13 +103,6 @@ export function SkillSearchResults({ query }: SkillSearchResultsProps) {
         </p>
       )}
 
-      <SkillDetailSheet
-        open={activeSkill !== null}
-        onOpenChange={(open) => {
-          if (!open) setActiveSkill(null);
-        }}
-        skill={activeSkill}
-      />
     </div>
   );
 }

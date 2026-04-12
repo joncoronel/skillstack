@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useConvex } from "convex/react";
 import Link from "next/link";
@@ -9,7 +8,7 @@ import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
 import { api } from "@/convex/_generated/api";
 import type { AnalyzeRepoResult } from "@/convex/recommendations";
 import { SkillCard, type SkillData } from "@/components/skill-card";
-import { SkillDetailSheet } from "@/components/skill-detail-sheet";
+import type { SkillDetailHandle } from "@/components/skill-detail-sheet";
 import { Skeleton } from "@/components/ui/cubby-ui/skeleton";
 import { Badge } from "@/components/ui/cubby-ui/badge";
 import {
@@ -19,12 +18,13 @@ import {
 } from "@/components/ui/cubby-ui/collapsible";
 import { cn } from "@/lib/utils";
 type GroupedRecommendation = AnalyzeRepoResult["recommendations"][number];
-type Variant = GroupedRecommendation["variants"][number];
+
 
 interface RepoAnalysisResultsProps {
   /** The repo URL from the URL param. Empty = no analysis yet. */
   repoUrl: string;
   canAutoDetect: boolean;
+  sheetHandle: SkillDetailHandle;
 }
 
 /**
@@ -36,9 +36,9 @@ interface RepoAnalysisResultsProps {
 export function RepoAnalysisResults({
   repoUrl,
   canAutoDetect,
+  sheetHandle,
 }: RepoAnalysisResultsProps) {
   const convex = useConvex();
-  const [activeSkill, setActiveSkill] = useState<SkillData | null>(null);
 
   const trimmedUrl = repoUrl.trim();
 
@@ -100,16 +100,7 @@ export function RepoAnalysisResults({
 
   const chipPackages = fingerprint?.packages.slice(0, 12) ?? [];
 
-  function openSkillDetail(variant: Variant, name: string) {
-    setActiveSkill({
-      source: variant.source,
-      skillId: variant.skillId,
-      name,
-      description: variant.description,
-      installs: variant.installs,
-      technologies: [],
-    });
-  }
+
 
   return (
     <div className="mt-4">
@@ -173,7 +164,7 @@ export function RepoAnalysisResults({
                 skill={skill}
                 selectable
                 variant="row"
-                onViewDetail={() => setActiveSkill(skill)}
+                sheetHandle={sheetHandle}
                 className={positionClassName}
               />
             );
@@ -184,21 +175,12 @@ export function RepoAnalysisResults({
               key={`group:${group.name}`}
               group={group}
               className={positionClassName}
-              onSelectVariant={(variant) =>
-                openSkillDetail(variant, group.name)
-              }
+              sheetHandle={sheetHandle}
             />
           );
         })}
       </div>
 
-      <SkillDetailSheet
-        open={activeSkill !== null}
-        onOpenChange={(open) => {
-          if (!open) setActiveSkill(null);
-        }}
-        skill={activeSkill}
-      />
     </div>
   );
 }
@@ -210,13 +192,13 @@ export function RepoAnalysisResults({
 interface SkillGroupRowProps {
   group: GroupedRecommendation;
   className?: string;
-  onSelectVariant: (variant: Variant) => void;
+  sheetHandle: SkillDetailHandle;
 }
 
 function SkillGroupRow({
   group,
   className,
-  onSelectVariant,
+  sheetHandle,
 }: SkillGroupRowProps) {
   const visibleCount = group.variants.length;
   const cappedRemainder = group.variantCount - visibleCount;
@@ -290,7 +272,7 @@ function SkillGroupRow({
                 skill={skill}
                 selectable
                 variant="row"
-                onViewDetail={() => onSelectVariant(variant)}
+                sheetHandle={sheetHandle}
                 className={cn(
                   // Square the corners and remove the standalone card border
                   // so variants render as one continuous list inside the

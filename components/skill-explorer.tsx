@@ -31,6 +31,10 @@ import { SkillSearchResults } from "@/components/skill-search";
 import { DefaultSkillsList } from "@/components/default-skills-list";
 import { RepoAnalysisResults } from "@/components/repo-url-input";
 import { BundleBar } from "@/components/bundle-bar";
+import {
+  SkillDetailSheet,
+  createSkillDetailHandle,
+} from "@/components/skill-detail-sheet";
 import type { api } from "@/convex/_generated/api";
 
 interface SkillExplorerProps {
@@ -39,6 +43,8 @@ interface SkillExplorerProps {
 }
 
 const TEXT_DEBOUNCE_MS = 300;
+
+const skillDetailHandle = createSkillDetailHandle();
 
 export function SkillExplorer({
   canAutoDetect,
@@ -187,22 +193,30 @@ export function SkillExplorer({
                 non-intersecting while the user is searching — no spurious
                 background fetches. */}
             <div hidden={!!effectiveTextQuery}>
-              <DefaultSkillsList initialPage={initialPopularSkills} />
+              <DefaultSkillsList
+                initialPage={initialPopularSkills}
+                sheetHandle={skillDetailHandle}
+              />
             </div>
             <div hidden={!effectiveTextQuery}>
-              <SkillSearchResults query={effectiveTextQuery} />
+              <SkillSearchResults
+                query={effectiveTextQuery}
+                sheetHandle={skillDetailHandle}
+              />
             </div>
           </TabsContent>
           <TabsContent value="repo">
             <RepoAnalysisResults
               repoUrl={repoUrl}
               canAutoDetect={canAutoDetect}
+              sheetHandle={skillDetailHandle}
             />
           </TabsContent>
         </TabsPanels>
       </Tabs>
 
       <BundleBar />
+      <SkillDetailSheet handle={skillDetailHandle} />
     </BundleSelectionProvider>
   );
 }
