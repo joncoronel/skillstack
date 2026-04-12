@@ -2,6 +2,7 @@
 
 import { useQuery } from "convex/react";
 import { useQueryState } from "nuqs";
+import { useDebounce } from "use-debounce";
 import type { Preloaded } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { exploreQueryParser } from "@/lib/search-params";
@@ -16,13 +17,16 @@ export function ExploreContent({
   preloadedTrending: Preloaded<typeof api.bundleEvents.getTrendingBundles>;
 }) {
   const [query] = useQueryState("q", exploreQueryParser);
-  const isSearching = query.trim().length > 0;
+  const [debouncedQuery] = useDebounce(query.trim(), 300);
+  // If raw query is empty, bypass debounce and show trending immediately.
+  const effectiveQuery = query.trim() ? debouncedQuery : "";
+  const isSearching = effectiveQuery.length > 0;
 
   return (
     <>
       <ExploreFilters />
       {isSearching ? (
-        <SearchResults query={query} />
+        <SearchResults query={effectiveQuery} />
       ) : (
         <TrendingBundles preloadedBundles={preloadedTrending} />
       )}

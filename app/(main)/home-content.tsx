@@ -1,27 +1,26 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import type { FunctionReturnType } from "convex/server";
 import { cn } from "@/lib/utils";
 import { SkillExplorer } from "@/components/skill-explorer";
-// import useMeasure from "react-use-measure";
 import { useCollapsibleHeight } from "@/hooks/cubby-ui/use-collapsible-height";
 import { useUserPlan } from "@/hooks/use-user-plan";
 import type { api } from "@/convex/_generated/api";
 
 type HomeContentProps = {
+  children: ReactNode;
   initialPopularSkills: FunctionReturnType<
     typeof api.skills.listPopularSkills
   >;
 };
 
-export function HomeContent({ initialPopularSkills }: HomeContentProps) {
+export function HomeContent({
+  children,
+  initialPopularSkills,
+}: HomeContentProps) {
   const { limits } = useUserPlan();
-  // Read URL state via Next's router-tied hook (not nuqs) so the very first
-  // render after navigating back to `/` reflects the actual URL instead of
-  // nuqs's internal store, which can lag for one render after a Link
-  // navigation. SkillExplorer still uses `useQueryState` for the input/write
-  // path — they stay in sync because nuqs writes go through Next's router.
   const searchParams = useSearchParams();
   const mode = searchParams.get("mode") ?? "text";
   const query = searchParams.get("q") ?? "";
@@ -34,7 +33,7 @@ export function HomeContent({ initialPopularSkills }: HomeContentProps) {
 
   return (
     <>
-      {/* Hero */}
+      {/* Hero — server-rendered children, collapse activates after hydration */}
       <div
         className={cn(
           "max-sm:duration-0 max-sm:transition-none transition-[height,opacity] duration-200 ease-out-cubic overflow-hidden",
@@ -43,23 +42,11 @@ export function HomeContent({ initialPopularSkills }: HomeContentProps) {
         style={{ height: searchActive ? 0 : height }}
       >
         <div ref={ref} className={cn("max-sm:duration-0 ")}>
-          <section className="mx-auto max-w-5xl px-4 pt-16 pb-10 text-center">
-            <h1 className="font-display text-4xl font-bold tracking-tight sm:text-5xl">
-              Build your{" "}
-              <mark className="bg-primary/10 text-primary rounded px-1">
-                AI skill stack
-              </mark>
-            </h1>
-            <p className="mx-auto mt-4 max-w-2xl text-lg text-muted-foreground">
-              Discover, compare, and bundle skills for AI coding assistants like
-              Cursor and Claude. Pick your technologies, find the best skills,
-              and share your stack.
-            </p>
-          </section>
+          {children}
         </div>
       </div>
 
-      {/* Main content */}
+      {/* Main content — renders immediately with cached data */}
       <main
         className={cn(
           "mx-auto max-w-5xl px-4 pb-20 transition-[padding-top] duration-200 max-sm:duration-0 ease-out-cubic",

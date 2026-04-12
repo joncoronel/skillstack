@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useQueryState } from "nuqs";
+import { useDebounce } from "use-debounce";
 import type { FunctionReturnType } from "convex/server";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
@@ -47,22 +48,14 @@ export function SkillExplorer({
   const [textQuery, setTextQuery] = useQueryState("q", searchQueryParser);
   const [repoUrl, setRepoUrl] = useQueryState("repo", repoUrlParser);
 
-  const [debouncedText, setDebouncedText] = useState(textQuery.trim());
+  // Debounce the search query so results don't re-fetch on every keystroke.
+  // If the input is cleared, skip the debounce and show defaults immediately.
+  const [debouncedText] = useDebounce(textQuery.trim(), TEXT_DEBOUNCE_MS);
+  const effectiveTextQuery = textQuery.trim() ? debouncedText : "";
+
   // Local input state for the repo field — only pushed to the URL on submit.
   const [repoInput, setRepoInput] = useState(repoUrl);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  // Debounce text query (300ms) — only for non-empty values. An empty input
-  // is read directly from `textQuery` below so clearing the field wipes
-  // results instantly instead of lingering for 300ms.
-  useEffect(() => {
-    const trimmed = textQuery.trim();
-    if (!trimmed) return;
-    const id = setTimeout(() => setDebouncedText(trimmed), TEXT_DEBOUNCE_MS);
-    return () => clearTimeout(id);
-  }, [textQuery]);
-
-  const effectiveTextQuery = textQuery.trim() ? debouncedText : "";
 
   // Keyboard shortcut: focus on /
   useEffect(() => {
@@ -136,7 +129,6 @@ export function SkillExplorer({
                   setTextQuery(e.target.value);
                   // Reset debounced value when clearing so the next keystroke
                   // doesn't briefly resurface stale results.
-                  if (!e.target.value.trim()) setDebouncedText("");
                 } else {
                   setRepoInput(e.target.value);
                 }
@@ -152,7 +144,6 @@ export function SkillExplorer({
                 onClick={() => {
                   if (isText) {
                     setTextQuery("");
-                    setDebouncedText("");
                   } else {
                     setRepoInput("");
                     setRepoUrl("");

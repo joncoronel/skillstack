@@ -16,7 +16,11 @@ import {
   SheetDescription,
 } from "@/components/ui/cubby-ui/sheet";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { ArrowRight01Icon, PlusSignIcon, MinusSignIcon } from "@hugeicons/core-free-icons";
+import {
+  ArrowRight01Icon,
+  PlusSignIcon,
+  MinusSignIcon,
+} from "@hugeicons/core-free-icons";
 import { Button, buttonVariants } from "@/components/ui/cubby-ui/button";
 import { Skeleton } from "@/components/ui/cubby-ui/skeleton";
 import { useBundleSelection } from "@/lib/bundle-selection-context";
@@ -62,7 +66,9 @@ export function SkillDetailSheet({
         {shownSkill && (
           <>
             <SheetHeader>
-              <SheetTitle className="font-display">{shownSkill.name}</SheetTitle>
+              <SheetTitle className="font-display">
+                {shownSkill.name}
+              </SheetTitle>
               <SheetDescription>
                 <span className="tabular-nums">
                   {formatInstalls(shownSkill.installs)} installs
@@ -109,15 +115,26 @@ export function SkillDetailSheet({
               <Link
                 href={`/${shownSkill.source}/${shownSkill.skillId}`}
                 className={buttonVariants({ variant: "outline", size: "sm" })}
+                onNavigate={() => onOpenChange(false)}
               >
                 View full page
-                <HugeiconsIcon icon={ArrowRight01Icon} strokeWidth={2} className="size-3.5" />
+                <HugeiconsIcon
+                  icon={ArrowRight01Icon}
+                  strokeWidth={2}
+                  className="size-3.5"
+                />
               </Link>
               {selection && (
                 <Button
                   variant={isSelected ? "outline" : "primary"}
                   size="sm"
-                  leftSection={<HugeiconsIcon icon={isSelected ? MinusSignIcon : PlusSignIcon} strokeWidth={2} className="size-3.5" />}
+                  leftSection={
+                    <HugeiconsIcon
+                      icon={isSelected ? MinusSignIcon : PlusSignIcon}
+                      strokeWidth={2}
+                      className="size-3.5"
+                    />
+                  }
                   onClick={() =>
                     selection.toggleSkill({
                       source: shownSkill.source,
