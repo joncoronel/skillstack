@@ -7,16 +7,20 @@ import {
   CardHeader,
   CardTitle,
   CardDescription,
-  CardContent,
   CardFooter,
   CardAction,
 } from "@/components/ui/cubby-ui/card";
 import { Badge } from "@/components/ui/cubby-ui/badge";
 import { Checkbox } from "@/components/ui/cubby-ui/checkbox";
 import { Label } from "@/components/ui/cubby-ui/label";
-import { techNameMap } from "@/lib/technologies";
+import { SheetTrigger } from "@/components/ui/cubby-ui/sheet";
 import { useBundleSelection } from "@/lib/bundle-selection-context";
 import { cn, formatInstalls, timeAgo } from "@/lib/utils";
+import type { SkillDetailHandle } from "@/components/skill-detail-sheet";
+
+// ---------------------------------------------------------------------------
+// Types & helpers
+// ---------------------------------------------------------------------------
 
 type SkillStatus = "delisted" | "fetch-error" | "updated" | null;
 
@@ -56,7 +60,8 @@ export interface SkillData {
   skillId: string;
   description?: string;
   installs: number;
-  technologies: string[];
+  /** @deprecated Kept for backward-compat with bundle data; not rendered. */
+  technologies?: string[];
   updatedSinceAdded?: boolean;
   contentUpdatedAt?: number;
   createdAt?: number;
@@ -64,122 +69,208 @@ export interface SkillData {
   hasContentFetchError?: boolean;
 }
 
-interface SkillCardProps {
+// ---------------------------------------------------------------------------
+// Shared primitives
+// ---------------------------------------------------------------------------
+
+function SkillName({
+  skill,
+  sheetHandle,
+  className,
+}: {
   skill: SkillData;
-  selectable?: boolean;
-  onViewDetail?: () => void;
-  showTechnologies?: boolean;
+  sheetHandle?: SkillDetailHandle;
   className?: string;
-  variant?: "card" | "row";
+}) {
+  if (sheetHandle) {
+    return (
+      <SheetTrigger
+        handle={sheetHandle}
+        payload={skill}
+        className={cn("hover:underline text-left", className)}
+      >
+        {skill.name}
+      </SheetTrigger>
+    );
+  }
+  return (
+    <Link
+      href={`/${skill.source}/${skill.skillId}`}
+      className={cn("hover:underline text-left", className)}
+      prefetch={false}
+    >
+      {skill.name}
+    </Link>
+  );
 }
 
-export function SkillCard({
+function SkillMeta({
+  skill,
+  showLabel,
+}: {
+  skill: SkillData;
+  showLabel?: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <SkillStatusBadge
+        status={deriveSkillStatus({
+          isDelisted: skill.isDelisted,
+          hasContentFetchError: skill.hasContentFetchError,
+          updatedSinceAdded: skill.updatedSinceAdded,
+        })}
+      />
+      <span className="text-xs font-mono tabular-nums text-muted-foreground">
+        {formatInstalls(skill.installs)}
+        {showLabel && " installs"}
+      </span>
+    </div>
+  );
+}
+
+function SelectableWrapper({
+  checkboxId,
+  className,
+  children,
+}: {
+  checkboxId: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Label
+      htmlFor={checkboxId}
+      data-variant="default"
+      className={cn(
+        "text-card-foreground flex flex-col bg-card rounded-2xl border dark:border-border/50",
+        "cursor-pointer transition-colors",
+        "has-data-checked:border-primary/30 dark:has-data-checked:border-primary/30 has-data-checked:bg-primary/8",
+        className,
+      )}
+    >
+      {children}
+    </Label>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Shared props
+// ---------------------------------------------------------------------------
+
+interface SkillViewProps {
+  skill: SkillData;
+  selectable?: boolean;
+  sheetHandle?: SkillDetailHandle;
+  className?: string;
+}
+
+// ---------------------------------------------------------------------------
+// SkillRowView
+// ---------------------------------------------------------------------------
+
+function SkillRowContent({
+  skill,
+  selectable,
+  checkboxId,
+  selected,
+  selection,
+  sheetHandle,
+}: {
+  skill: SkillData;
+  selectable: boolean;
+  checkboxId: string;
+  selected: boolean;
+  selection: ReturnType<typeof useBundleSelection>;
+  sheetHandle?: SkillDetailHandle;
+}) {
+  return (
+    <div className="flex items-center gap-3 px-4">
+      {selectable && (
+        <Checkbox
+          id={checkboxId}
+          checked={selected}
+          onCheckedChange={() => {
+            if (selection)
+              selection.toggleSkill({
+                source: skill.source,
+                skillId: skill.skillId,
+                name: skill.name,
+              });
+          }}
+          className="shrink-0"
+        />
+      )}
+      <div className="flex flex-wrap items-baseline gap-x-2 min-w-0">
+        <span className="text-sm font-semibold">
+          <SkillName skill={skill} sheetHandle={sheetHandle} />
+        </span>
+        <span className="text-sm text-muted-foreground">{skill.source}</span>
+      </div>
+      <div className="ml-auto shrink-0">
+        <SkillMeta skill={skill} />
+      </div>
+    </div>
+  );
+}
+
+export function SkillRowView({
   skill,
   selectable = false,
-  onViewDetail,
-  showTechnologies = true,
+  sheetHandle,
   className,
-  variant = "card",
-}: SkillCardProps) {
-  const {
-    name,
-    source,
-    skillId,
-    description,
-    installs,
-    technologies,
-    updatedSinceAdded,
-    contentUpdatedAt,
-    createdAt,
-    isDelisted,
-    hasContentFetchError,
-  } = skill;
+}: SkillViewProps) {
   const id = useId();
   const checkboxId = `skill-${id}`;
-
-  // Always call hook (rules of hooks) — returns null outside provider
   const selection = useBundleSelection();
   const selected =
-    selectable && selection ? selection.isSelected(source, skillId) : false;
+    selectable && selection
+      ? selection.isSelected(skill.source, skill.skillId)
+      : false;
 
-  const cardTimestamp = contentUpdatedAt ?? createdAt;
-  const cardTimeLabel = contentUpdatedAt !== undefined ? "Updated" : "Added";
+  const contentProps = { skill, selectable, checkboxId, selected, selection, sheetHandle };
 
-  if (variant === "row") {
-    const rowInner = (
-      <div className="flex items-center gap-3 px-4">
-        {selectable && (
-          <Checkbox
-            id={checkboxId}
-            checked={selected}
-            onCheckedChange={() => {
-              if (selection)
-                selection.toggleSkill({ source, skillId, name, technologies });
-            }}
-            className="shrink-0"
-          />
+  if (selectable) {
+    return (
+      <SelectableWrapper
+        checkboxId={checkboxId}
+        className={cn(
+          "py-3",
+          "[&:has(+_label_[data-checked])]:border-b-primary/30 dark:[&:has(+_label_[data-checked])]:border-b-primary/30",
+          className,
         )}
-        <div className="flex flex-wrap items-baseline gap-x-2 min-w-0">
-          <span className="text-sm font-semibold">
-            {onViewDetail ? (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onViewDetail();
-                }}
-                className="hover:underline text-left"
-              >
-                {name}
-              </button>
-            ) : (
-              <Link
-                href={`/${source}/${skillId}`}
-                className="hover:underline text-left"
-                onClick={(e) => e.stopPropagation()}
-                prefetch={false}
-              >
-                {name}
-              </Link>
-            )}
-          </span>
-          <span className="text-sm text-muted-foreground">{source}</span>
-        </div>
-        <div className="ml-auto flex items-center gap-1.5 shrink-0">
-          <SkillStatusBadge
-            status={deriveSkillStatus({ isDelisted, hasContentFetchError, updatedSinceAdded })}
-          />
-          <span className="text-xs font-mono tabular-nums text-muted-foreground">
-            {formatInstalls(installs)}
-          </span>
-        </div>
-      </div>
+      >
+        <SkillRowContent {...contentProps} />
+      </SelectableWrapper>
     );
-
-    if (selectable) {
-      return (
-        <Label
-          htmlFor={checkboxId}
-          data-variant="default"
-          className={cn(
-            "text-card-foreground flex flex-col bg-card rounded-2xl border dark:border-border/50 py-3",
-            "cursor-pointer transition-colors",
-            "has-data-checked:border-primary/30 dark:has-data-checked:border-primary/30 has-data-checked:bg-primary/8",
-            "[&:has(+_label_[data-checked])]:border-b-primary/30 dark:[&:has(+_label_[data-checked])]:border-b-primary/30",
-            "hover:border-border/20",
-            className,
-          )}
-        >
-          {rowInner}
-        </Label>
-      );
-    }
-
-    return rowInner;
   }
 
-  const cardInner = (
+  return <SkillRowContent {...contentProps} />;
+}
+
+// ---------------------------------------------------------------------------
+// SkillCardView
+// ---------------------------------------------------------------------------
+
+function SkillCardContent({
+  skill,
+  selectable,
+  checkboxId,
+  selected,
+  selection,
+  sheetHandle,
+}: {
+  skill: SkillData;
+  selectable: boolean;
+  checkboxId: string;
+  selected: boolean;
+  selection: ReturnType<typeof useBundleSelection>;
+  sheetHandle?: SkillDetailHandle;
+}) {
+  const cardTimestamp = skill.contentUpdatedAt ?? skill.createdAt;
+  const cardTimeLabel =
+    skill.contentUpdatedAt !== undefined ? "Updated" : "Added";
+
+  return (
     <>
       <CardHeader className="gap-1">
         <div className="flex items-center gap-2">
@@ -190,73 +281,29 @@ export function SkillCard({
               onCheckedChange={() => {
                 if (selection)
                   selection.toggleSkill({
-                    source,
-                    skillId,
-                    name,
-                    technologies,
+                    source: skill.source,
+                    skillId: skill.skillId,
+                    name: skill.name,
                   });
               }}
               className="shrink-0"
             />
           )}
           <CardTitle className="text-sm leading-snug flex items-center">
-            {onViewDetail ? (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onViewDetail();
-                }}
-                className="hover:underline text-left [text-box:trim-both_cap_alphabetic]"
-              >
-                {name}
-              </button>
-            ) : (
-              <Link
-                href={`/${source}/${skillId}`}
-                className="hover:underline text-left"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {name}
-              </Link>
-            )}
+            <SkillName
+              skill={skill}
+              sheetHandle={sheetHandle}
+              className="[text-box:trim-both_cap_alphabetic]"
+            />
           </CardTitle>
         </div>
         <CardAction>
-          <div className="flex items-center gap-1.5">
-            <SkillStatusBadge
-              status={deriveSkillStatus({ isDelisted, hasContentFetchError, updatedSinceAdded })}
-            />
-            <span className="text-xs font-mono tabular-nums text-muted-foreground">
-              {formatInstalls(installs)} installs
-            </span>
-          </div>
+          <SkillMeta skill={skill} showLabel />
         </CardAction>
         <CardDescription className="text-xs line-clamp-2">
-          {description ?? source}
+          {skill.description ?? skill.source}
         </CardDescription>
       </CardHeader>
-      {showTechnologies && technologies.length > 0 && (
-        <CardContent className="pt-0">
-          <div className="flex flex-wrap gap-1">
-            {technologies.slice(0, 4).map((techId) => (
-              <Badge
-                key={techId}
-                variant="secondary"
-                className="text-[10px] px-1.5 py-0.5"
-              >
-                {techNameMap.get(techId) ?? techId}
-              </Badge>
-            ))}
-            {technologies.length > 4 && (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0.5">
-                +{technologies.length - 4}
-              </Badge>
-            )}
-          </div>
-        </CardContent>
-      )}
       {cardTimestamp !== undefined && (
         <CardFooter className="mt-auto pt-0 justify-end">
           <span className="text-[11px] text-muted-foreground/60">
@@ -266,24 +313,50 @@ export function SkillCard({
       )}
     </>
   );
+}
+
+export function SkillCardView({
+  skill,
+  selectable = false,
+  sheetHandle,
+  className,
+}: SkillViewProps) {
+  const id = useId();
+  const checkboxId = `skill-${id}`;
+  const selection = useBundleSelection();
+  const selected =
+    selectable && selection
+      ? selection.isSelected(skill.source, skill.skillId)
+      : false;
+
+  const contentProps = { skill, selectable, checkboxId, selected, selection, sheetHandle };
 
   if (selectable) {
     return (
-      <Label
-        htmlFor={checkboxId}
-        data-variant="default"
-        className={cn(
-          "text-card-foreground flex flex-col bg-card gap-3 rounded-2xl border dark:border-border/50 py-4 h-full",
-          "cursor-pointer transition-colors",
-          "has-data-checked:border-primary/30 dark:has-data-checked:border-primary/30 has-data-checked:bg-primary/8",
-          "hover:border-border/20",
-          className,
-        )}
+      <SelectableWrapper
+        checkboxId={checkboxId}
+        className={cn("gap-3 py-4 h-full", className)}
       >
-        {cardInner}
-      </Label>
+        <SkillCardContent {...contentProps} />
+      </SelectableWrapper>
     );
   }
 
-  return <Card className={cn("gap-3 py-4", className)}>{cardInner}</Card>;
+  return (
+    <Card className={cn("gap-3 py-4", className)}>
+      <SkillCardContent {...contentProps} />
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SkillCard — thin dispatcher (preserves existing API)
+// ---------------------------------------------------------------------------
+
+export function SkillCard({
+  variant = "card",
+  ...props
+}: SkillViewProps & { variant?: "card" | "row" }) {
+  if (variant === "row") return <SkillRowView {...props} />;
+  return <SkillCardView {...props} />;
 }

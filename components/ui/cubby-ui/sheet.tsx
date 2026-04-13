@@ -98,7 +98,7 @@ const sheetContentVariants = cva(
 
 const createSheetHandle = BaseSheet.createHandle;
 
-function Sheet({ ...props }: BaseSheet.Root.Props) {
+function Sheet<Payload>({ ...props }: BaseSheet.Root.Props<Payload>) {
   return <BaseSheet.Root data-slot="sheet" {...props} />;
 }
 

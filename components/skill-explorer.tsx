@@ -1,17 +1,25 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryState } from "nuqs";
+import { useDebounce } from "use-debounce";
+import type { FunctionReturnType } from "convex/server";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
+import {
+  Search01Icon,
+  Cancel01Icon,
+  GithubIcon,
+  FlashIcon,
+} from "@hugeicons/core-free-icons";
+import {
+  modeParser,
+  searchQueryParser,
+  repoUrlParser,
+  type ModeValue,
+} from "@/lib/search-params";
 import { BundleSelectionProvider } from "@/lib/bundle-selection-context";
-import { techParser, tabParser, type TabValue } from "@/lib/search-params";
-import { TechnologySelector } from "@/components/technology-selector";
-import { RepoUrlInput } from "@/components/repo-url-input";
-import { SkillResults } from "@/components/skill-results";
-import { SkillSearch } from "@/components/skill-search";
-import { BundleBar } from "@/components/bundle-bar";
-import { StickyTechBar } from "@/components/sticky-tech-bar";
+import { Input } from "@/components/ui/cubby-ui/input";
+import { Button } from "@/components/ui/cubby-ui/button";
 import {
   Tabs,
   TabsList,
@@ -19,108 +27,196 @@ import {
   TabsPanels,
   TabsContent,
 } from "@/components/ui/cubby-ui/tabs";
+import { SkillSearchResults } from "@/components/skill-search";
+import { DefaultSkillsList } from "@/components/default-skills-list";
+import { RepoAnalysisResults } from "@/components/repo-url-input";
+import { BundleBar } from "@/components/bundle-bar";
 import {
-  Collapsible,
-  CollapsibleTrigger,
-  CollapsibleContent,
-} from "@/components/ui/cubby-ui/collapsible";
+  SkillDetailSheet,
+  createSkillDetailHandle,
+} from "@/components/skill-detail-sheet";
+import type { api } from "@/convex/_generated/api";
 
 interface SkillExplorerProps {
   canAutoDetect: boolean;
+  initialPopularSkills: FunctionReturnType<typeof api.skills.listPopularSkills>;
 }
 
-export function SkillExplorer({ canAutoDetect }: SkillExplorerProps) {
-  const [selected, setSelected] = useQueryState("tech", techParser);
-  const [tab, setTab] = useQueryState("tab", tabParser);
-  const [pickerOpen, setPickerOpen] = useState(true);
-  const selectorRef = useRef<HTMLDivElement>(null);
+const TEXT_DEBOUNCE_MS = 300;
 
-  function handleToggle(id: string) {
-    setSelected((prev) =>
-      prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id],
-    );
+const skillDetailHandle = createSkillDetailHandle();
+
+export function SkillExplorer({
+  canAutoDetect,
+  initialPopularSkills,
+}: SkillExplorerProps) {
+  const [mode, setMode] = useQueryState("mode", modeParser);
+  const [textQuery, setTextQuery] = useQueryState("q", searchQueryParser);
+  const [repoUrl, setRepoUrl] = useQueryState("repo", repoUrlParser);
+
+  // Debounce the search query so results don't re-fetch on every keystroke.
+  // If the input is cleared, skip the debounce and show defaults immediately.
+  const [debouncedText] = useDebounce(textQuery.trim(), TEXT_DEBOUNCE_MS);
+  const effectiveTextQuery = textQuery.trim() ? debouncedText : "";
+
+  // Local input state for the repo field — only pushed to the URL on submit.
+  const [repoInput, setRepoInput] = useState(repoUrl);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Keyboard shortcut: focus on /
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (
+        e.key === "/" &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        document.activeElement?.tagName !== "INPUT" &&
+        document.activeElement?.tagName !== "TEXTAREA"
+      ) {
+        e.preventDefault();
+        inputRef.current?.focus();
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  function handleRepoSubmit() {
+    const trimmed = repoInput.trim();
+    if (!trimmed) return;
+    setRepoUrl(trimmed);
   }
 
-  function handleRepoDetected(technologies: string[]) {
-    setSelected(technologies);
-  }
-
-  function handleEditStack() {
-    setPickerOpen(true);
-    setTimeout(() => {
-      selectorRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    }, 100);
-  }
+  const isText = mode === "text";
+  const inputValue = isText ? textQuery : repoInput;
+  const placeholder = isText
+    ? "Search skills by name…"
+    : "https://github.com/owner/repo";
+  const Icon = isText ? Search01Icon : GithubIcon;
 
   return (
     <BundleSelectionProvider>
-      <Tabs value={tab} onValueChange={(value) => setTab(value as TabValue)}>
-        <TabsList variant="underline">
-          <TabsTrigger value="search">Search</TabsTrigger>
-          <TabsTrigger value="browse">Build Your Stack</TabsTrigger>
+      <Tabs value={mode} onValueChange={(value) => setMode(value as ModeValue)}>
+        <TabsList variant="underline" className="mb-3">
+          <TabsTrigger value="text">
+            <HugeiconsIcon
+              icon={Search01Icon}
+              strokeWidth={2}
+              className="size-3.5"
+            />
+            Text
+          </TabsTrigger>
+          <TabsTrigger value="repo">
+            <HugeiconsIcon
+              icon={GithubIcon}
+              strokeWidth={2}
+              className="size-3.5"
+            />
+            Repo
+          </TabsTrigger>
         </TabsList>
 
-        <TabsPanels className="mt-6">
-          <TabsContent value="search" keepMounted>
-            <SkillSearch />
-          </TabsContent>
-
-          <TabsContent value="browse" keepMounted>
-            <div ref={selectorRef}>
-              <RepoUrlInput
-                onTechnologiesDetected={handleRepoDetected}
-                canAutoDetect={canAutoDetect}
-              />
-              <Collapsible>
-                <div className="relative mt-5">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <CollapsibleTrigger className="w-auto border-none bg-transparent shadow-none ring-0 py-0 hover:bg-transparent hover:opacity-80 gap-1.5">
-                      <span className="bg-background px-2 text-muted-foreground">
-                        or select manually
-                        {!pickerOpen && selected.length > 0 && (
-                          <span className="ml-1 text-primary">
-                            ({selected.length})
-                          </span>
-                        )}
-                      </span>
-                      <span className="bg-background pr-1">
-                        <HugeiconsIcon icon={ArrowDown01Icon} strokeWidth={2} className="size-3.5 text-muted-foreground transition-transform duration-200 group-data-[panel-open]/collapsible:rotate-180" />
-                      </span>
-                    </CollapsibleTrigger>
-                  </div>
-                </div>
-                <CollapsibleContent className="max-sm:duration-0">
-                  <div className="mt-5 pb-1">
-                    <TechnologySelector
-                      selected={selected}
-                      onToggle={handleToggle}
-                    />
-                  </div>
-                </CollapsibleContent>
-              </Collapsible>
-            </div>
-
-            <StickyTechBar
-              selected={selected}
-              onRemove={handleToggle}
-              onEditClick={handleEditStack}
-              selectorRef={selectorRef}
+        {/* Unified input — lives inside Tabs root but outside TabsPanels so
+            it doesn't animate on mode change. State (mode) drives which
+            input/placeholder/icon renders. */}
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <HugeiconsIcon
+              icon={Icon}
+              strokeWidth={2}
+              className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none"
             />
+            <Input
+              ref={inputRef}
+              placeholder={placeholder}
+              value={inputValue}
+              onChange={(e) => {
+                if (isText) {
+                  setTextQuery(e.target.value);
+                  // Reset debounced value when clearing so the next keystroke
+                  // doesn't briefly resurface stale results.
+                } else {
+                  setRepoInput(e.target.value);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (!isText && e.key === "Enter") handleRepoSubmit();
+              }}
+              className="pl-9 pr-9"
+            />
+            {inputValue && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (isText) {
+                    setTextQuery("");
+                  } else {
+                    setRepoInput("");
+                    setRepoUrl("");
+                  }
+                }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <HugeiconsIcon
+                  icon={Cancel01Icon}
+                  strokeWidth={2}
+                  className="size-4"
+                />
+              </button>
+            )}
+          </div>
+          {!isText && (
+            <Button
+              variant="outline"
+              onClick={handleRepoSubmit}
+              disabled={!repoInput.trim() || !canAutoDetect}
+              leftSection={
+                <HugeiconsIcon
+                  icon={FlashIcon}
+                  strokeWidth={2}
+                  className="size-3.5"
+                />
+              }
+            >
+              Analyze
+            </Button>
+          )}
+        </div>
 
-            <section className="mt-10">
-              <SkillResults selectedTechnologies={selected} />
-            </section>
+        {/* Results region — each panel keeps mounted so per-mode state
+            (search results, repo analysis) survives mode switches. */}
+        <TabsPanels>
+          <TabsContent value="text">
+            {/* Both lists stay mounted so the default list preserves scroll
+                + pagination state across type-and-clear. `hidden` maps to
+                display:none, which makes the IntersectionObserver sentinel
+                non-intersecting while the user is searching — no spurious
+                background fetches. */}
+            <div hidden={!!effectiveTextQuery}>
+              <DefaultSkillsList
+                initialPage={initialPopularSkills}
+                sheetHandle={skillDetailHandle}
+              />
+            </div>
+            <div hidden={!effectiveTextQuery}>
+              <SkillSearchResults
+                query={effectiveTextQuery}
+                sheetHandle={skillDetailHandle}
+              />
+            </div>
+          </TabsContent>
+          <TabsContent value="repo">
+            <RepoAnalysisResults
+              repoUrl={repoUrl}
+              canAutoDetect={canAutoDetect}
+              sheetHandle={skillDetailHandle}
+            />
           </TabsContent>
         </TabsPanels>
       </Tabs>
 
       <BundleBar />
+      <SkillDetailSheet handle={skillDetailHandle} />
     </BundleSelectionProvider>
   );
 }

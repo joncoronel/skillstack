@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useQuery, useAction } from "convex/react";
+import { useAction } from "convex/react";
+import { useQuery } from "@tanstack/react-query";
+import { convexQuery } from "@convex-dev/react-query";
 import { api } from "@/convex/_generated/api";
 import { useUserPlan } from "@/hooks/use-user-plan";
 import { PLANS } from "@/lib/plans";
@@ -41,8 +43,10 @@ function BillingSkeleton() {
 
 export function BillingTab() {
   const { plan, isLoading: planLoading } = useUserPlan();
-  const subscription = useQuery(api.subscriptions.currentSubscription);
-  const isLoading = planLoading || subscription === undefined;
+  const { data: subscription, isPending: subPending } = useQuery(
+    convexQuery(api.subscriptions.currentSubscription, {}),
+  );
+  const isLoading = planLoading || subPending;
 
   if (isLoading) return <BillingSkeleton />;
 

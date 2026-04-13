@@ -1,23 +1,39 @@
 "use client";
 
-import { useQueryState } from "nuqs";
+import type { ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
+import type { FunctionReturnType } from "convex/server";
 import { cn } from "@/lib/utils";
-import { searchQueryParser, tabParser } from "@/lib/search-params";
 import { SkillExplorer } from "@/components/skill-explorer";
-// import useMeasure from "react-use-measure";
 import { useCollapsibleHeight } from "@/hooks/cubby-ui/use-collapsible-height";
 import { useUserPlan } from "@/hooks/use-user-plan";
+import type { api } from "@/convex/_generated/api";
 
-export function HomeContent() {
+type HomeContentProps = {
+  children: ReactNode;
+  initialPopularSkills: FunctionReturnType<
+    typeof api.skills.listPopularSkills
+  >;
+};
+
+export function HomeContent({
+  children,
+  initialPopularSkills,
+}: HomeContentProps) {
   const { limits } = useUserPlan();
-  const [query] = useQueryState("q", searchQueryParser);
-  const [tab] = useQueryState("tab", tabParser);
-  const searchActive = tab === "search" && query.trim().length > 0;
+  const searchParams = useSearchParams();
+  const mode = searchParams.get("mode") ?? "text";
+  const query = searchParams.get("q") ?? "";
+  const repoUrl = searchParams.get("repo") ?? "";
+  const searchActive =
+    mode === "text"
+      ? query.trim().length > 0
+      : repoUrl.trim().length > 0;
   const { ref, height } = useCollapsibleHeight();
 
   return (
     <>
-      {/* Hero */}
+      {/* Hero — server-rendered children, collapse activates after hydration */}
       <div
         className={cn(
           "max-sm:duration-0 max-sm:transition-none transition-[height,opacity] duration-200 ease-out-cubic overflow-hidden",
@@ -26,30 +42,21 @@ export function HomeContent() {
         style={{ height: searchActive ? 0 : height }}
       >
         <div ref={ref} className={cn("max-sm:duration-0 ")}>
-          <section className="mx-auto max-w-5xl px-4 pt-16 pb-10 text-center">
-            <h1 className="font-display text-4xl font-bold tracking-tight sm:text-5xl">
-              Build your{" "}
-              <mark className="bg-primary/10 text-primary rounded px-1">
-                AI skill stack
-              </mark>
-            </h1>
-            <p className="mx-auto mt-4 max-w-2xl text-lg text-muted-foreground">
-              Discover, compare, and bundle skills for AI coding assistants like
-              Cursor and Claude. Pick your technologies, find the best skills,
-              and share your stack.
-            </p>
-          </section>
+          {children}
         </div>
       </div>
 
-      {/* Main content */}
+      {/* Main content — renders immediately with cached data */}
       <main
         className={cn(
           "mx-auto max-w-5xl px-4 pb-20 transition-[padding-top] duration-200 max-sm:duration-0 ease-out-cubic",
           searchActive ? "pt-6" : "pt-0",
         )}
       >
-        <SkillExplorer canAutoDetect={limits?.canAutoDetect ?? true} />
+        <SkillExplorer
+          canAutoDetect={limits?.canAutoDetect ?? true}
+          initialPopularSkills={initialPopularSkills}
+        />
       </main>
     </>
   );
