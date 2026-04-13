@@ -11,7 +11,13 @@ import {
   CardAction,
 } from "@/components/ui/cubby-ui/card";
 import { Badge } from "@/components/ui/cubby-ui/badge";
-import { cn, timeAgo } from "@/lib/utils";
+import {
+  Avatar,
+  AvatarImage,
+  AvatarFallback,
+} from "@/components/ui/cubby-ui/avatar";
+import { Skeleton } from "@/components/ui/cubby-ui/skeleton";
+import { timeAgo, getInitials } from "@/lib/utils";
 
 interface BundleCardProps {
   name: string;
@@ -23,7 +29,8 @@ interface BundleCardProps {
   isPublic?: boolean;
   actions?: React.ReactNode;
   viewCount?: number;
-  isTrending?: boolean;
+  copyCount?: number;
+  forkCount?: number;
 }
 
 export function BundleCard({
@@ -32,15 +39,20 @@ export function BundleCard({
   skillCount,
   createdAt,
   creatorName,
+  creatorImage,
   isPublic = true,
   actions,
   viewCount,
-  isTrending,
+  copyCount,
+  forkCount,
 }: BundleCardProps) {
+  const hasStats =
+    viewCount !== undefined ||
+    copyCount !== undefined ||
+    forkCount !== undefined;
+
   const content = (
-    <Card
-      className={cn("gap-3 py-4 transition-colors hover:border-border/20", isTrending && "border-l-2 border-l-primary/40")}
-    >
+    <Card className="gap-3 py-4 transition-colors hover:bg-accent/50">
       <CardHeader className="gap-1">
         <CardTitle className="text-sm leading-snug">{name}</CardTitle>
         <CardAction>
@@ -55,15 +67,46 @@ export function BundleCard({
             </span>
           </div>
         </CardAction>
-        <CardDescription className="text-xs">
-          by {creatorName} &middot; {timeAgo(createdAt)}
+        <CardDescription className="flex items-center gap-1.5 text-xs">
+          {creatorImage && (
+            <Avatar className="size-4">
+              <AvatarImage src={creatorImage} alt={creatorName} />
+              <AvatarFallback className="text-[8px]">
+                {getInitials(creatorName)}
+              </AvatarFallback>
+            </Avatar>
+          )}
+          <span>
+            by {creatorName} &middot; {timeAgo(createdAt)}
+          </span>
         </CardDescription>
       </CardHeader>
-      {viewCount !== undefined && (
+      {hasStats && (
         <CardContent className="pt-0">
-          <span className="text-xs font-mono tabular-nums text-muted-foreground">
-            {viewCount} {viewCount === 1 ? "view" : "views"}
-          </span>
+          <div className="flex items-center gap-2 text-xs font-mono tabular-nums text-muted-foreground">
+            {viewCount !== undefined && (
+              <span>
+                {viewCount} {viewCount === 1 ? "view" : "views"}
+              </span>
+            )}
+            {copyCount !== undefined && viewCount !== undefined && (
+              <span>&middot;</span>
+            )}
+            {copyCount !== undefined && (
+              <span>
+                {copyCount} {copyCount === 1 ? "copy" : "copies"}
+              </span>
+            )}
+            {forkCount !== undefined &&
+              (viewCount !== undefined || copyCount !== undefined) && (
+                <span>&middot;</span>
+              )}
+            {forkCount !== undefined && (
+              <span>
+                {forkCount} {forkCount === 1 ? "fork" : "forks"}
+              </span>
+            )}
+          </div>
         </CardContent>
       )}
       {actions && <CardFooter>{actions}</CardFooter>}
@@ -75,4 +118,30 @@ export function BundleCard({
   }
 
   return <Link href={`/stack/${urlId}`}>{content}</Link>;
+}
+
+export function BundleCardSkeleton({ hasStats = false }: { hasStats?: boolean }) {
+  return (
+    <Card className="gap-3 py-4">
+      <CardHeader className="gap-1">
+        <CardTitle className="text-sm leading-snug">
+          <Skeleton className="h-lh w-3/4 rounded" />
+        </CardTitle>
+        <CardAction>
+          <span className="text-xs font-mono tabular-nums invisible">
+            0 skills
+          </span>
+        </CardAction>
+        <CardDescription className="flex items-center gap-1.5 text-xs">
+          <Skeleton className="size-4 shrink-0 rounded-full" />
+          <Skeleton className="h-lh w-28 rounded" />
+        </CardDescription>
+      </CardHeader>
+      {hasStats && (
+        <CardContent className="pt-0">
+          <Skeleton className="h-lh w-36 rounded text-xs" />
+        </CardContent>
+      )}
+    </Card>
+  );
 }
