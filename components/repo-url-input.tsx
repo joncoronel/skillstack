@@ -67,7 +67,7 @@ export function RepoAnalysisResults({
 
   const loading = isPending && !!trimmedUrl;
   const actionError = error
-    ? "Failed to analyze repository. Please check the URL."
+    ? error.message || "Something went wrong analyzing this repository. Please try again."
     : data?.error ?? null;
 
   if (loading) {
@@ -156,7 +156,6 @@ export function RepoAnalysisResults({
               name: group.name,
               description: variant.description,
               installs: variant.installs,
-              technologies: [],
             };
             return (
               <SkillRowView
@@ -262,7 +261,6 @@ function SkillGroupRow({
               name: group.name,
               description: variant.description,
               installs: variant.installs,
-              technologies: [],
             };
             const isLast = i === group.variants.length - 1;
             return (

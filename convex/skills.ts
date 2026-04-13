@@ -1817,9 +1817,9 @@ export const embedSkillsBatch = internalAction({
  * Run via: npx convex run skills:backfillEmbeddings
  */
 export const backfillEmbeddings = internalAction({
-  args: { batchSize: v.optional(v.number()) },
-  handler: async (ctx, { batchSize = 100 }) => {
-    await ctx.runAction(internal.skills.embedSkillsBatch, { batchSize });
+  args: {},
+  handler: async (ctx) => {
+    await ctx.runAction(internal.skills.embedSkillsBatch, {});
   },
 });
 

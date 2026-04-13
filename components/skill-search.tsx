@@ -38,7 +38,6 @@ export function SkillSearchResults({
     name: r.name,
     description: r.description,
     installs: r.installs,
-    technologies: [],
     isDelisted: r.isDelisted,
     hasContentFetchError: r.hasContentFetchError,
   }));

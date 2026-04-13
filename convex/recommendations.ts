@@ -5,10 +5,61 @@ import type { Id } from "./_generated/dataModel";
 import {
   buildRepoFingerprint,
   fingerprintToEmbeddingInput,
+  scanTree,
   parseGitHubUrl,
   type RepoFingerprint,
+  type TreeScanResult,
 } from "./github";
 import { embedText } from "./lib/embeddings";
+import {
+  fetchRepoMetadata,
+  fetchRepoTree,
+  NOT_MODIFIED,
+} from "./lib/github";
+
+// ---------------------------------------------------------------------------
+// Tree scan ↔ cache encoding
+// ---------------------------------------------------------------------------
+// The githubTreeCache schema stores `dependencyFilePaths: string[]`. We pack
+// the full TreeScanResult into this array using prefixed entries so a 304
+// cache hit can restore the scan without re-fetching the tree.
+
+function encodeScanForCache(scan: TreeScanResult): string[] {
+  return [
+    ...scan.configFiles.map((p) => `c:${p}`),
+    ...scan.workspacePackageJsonPaths.map((p) => `w:${p}`),
+    ...scan.depFiles.map((p) => `d:${p}`),
+    ...(scan.readmePath ? [`r:${scan.readmePath}`] : []),
+  ];
+}
+
+function decodeCachedScan(encoded: string[]): TreeScanResult {
+  const configFiles: string[] = [];
+  const workspacePackageJsonPaths: string[] = [];
+  const depFiles: string[] = [];
+  let readmePath: string | null = null;
+
+  for (const entry of encoded) {
+    const prefix = entry.slice(0, 2);
+    const path = entry.slice(2);
+    switch (prefix) {
+      case "c:":
+        configFiles.push(path);
+        break;
+      case "w:":
+        workspacePackageJsonPaths.push(path);
+        break;
+      case "d:":
+        depFiles.push(path);
+        break;
+      case "r:":
+        readmePath = path;
+        break;
+    }
+  }
+
+  return { configFiles, workspacePackageJsonPaths, depFiles, readmePath };
+}
 
 // ---------------------------------------------------------------------------
 // Repo fingerprint cache
@@ -155,22 +206,158 @@ export const analyzeRepo = action({
     const { owner, repo } = parsed;
     const repoName = `${owner}/${repo}`;
     const cacheKey = makeCacheKey(owner, repo);
+    const repoKey = `${owner}/${repo}`;
 
-    // Try cache first — repeat detections of the same repo are free
     let fingerprint: RepoFingerprint;
     let queryEmbedding: number[];
 
-    const cached = await ctx.runQuery(
-      internal.recommendations.getCachedFingerprint,
-      { cacheKey },
+    // ------------------------------------------------------------------
+    // Step 1: Tree ETag freshness check
+    // ------------------------------------------------------------------
+    // Always check whether the repo has changed before trusting any cache.
+    // With an authenticated GITHUB_TOKEN, 304 responses are free (don't
+    // count against the 5,000/hour rate limit), so this costs only ~100ms
+    // of latency. If the tree changed, we invalidate the fingerprint cache
+    // and rebuild — so users who just restructured their repo get fresh
+    // results immediately.
+    const treeCache = await ctx.runQuery(
+      internal.githubCache.getTreeCache,
+      { repo: repoKey },
     );
+
+    let treeChanged = false;
+    let scan: TreeScanResult | null = null;
+    let branch: string | undefined;
+
+    if (treeCache) {
+      const treeResult = await fetchRepoTree(
+        owner,
+        repo,
+        [treeCache.branch],
+        { etag: treeCache.etag },
+      );
+      if (treeResult === NOT_MODIFIED) {
+        // Repo unchanged — fingerprint cache (if any) is still valid
+        await ctx.runMutation(internal.githubCache.touchTreeCache, {
+          repo: repoKey,
+        });
+        branch = treeCache.branch;
+        scan = decodeCachedScan(treeCache.dependencyFilePaths);
+      } else if (treeResult) {
+        // Repo changed — rebuild fingerprint even if cached
+        treeChanged = true;
+        branch = treeResult.branch;
+        scan = scanTree(treeResult.entries);
+        if (treeResult.etag) {
+          await ctx.runMutation(internal.githubCache.setTreeCache, {
+            repo: repoKey,
+            branch: treeResult.branch,
+            etag: treeResult.etag,
+            dependencyFilePaths: encodeScanForCache(scan),
+          });
+        }
+      } else {
+        // Tree API failed — trust the fingerprint cache if available
+        branch = treeCache.branch;
+        scan = decodeCachedScan(treeCache.dependencyFilePaths);
+      }
+    } else {
+      // No tree cache at all — need full rebuild
+      treeChanged = true;
+    }
+
+    // ------------------------------------------------------------------
+    // Step 2: Check fingerprint cache (skip if tree changed)
+    // ------------------------------------------------------------------
+    const cached = treeChanged
+      ? null
+      : await ctx.runQuery(
+          internal.recommendations.getCachedFingerprint,
+          { cacheKey },
+        );
+
     if (cached) {
       fingerprint = cached.fingerprint;
       queryEmbedding = cached.embedding;
     } else {
-      // Fetch fresh fingerprint
-      const built = await buildRepoFingerprint(owner, repo);
-      if (!built) {
+      // ------------------------------------------------------------------
+      // Step 3: Fetch metadata + tree (if not already done)
+      // ------------------------------------------------------------------
+      const meta = await fetchRepoMetadata(owner, repo);
+      if (!branch) branch = meta?.defaultBranch ?? "main";
+
+      // If we don't have a tree scan yet (no cache existed), fetch fresh
+      if (!scan) {
+        const branchesToTry: string[] = [];
+        if (meta?.defaultBranch) branchesToTry.push(meta.defaultBranch);
+        if (!branchesToTry.includes("main")) branchesToTry.push("main");
+        if (!branchesToTry.includes("master")) branchesToTry.push("master");
+
+        const treeResult = await fetchRepoTree(owner, repo, branchesToTry);
+        if (treeResult && treeResult !== NOT_MODIFIED) {
+          branch = treeResult.branch;
+          scan = scanTree(treeResult.entries);
+          if (treeResult.etag) {
+            await ctx.runMutation(internal.githubCache.setTreeCache, {
+              repo: repoKey,
+              branch: treeResult.branch,
+              etag: treeResult.etag,
+              dependencyFilePaths: encodeScanForCache(scan),
+            });
+          }
+        }
+        // If tree API fails, scan stays null — graceful degradation.
+      }
+
+      // ------------------------------------------------------------------
+      // Step 4: Determine which files to fetch
+      // ------------------------------------------------------------------
+      const allDepFiles = [
+        "package.json",
+        "requirements.txt",
+        "pyproject.toml",
+        "Cargo.toml",
+        "go.mod",
+        "Dockerfile",
+      ];
+      const allReadmeCandidates = [
+        "README.md",
+        "readme.md",
+        "README.MD",
+        "Readme.md",
+      ];
+
+      let filesToFetch: string[];
+      if (scan) {
+        filesToFetch = [
+          ...scan.depFiles,
+          ...scan.workspacePackageJsonPaths,
+          ...(scan.readmePath ? [scan.readmePath] : []),
+        ];
+      } else {
+        filesToFetch = [...allDepFiles, ...allReadmeCandidates];
+      }
+
+      // ------------------------------------------------------------------
+      // Step 5: Build fingerprint from resolved inputs
+      // ------------------------------------------------------------------
+      fingerprint = await buildRepoFingerprint({
+        owner,
+        repo,
+        branch,
+        description: meta?.description ?? undefined,
+        topics: meta?.topics ?? [],
+        configFiles: scan?.configFiles ?? [],
+        filesToFetch,
+      });
+
+      if (
+        fingerprint.packages.length === 0 &&
+        fingerprint.configFiles.length === 0 &&
+        !fingerprint.readmeExcerpt &&
+        !fingerprint.description &&
+        fingerprint.topics.length === 0
+      ) {
         return {
           error: "Could not fetch repository details",
           repoName,
@@ -178,10 +365,11 @@ export const analyzeRepo = action({
           recommendations: [],
         };
       }
-      fingerprint = built.fingerprint;
 
-      // Embed the fingerprint text
-      const embeddingInput = fingerprintToEmbeddingInput(built.fingerprint);
+      // ------------------------------------------------------------------
+      // Step 6: Embed and cache
+      // ------------------------------------------------------------------
+      const embeddingInput = fingerprintToEmbeddingInput(fingerprint);
       try {
         queryEmbedding = await embedText(embeddingInput);
       } catch (e) {
@@ -189,15 +377,14 @@ export const analyzeRepo = action({
         return {
           error: "Failed to analyze repository (embedding error)",
           repoName,
-          fingerprint: built.fingerprint,
+          fingerprint,
           recommendations: [],
         };
       }
 
-      // Cache for next time
       await ctx.runMutation(internal.recommendations.setCachedFingerprint, {
         cacheKey,
-        fingerprint: built.fingerprint,
+        fingerprint,
         embedding: queryEmbedding,
       });
     }

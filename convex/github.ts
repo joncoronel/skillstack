@@ -1,6 +1,4 @@
-import { internalAction } from "./_generated/server";
-import { v } from "convex/values";
-import { fetchRepoMetadata } from "./lib/github";
+import type { TreeEntry } from "./lib/github";
 
 // ---------------------------------------------------------------------------
 // URL parsing
@@ -27,7 +25,7 @@ function parseGitHubUrl(url: string): { owner: string; repo: string } | null {
 export interface RepoFingerprint {
   /** Raw dependency package names from package.json + non-JS manifests. */
   packages: string[];
-  /** Config file basenames present in the repo root (e.g. drizzle.config.ts). */
+  /** Config file paths present in the repo (e.g. prisma/schema.prisma). */
   configFiles: string[];
   /** Detected language ecosystems (python, rust, go, etc.). */
   languages: string[];
@@ -41,16 +39,6 @@ export interface RepoFingerprint {
 
 const README_EXCERPT_LIMIT = 1500;
 
-const README_CANDIDATES = ["README.md", "readme.md", "README.MD", "Readme.md"];
-
-const NON_JS_DEPENDENCY_FILES = [
-  "requirements.txt",
-  "pyproject.toml",
-  "Cargo.toml",
-  "go.mod",
-  "Dockerfile",
-] as const;
-
 const FILE_LANGUAGE_MAP: Record<string, string> = {
   "requirements.txt": "python",
   "pyproject.toml": "python",
@@ -59,8 +47,8 @@ const FILE_LANGUAGE_MAP: Record<string, string> = {
   "Dockerfile": "docker",
 };
 
-/** Common config files we look for in the repo root as fingerprint signals. */
-const KNOWN_CONFIG_FILES = [
+/** Config file paths whose presence in the repo tree is a fingerprint signal. */
+const KNOWN_CONFIG_FILES = new Set([
   "next.config.js",
   "next.config.ts",
   "next.config.mjs",
@@ -91,7 +79,35 @@ const KNOWN_CONFIG_FILES = [
   "Dockerfile",
   "docker-compose.yml",
   "supabase/config.toml",
+]);
+
+/** Directories that should never contain relevant package.json files. */
+const EXCLUDED_SEGMENTS = [
+  "node_modules",
+  "test/fixtures",
+  "__fixtures__",
+  "__tests__",
+  ".next",
+  "dist",
+  "build",
+  "examples",
+  ".cache",
+  "coverage",
 ];
+
+/** Check if a tree path is a relevant workspace package.json to analyze. */
+function isRelevantPackageJson(path: string): boolean {
+  if (!path.endsWith("package.json")) return false;
+  if (path === "package.json") return false; // root is handled separately
+  const lowerPath = path.toLowerCase();
+  return !EXCLUDED_SEGMENTS.some((seg) => lowerPath.includes(seg));
+}
+
+const MAX_WORKSPACE_PACKAGE_JSONS = 15;
+
+// ---------------------------------------------------------------------------
+// Raw file fetching (via raw.githubusercontent.com — free, no API quota)
+// ---------------------------------------------------------------------------
 
 interface PackageJson {
   name?: string;
@@ -100,7 +116,7 @@ interface PackageJson {
   devDependencies?: Record<string, string>;
 }
 
-async function fetchRawFile(
+export async function fetchRawFile(
   owner: string,
   repo: string,
   branch: string,
@@ -116,13 +132,7 @@ async function fetchRawFile(
   }
 }
 
-async function fetchPackageJson(
-  owner: string,
-  repo: string,
-  branch: string,
-): Promise<PackageJson | null> {
-  const text = await fetchRawFile(owner, repo, branch, "package.json");
-  if (!text) return null;
+function parsePackageJson(text: string): PackageJson | null {
   try {
     return JSON.parse(text) as PackageJson;
   } catch {
@@ -130,19 +140,9 @@ async function fetchPackageJson(
   }
 }
 
-async function fetchReadmeExcerpt(
-  owner: string,
-  repo: string,
-  branch: string,
-): Promise<string | null> {
-  for (const candidate of README_CANDIDATES) {
-    const text = await fetchRawFile(owner, repo, branch, candidate);
-    if (text) {
-      return text.slice(0, README_EXCERPT_LIMIT);
-    }
-  }
-  return null;
-}
+// ---------------------------------------------------------------------------
+// Non-JS dependency file parsing
+// ---------------------------------------------------------------------------
 
 /** Parse a non-JS dependency file and extract package names (best-effort). */
 function parseNonJsPackages(filename: string, content: string): string[] {
@@ -209,109 +209,164 @@ function parseNonJsPackages(filename: string, content: string): string[] {
   return Array.from(pkgs);
 }
 
+// ---------------------------------------------------------------------------
+// Tree scanning
+// ---------------------------------------------------------------------------
+
+const README_CANDIDATES = new Set([
+  "README.md",
+  "readme.md",
+  "README.MD",
+  "Readme.md",
+]);
+
+const DEP_FILES = new Set([
+  "package.json",
+  "requirements.txt",
+  "pyproject.toml",
+  "Cargo.toml",
+  "go.mod",
+  "Dockerfile",
+]);
+
+export interface TreeScanResult {
+  configFiles: string[];
+  workspacePackageJsonPaths: string[];
+  /** Which root dep files actually exist in the tree. */
+  depFiles: string[];
+  /** First matching README variant, or null. */
+  readmePath: string | null;
+}
+
 /**
- * Build a repo fingerprint by fetching package.json + non-JS manifests +
- * GitHub metadata (description/topics) + README excerpt. Tries main and
- * master branches. Returns null if nothing useful was found.
+ * Single-pass scan over tree entries. Extracts config files, workspace
+ * package.json paths, which root dep files exist, and the README path.
  */
-export async function buildRepoFingerprint(
-  owner: string,
-  repo: string,
-): Promise<{ fingerprint: RepoFingerprint; branch: string } | null> {
-  // Fetch repo metadata + dependency files in parallel
-  const metaPromise = fetchRepoMetadata(owner, repo);
+export function scanTree(entries: TreeEntry[]): TreeScanResult {
+  const configFiles: string[] = [];
+  const workspacePaths: string[] = [];
+  const depFiles: string[] = [];
+  let readmePath: string | null = null;
 
-  // Try the metadata's default branch first; fall back to main/master
-  const meta = await metaPromise;
-  const branchesToTry: string[] = [];
-  if (meta?.defaultBranch) branchesToTry.push(meta.defaultBranch);
-  if (!branchesToTry.includes("main")) branchesToTry.push("main");
-  if (!branchesToTry.includes("master")) branchesToTry.push("master");
+  for (const entry of entries) {
+    if (entry.type !== "blob") continue;
 
-  let foundBranch: string | null = null;
-  let pkgJson: PackageJson | null = null;
-  const nonJsContents = new Map<string, string>();
-
-  for (const branch of branchesToTry) {
-    const [pkg, ...nonJs] = await Promise.all([
-      fetchPackageJson(owner, repo, branch),
-      ...NON_JS_DEPENDENCY_FILES.map((f) => fetchRawFile(owner, repo, branch, f)),
-    ]);
-
-    const anyNonJs = nonJs.some((c) => c !== null);
-    if (pkg || anyNonJs) {
-      pkgJson = pkg;
-      for (let i = 0; i < NON_JS_DEPENDENCY_FILES.length; i++) {
-        if (nonJs[i]) nonJsContents.set(NON_JS_DEPENDENCY_FILES[i], nonJs[i]!);
-      }
-      foundBranch = branch;
-      break;
+    if (KNOWN_CONFIG_FILES.has(entry.path)) {
+      configFiles.push(entry.path);
+    }
+    if (isRelevantPackageJson(entry.path)) {
+      workspacePaths.push(entry.path);
+    }
+    // Root-level dep files (no slash in path = root)
+    if (!entry.path.includes("/") && DEP_FILES.has(entry.path)) {
+      depFiles.push(entry.path);
+    }
+    // First matching README at root
+    if (!readmePath && !entry.path.includes("/") && README_CANDIDATES.has(entry.path)) {
+      readmePath = entry.path;
     }
   }
 
-  // Even with no dependency files, we still have GitHub metadata + README —
-  // that's enough for an embedding-based recommendation.
-  const branch = foundBranch ?? meta?.defaultBranch ?? "main";
-
-  const readmeExcerpt = await fetchReadmeExcerpt(owner, repo, branch);
-
-  if (
-    !pkgJson &&
-    nonJsContents.size === 0 &&
-    !readmeExcerpt &&
-    !meta?.description &&
-    (!meta?.topics || meta.topics.length === 0)
-  ) {
-    return null;
-  }
-
-  // Extract packages
-  const packages = new Set<string>();
-  if (pkgJson) {
-    const deps = {
-      ...(pkgJson.dependencies ?? {}),
-      ...(pkgJson.devDependencies ?? {}),
-    };
-    for (const name of Object.keys(deps)) packages.add(name);
-  }
-  for (const [filename, content] of nonJsContents) {
-    for (const pkg of parseNonJsPackages(filename, content)) packages.add(pkg);
-  }
-
-  // Detect languages
-  const languages = new Set<string>();
-  if (pkgJson) languages.add("javascript");
-  for (const filename of nonJsContents.keys()) {
-    const lang = FILE_LANGUAGE_MAP[filename];
-    if (lang) languages.add(lang);
-  }
-
-  // Detect config files (best-effort: HEAD requests in parallel)
-  const configChecks = await Promise.all(
-    KNOWN_CONFIG_FILES.map(async (path) => {
-      try {
-        const res = await fetch(
-          `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${path}`,
-          { method: "HEAD" },
-        );
-        return res.ok ? path : null;
-      } catch {
-        return null;
-      }
-    }),
-  );
-  const configFiles = configChecks.filter((c): c is string => c !== null);
+  // Sort workspace paths: shallower first, then alphabetical. Cap count.
+  workspacePaths.sort((a, b) => {
+    const depthA = a.split("/").length;
+    const depthB = b.split("/").length;
+    return depthA !== depthB ? depthA - depthB : a.localeCompare(b);
+  });
 
   return {
-    branch,
-    fingerprint: {
-      packages: Array.from(packages),
-      configFiles,
-      languages: Array.from(languages),
-      description: meta?.description ?? undefined,
-      topics: meta?.topics ?? [],
-      readmeExcerpt: readmeExcerpt ?? undefined,
-    },
+    configFiles,
+    workspacePackageJsonPaths: workspacePaths.slice(
+      0,
+      MAX_WORKSPACE_PACKAGE_JSONS,
+    ),
+    depFiles,
+    readmePath,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Fingerprint builder
+// ---------------------------------------------------------------------------
+
+interface BuildFingerprintInput {
+  owner: string;
+  repo: string;
+  branch: string;
+  /** GitHub repo description. */
+  description?: string;
+  /** GitHub repo topics. */
+  topics: string[];
+  /** Config file paths found in tree (from scanTree). */
+  configFiles: string[];
+  /** Paths of files to fetch for dependency extraction. */
+  filesToFetch: string[];
+}
+
+/**
+ * Build a repo fingerprint from pre-resolved inputs. The caller is
+ * responsible for resolving the branch, fetching metadata, and scanning the
+ * tree — this function only fetches file contents and assembles the result.
+ */
+export async function buildRepoFingerprint(
+  input: BuildFingerprintInput,
+): Promise<RepoFingerprint> {
+  const { owner, repo, branch, description, topics, configFiles, filesToFetch } =
+    input;
+
+  // Fetch all needed files in one parallel burst
+  const fileContents = await Promise.all(
+    filesToFetch.map(async (path) => {
+      const content = await fetchRawFile(owner, repo, branch, path);
+      return { path, content };
+    }),
+  );
+
+  const packages = new Set<string>();
+  const languages = new Set<string>();
+  let readmeExcerpt: string | undefined;
+
+  for (const { path, content } of fileContents) {
+    if (!content) continue;
+    const filename = path.split("/").pop() ?? "";
+
+    // README
+    if (filename.toLowerCase() === "readme.md") {
+      readmeExcerpt = content.slice(0, README_EXCERPT_LIMIT);
+      continue;
+    }
+
+    // Root or workspace package.json
+    if (filename === "package.json") {
+      const pkg = parsePackageJson(content);
+      if (pkg) {
+        languages.add("javascript");
+        const deps = {
+          ...(pkg.dependencies ?? {}),
+          ...(pkg.devDependencies ?? {}),
+        };
+        for (const name of Object.keys(deps)) packages.add(name);
+      }
+      continue;
+    }
+
+    // Non-JS dependency files
+    const lang = FILE_LANGUAGE_MAP[filename];
+    if (lang) {
+      languages.add(lang);
+      for (const pkg of parseNonJsPackages(filename, content)) {
+        packages.add(pkg);
+      }
+    }
+  }
+
+  return {
+    packages: Array.from(packages),
+    configFiles,
+    languages: Array.from(languages),
+    description,
+    topics,
+    readmeExcerpt,
   };
 }
 
@@ -338,19 +393,5 @@ export function fingerprintToEmbeddingInput(
   }
   return parts.join("\n\n");
 }
-
-/**
- * Internal action that builds a fingerprint for a parsed repo. Used by
- * recommendations.ts (which has the public action with rate limiting + caching).
- */
-export const buildFingerprintForRepo = internalAction({
-  args: { owner: v.string(), repo: v.string() },
-  handler: async (_ctx, { owner, repo }): Promise<{
-    fingerprint: RepoFingerprint;
-    branch: string;
-  } | null> => {
-    return await buildRepoFingerprint(owner, repo);
-  },
-});
 
 export { parseGitHubUrl };
