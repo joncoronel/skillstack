@@ -159,6 +159,25 @@ export default defineSchema({
     }),
     embedding: v.array(v.float64()),
     cachedAt: v.number(),
+    // Cached final recommendations from the vector search + grouping pipeline.
+    // Written in a second mutation after the vector search completes, so
+    // repeat analyses of an unchanged repo skip the vector search entirely.
+    recommendations: v.optional(
+      v.array(
+        v.object({
+          name: v.string(),
+          variantCount: v.number(),
+          variants: v.array(
+            v.object({
+              source: v.string(),
+              skillId: v.string(),
+              description: v.optional(v.string()),
+              installs: v.number(),
+            }),
+          ),
+        }),
+      ),
+    ),
   }).index("by_cacheKey", ["cacheKey"]),
 
   bundles: defineTable({

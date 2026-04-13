@@ -83,6 +83,7 @@ export const getCachedFingerprint = internalQuery({
     return {
       fingerprint: entry.fingerprint,
       embedding: entry.embedding,
+      recommendations: entry.recommendations ?? null,
     };
   },
 });
@@ -112,6 +113,7 @@ export const setCachedFingerprint = internalMutation({
         fingerprint,
         embedding,
         cachedAt: now,
+        recommendations: undefined,
       });
     } else {
       await ctx.db.insert("repoFingerprintCache", {
@@ -120,6 +122,38 @@ export const setCachedFingerprint = internalMutation({
         embedding,
         cachedAt: now,
       });
+    }
+  },
+});
+
+export const setCachedRecommendations = internalMutation({
+  args: {
+    cacheKey: v.string(),
+    recommendations: v.array(
+      v.object({
+        name: v.string(),
+        variantCount: v.number(),
+        variants: v.array(
+          v.object({
+            source: v.string(),
+            skillId: v.string(),
+            description: v.optional(v.string()),
+            installs: v.number(),
+          }),
+        ),
+      }),
+    ),
+  },
+  handler: async (ctx, { cacheKey, recommendations }) => {
+    const existing = await ctx.db
+      .query("repoFingerprintCache")
+      .withIndex("by_cacheKey", (q) => q.eq("cacheKey", cacheKey))
+      .unique();
+
+    // No-op if the row was deleted between setCachedFingerprint and this call.
+    // The next analyzeRepo request will rebuild everything from scratch.
+    if (existing) {
+      await ctx.db.patch(existing._id, { recommendations });
     }
   },
 });
@@ -279,6 +313,16 @@ export const analyzeRepo = action({
     if (cached) {
       fingerprint = cached.fingerprint;
       queryEmbedding = cached.embedding;
+
+      // Full cache hit — skip vector search, summary lookups, and grouping.
+      if (cached.recommendations) {
+        return {
+          error: null,
+          repoName,
+          fingerprint,
+          recommendations: cached.recommendations,
+        };
+      }
     } else {
       // ------------------------------------------------------------------
       // Step 3: Fetch metadata + tree (if not already done)
@@ -533,6 +577,12 @@ export const analyzeRepo = action({
         variantCount: sortedVariants.length,
         variants: sortedVariants.slice(0, MAX_VARIANTS_PER_GROUP),
       };
+    });
+
+    // Cache recommendations so repeat analyses skip the vector search.
+    await ctx.runMutation(internal.recommendations.setCachedRecommendations, {
+      cacheKey,
+      recommendations,
     });
 
     return {
