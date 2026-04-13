@@ -41,11 +41,7 @@ export function DesktopNav() {
       <NavLink
         href="/pricing"
         icon={
-          <HugeiconsIcon
-            icon={Tag01Icon}
-            strokeWidth={2}
-            className="size-4"
-          />
+          <HugeiconsIcon icon={Tag01Icon} strokeWidth={2} className="size-4" />
         }
       >
         Pricing
@@ -72,7 +68,7 @@ function NavLink({
       variant="ghost"
       size="sm"
       render={<Link href={href} />}
-      className={cn(isActive && "text-foreground font-medium")}
+      className={cn(isActive && "bg-accent text-foreground font-medium")}
       leftSection={icon}
     >
       {children}

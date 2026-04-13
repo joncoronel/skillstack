@@ -47,9 +47,9 @@ export function AppHeader() {
 function NavSkeleton() {
   return (
     <nav className="max-sm:hidden flex items-center gap-1">
-      <Skeleton className="h-8 w-20 rounded-md" />
-      <Skeleton className="h-8 w-24 rounded-md" />
-      <Skeleton className="h-8 w-18 rounded-md" />
+      <Skeleton className="h-8 w-[82px] rounded-md" />
+      <Skeleton className="h-8 w-[102px] rounded-md" />
+      <Skeleton className="h-8 w-[78px] rounded-md" />
     </nav>
   );
 }

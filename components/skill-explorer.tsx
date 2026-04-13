@@ -19,6 +19,7 @@ import {
 } from "@/lib/search-params";
 import { BundleSelectionProvider } from "@/lib/bundle-selection-context";
 import { Input } from "@/components/ui/cubby-ui/input";
+import { Kbd } from "@/components/ui/cubby-ui/kbd";
 import { Button } from "@/components/ui/cubby-ui/button";
 import {
   Tabs,
@@ -104,7 +105,7 @@ export function SkillExplorer({
               strokeWidth={2}
               className="size-3.5"
             />
-            Text
+            Search
           </TabsTrigger>
           <TabsTrigger value="repo">
             <HugeiconsIcon
@@ -144,9 +145,20 @@ export function SkillExplorer({
               }}
               className="pl-9 pr-9"
             />
+            {!inputValue && (
+              <Kbd
+                size="sm"
+                variant="ghost"
+                className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none max-sm:hidden"
+                aria-hidden="true"
+              >
+                /
+              </Kbd>
+            )}
             {inputValue && (
               <button
                 type="button"
+                aria-label="Clear search"
                 onClick={() => {
                   if (isText) {
                     setTextQuery("");

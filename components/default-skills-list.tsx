@@ -87,7 +87,20 @@ export function DefaultSkillsList({
 
   return (
     <div className="mt-4">
-      <p className="text-xs text-muted-foreground mb-3">Popular skills</p>
+      <div className="mb-3">
+        <h2 className="text-sm font-medium">Popular skills</h2>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Sorted by installs from{" "}
+          <a
+            href="https://skills.sh"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-foreground transition-colors"
+          >
+            skills.sh
+          </a>
+        </p>
+      </div>
       <div className="grid">
         {skills.map((skill, i) => {
           const isFirst = i === 0;
@@ -118,7 +131,6 @@ export function DefaultSkillsList({
           <span className="text-xs text-muted-foreground">Loading more…</span>
         </div>
       )}
-
     </div>
   );
 }
