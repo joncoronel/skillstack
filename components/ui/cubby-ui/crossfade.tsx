@@ -24,7 +24,10 @@ export function Crossfade({
   // Skip @starting-style on initial mount so skeletons render without
   // a transform context that breaks bg-fixed animation sync.
   const [mounted, setMounted] = React.useState(false);
-  React.useEffect(() => setMounted(true), []);
+  React.useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
 
   return (
     <div
