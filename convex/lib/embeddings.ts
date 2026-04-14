@@ -1,15 +1,15 @@
 /**
  * Voyage AI embeddings wrapper.
  *
- * Uses voyage-4-lite at 512 dimensions — cheap, accurate, and optimized for
- * retrieval with input_type support. Read the docs at
- * https://docs.voyageai.com/docs/embeddings.
+ * Uses voyage-code-3 at 512 dimensions — purpose-built for code and
+ * programming documentation, with retrieval-optimized input_type support.
+ * Read the docs at https://docs.voyageai.com/docs/embeddings.
  *
  * Reads VOYAGE_API_KEY from the Convex environment. Set via:
  *   npx convex env set VOYAGE_API_KEY pa-...
  */
 
-const VOYAGE_EMBEDDING_MODEL = "voyage-4-lite";
+const VOYAGE_EMBEDDING_MODEL = "voyage-code-3";
 const VOYAGE_EMBEDDING_DIMENSIONS = 512;
 const VOYAGE_EMBEDDINGS_URL = "https://api.voyageai.com/v1/embeddings";
 
@@ -21,7 +21,7 @@ const VOYAGE_EMBEDDINGS_URL = "https://api.voyageai.com/v1/embeddings";
  */
 const MAX_INPUT_CHARS = 16_000;
 
-export const EMBEDDING_VERSION = 2;
+export const EMBEDDING_VERSION = 3;
 export const EMBEDDING_DIMENSIONS = VOYAGE_EMBEDDING_DIMENSIONS;
 
 function getApiKey(): string {
