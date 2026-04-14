@@ -26,6 +26,13 @@ interface DefaultSkillsListProps {
  * because only the former supports seeding with server-fetched initial data.
  * We lose live reactivity on the popular list, which is fine — installs
  * update via a daily sync, not per interaction.
+ *
+ * Page-boundary consistency caveat: page 1 is hour-cached on the server
+ * (see app/(main)/page.tsx) while pages 2+ are fetched fresh. If install
+ * counts shift enough to reorder skills between those snapshots, the cursor
+ * from page 1 can point into a now-different ordering, causing a rare
+ * duplicate or skipped skill at the boundary. Acceptable given the daily
+ * sync cadence; revisit if it ever becomes visible.
  */
 export function DefaultSkillsList({
   initialPage,
@@ -47,7 +54,11 @@ export function DefaultSkillsList({
       initialPageParam: null as string | null,
       initialData: { pages: [initialPage], pageParams: [null as string | null] },
       getNextPageParam: (last) => (last.isDone ? undefined : last.continueCursor),
-      staleTime: 5 * 60_000,
+      staleTime: Infinity,
+      gcTime: 0,
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
     });
 
   useEffect(() => {
