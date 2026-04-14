@@ -39,9 +39,7 @@ export function PricingContent() {
       </div>
 
       <p className="text-muted-foreground text-xs">
-        Prices in USD. Yearly billing is charged once annually and renews each
-        year; monthly billing renews each month. Cancel anytime from billing
-        settings.
+        Prices in USD. Cancel anytime from billing settings.
       </p>
     </div>
   );
@@ -88,7 +86,6 @@ function TierCard({ planKey, cycle }: { planKey: Plan; cycle: Cycle }) {
 
   return (
     <div
-      data-highlighted={isPro || undefined}
       className={cn(
         "relative flex flex-col rounded-2xl border p-8 transition-colors",
         isPro
@@ -186,10 +183,7 @@ function Price({
   if (monthly === 0 && yearly === 0) {
     return (
       <div className="flex items-baseline gap-2">
-        <span
-          className="font-display text-5xl font-bold tracking-tight tabular-nums"
-          style={{ fontVariantNumeric: "tabular-nums" }}
-        >
+        <span className="font-display text-5xl font-bold tracking-tight tabular-nums">
           $0
         </span>
         <span className="text-muted-foreground text-sm">forever</span>
@@ -202,10 +196,7 @@ function Price({
 
   return (
     <div className="flex items-baseline gap-2">
-      <span
-        className="font-display text-5xl font-bold tracking-tight"
-        style={{ fontVariantNumeric: "tabular-nums" }}
-      >
+      <span className="font-display text-5xl font-bold tracking-tight tabular-nums">
         ${amount}
       </span>
       <span className="text-muted-foreground text-sm">{suffix}</span>

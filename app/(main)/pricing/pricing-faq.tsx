@@ -28,11 +28,15 @@ const FAQ = [
 
 export function PricingFaq() {
   return (
-    <section aria-labelledby="faq-heading" className="flex flex-col gap-8">
-      <div className="flex flex-col gap-2">
-        <span className="text-primary text-xs font-medium tracking-widest uppercase">
-          Questions
-        </span>
+    <div aria-labelledby="faq-heading" className="flex flex-col gap-8">
+      <div className="flex flex-col gap-3">
+        <div className="text-muted-foreground flex items-center gap-2 text-xs font-medium tracking-widest uppercase">
+          <span
+            aria-hidden
+            className="bg-primary inline-block size-1.5 rounded-full"
+          />
+          <span>Questions</span>
+        </div>
         <h2
           id="faq-heading"
           className="font-display text-3xl font-semibold tracking-tight md:text-4xl"
@@ -54,6 +58,6 @@ export function PricingFaq() {
           </AccordionItem>
         ))}
       </Accordion>
-    </section>
+    </div>
   );
 }

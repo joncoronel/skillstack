@@ -20,16 +20,25 @@ export default function PricingPage() {
         <PricingContent />
       </section>
 
-      <div className="mt-24">
+      <section className="mt-24">
         <PricingComparison />
-      </div>
+      </section>
 
-      <div className="mt-24">
+      <section className="mt-24">
         <PricingFaq />
-      </div>
+      </section>
 
       <ClosingCta />
     </main>
+  );
+}
+
+function SectionEyebrow({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="text-muted-foreground flex items-center gap-2 text-xs font-medium tracking-widest uppercase">
+      <span aria-hidden className="bg-primary inline-block size-1.5 rounded-full" />
+      <span>{children}</span>
+    </div>
   );
 }
 
@@ -37,10 +46,7 @@ function PricingHero() {
   return (
     <section className="grid gap-8 md:grid-cols-[1.4fr_1fr] md:items-end">
       <div className="flex flex-col gap-5">
-        <div className="text-muted-foreground flex items-center gap-2 text-xs font-medium tracking-widest uppercase">
-          <span className="bg-primary inline-block size-1.5 rounded-full" />
-          <span>Pricing</span>
-        </div>
+        <SectionEyebrow>Pricing</SectionEyebrow>
         <h1 className="font-display text-5xl leading-[1.02] font-bold tracking-tight md:text-6xl lg:text-7xl">
           Pay for the
           <br />
@@ -51,7 +57,7 @@ function PricingHero() {
       </div>
       <p className="text-muted-foreground max-w-sm text-base md:justify-self-end md:text-right">
         Start free with manual stack selection and three saved bundles. Upgrade
-        to Pro when auto-detection, unlimited bundles, and private sharing earn
+        to Pro when auto-detection, unlimited bundles, and private bundles earn
         their keep.
       </p>
     </section>
@@ -60,16 +66,10 @@ function PricingHero() {
 
 function ClosingCta() {
   return (
-    <section className="border-border/60 bg-card relative mt-24 overflow-hidden rounded-3xl border p-10 md:p-14">
-      <div
-        aria-hidden
-        className="bg-primary/10 animate-float pointer-events-none absolute -top-24 -left-24 h-64 w-64 rounded-full blur-3xl"
-      />
-      <div className="relative flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+    <section className="border-border/60 bg-card mt-24 overflow-hidden rounded-3xl border p-10 md:p-14">
+      <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
         <div className="flex max-w-xl flex-col gap-3">
-          <span className="text-primary text-xs font-medium tracking-widest uppercase">
-            Start stacking
-          </span>
+          <SectionEyebrow>Start stacking</SectionEyebrow>
           <h2 className="font-display text-3xl leading-tight font-semibold tracking-tight md:text-4xl">
             Three saved bundles are free.
             <br />
