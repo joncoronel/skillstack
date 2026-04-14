@@ -71,7 +71,9 @@ export function BillingTab() {
             <p className="text-sm text-muted-foreground">
               {subscription.amount != null && subscription.currency
                 ? `${(subscription.amount / 100).toLocaleString("en-US", { style: "currency", currency: subscription.currency })}/${subscription.recurringInterval}`
-                : PLANS[plan].price}
+                : PLANS[plan].priceMonthly
+                  ? `$${PLANS[plan].priceMonthly}/month`
+                  : "Free"}
             </p>
           ) : (
             <p className="text-sm text-muted-foreground">

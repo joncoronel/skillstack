@@ -1,24 +1,100 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import { Button } from "@/components/ui/cubby-ui/button";
 import { PricingContent } from "./pricing-content";
+import { PricingComparison } from "./pricing-comparison";
+import { PricingFaq } from "./pricing-faq";
 
 export const metadata: Metadata = {
   title: "Pricing - SkillStack",
   description:
-    "Choose a plan for SkillStack. Start free, upgrade when you need more power.",
+    "Pick a plan that fits how you build. Start free, upgrade when auto-detection and unlimited bundles start paying for themselves.",
 };
 
 export default function PricingPage() {
   return (
-    <main className="mx-auto max-w-5xl px-4 pt-12 pb-20">
-      <div className="mb-12 text-center">
-        <h1 className="font-display text-3xl font-bold tracking-tight">
-          Simple pricing
-        </h1>
-        <p className="mt-3 text-sm text-muted-foreground">
-          Start free, upgrade when you need more power.
-        </p>
+    <main className="mx-auto max-w-6xl px-6 pt-16 pb-24">
+      <PricingHero />
+
+      <section className="mt-16">
+        <PricingContent />
+      </section>
+
+      <div className="mt-24">
+        <PricingComparison />
       </div>
-      <PricingContent />
+
+      <div className="mt-24">
+        <PricingFaq />
+      </div>
+
+      <ClosingCta />
     </main>
+  );
+}
+
+function PricingHero() {
+  return (
+    <section className="grid gap-8 md:grid-cols-[1.4fr_1fr] md:items-end">
+      <div className="flex flex-col gap-5">
+        <div className="text-muted-foreground flex items-center gap-2 text-xs font-medium tracking-widest uppercase">
+          <span className="bg-primary inline-block size-1.5 rounded-full" />
+          <span>Pricing</span>
+        </div>
+        <h1 className="font-display text-5xl leading-[1.02] font-bold tracking-tight md:text-6xl lg:text-7xl">
+          Pay for the
+          <br />
+          parts that
+          <br />
+          <span className="text-primary">save you time.</span>
+        </h1>
+      </div>
+      <p className="text-muted-foreground max-w-sm text-base md:justify-self-end md:text-right">
+        Start free with manual stack selection and three saved bundles. Upgrade
+        to Pro when auto-detection, unlimited bundles, and private sharing earn
+        their keep.
+      </p>
+    </section>
+  );
+}
+
+function ClosingCta() {
+  return (
+    <section className="border-border/60 bg-card relative mt-24 overflow-hidden rounded-3xl border p-10 md:p-14">
+      <div
+        aria-hidden
+        className="bg-primary/10 animate-float pointer-events-none absolute -top-24 -left-24 h-64 w-64 rounded-full blur-3xl"
+      />
+      <div className="relative flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+        <div className="flex max-w-xl flex-col gap-3">
+          <span className="text-primary text-xs font-medium tracking-widest uppercase">
+            Start stacking
+          </span>
+          <h2 className="font-display text-3xl leading-tight font-semibold tracking-tight md:text-4xl">
+            Three saved bundles are free.
+            <br />
+            You&apos;ll know when you want more.
+          </h2>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            nativeButton={false}
+            variant="primary"
+            size="lg"
+            render={<Link href="/sign-up" />}
+          >
+            Start free
+          </Button>
+          <Button
+            nativeButton={false}
+            variant="ghost"
+            size="lg"
+            render={<Link href="/explore" />}
+          >
+            Browse community bundles
+          </Button>
+        </div>
+      </div>
+    </section>
   );
 }
