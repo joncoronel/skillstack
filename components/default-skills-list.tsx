@@ -4,6 +4,8 @@ import { useEffect, useRef } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useConvex } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { api } from "@/convex/_generated/api";
 import { SkillRowView, type SkillData } from "@/components/skill-card";
 import type { SkillDetailHandle } from "@/components/skill-detail-sheet";
@@ -90,17 +92,24 @@ export function DefaultSkillsList({
 
   if (skills.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground text-center py-8">
-        No skills available yet.
-      </p>
+      <div className="rounded-lg border border-dashed border-border py-10 text-center">
+        <p className="text-sm text-muted-foreground">
+          No skills available yet.
+        </p>
+        <p className="text-xs text-muted-foreground mt-1">
+          Check back soon — skills sync daily.
+        </p>
+      </div>
     );
   }
 
   return (
     <div className="mt-4">
-      <div className="mb-3">
-        <h2 className="text-sm font-medium">Popular skills</h2>
-        <p className="text-xs text-muted-foreground mt-0.5">
+      <div className="mb-4">
+        <h2 className="font-display text-lg font-semibold tracking-tight">
+          Popular skills
+        </h2>
+        <p className="text-xs text-muted-foreground mt-1">
           Sorted by installs from{" "}
           <a
             href="https://skills.sh"
@@ -138,8 +147,13 @@ export function DefaultSkillsList({
       </div>
       <div ref={sentinelRef} aria-hidden="true" className="h-px" />
       {isFetchingNextPage && (
-        <div className="flex justify-center mt-4">
-          <span className="text-xs text-muted-foreground">Loading more…</span>
+        <div className="flex items-center justify-center gap-2 mt-4 text-muted-foreground">
+          <HugeiconsIcon
+            icon={Loading03Icon}
+            strokeWidth={2}
+            className="size-3.5 animate-spin"
+          />
+          <span className="text-xs">Loading more skills…</span>
         </div>
       )}
     </div>

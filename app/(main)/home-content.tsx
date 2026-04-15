@@ -33,15 +33,21 @@ export function HomeContent({
 
   return (
     <>
-      {/* Hero — server-rendered children, collapse activates after hydration */}
+      {/* Hero — server-rendered children, collapse activates after hydration.
+          Height transition lasts 200ms; the inner opacity fade runs shorter
+          (150ms) so the tagline dims before the section shrinks, avoiding an
+          abrupt disappearance. */}
       <div
-        className={cn(
-          "max-sm:duration-0 max-sm:transition-none transition-[height,opacity] duration-200 ease-out-cubic overflow-hidden",
-          searchActive ? "opacity-0" : `opacity-100`,
-        )}
+        className="max-sm:duration-0 max-sm:transition-none transition-[height] duration-200 ease-out-cubic overflow-hidden"
         style={{ height: searchActive ? 0 : height }}
       >
-        <div ref={ref} className={cn("max-sm:duration-0 ")}>
+        <div
+          ref={ref}
+          className={cn(
+            "max-sm:duration-0 max-sm:transition-none transition-opacity duration-150 ease-out-cubic",
+            searchActive ? "opacity-0" : "opacity-100",
+          )}
+        >
           {children}
         </div>
       </div>

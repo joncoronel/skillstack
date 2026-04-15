@@ -167,7 +167,7 @@ export function SkillExplorer({
                     setRepoUrl("");
                   }
                 }}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:text-foreground focus-visible:outline-2 focus-visible:outline-ring/50 focus-visible:outline-offset-2"
               >
                 <HugeiconsIcon
                   icon={Cancel01Icon}
