@@ -73,7 +73,7 @@ export function MobileNav() {
             </DrawerNavLink>
           </DrawerBody>
           <DrawerFooter className="px-4">
-            <div className="flex items-center justify-between rounded-lg px-3 py-2">
+            <div className="flex items-center justify-between px-3 py-2">
               <span className="text-sm text-muted-foreground">Theme</span>
               <ThemeSwitcher />
             </div>
@@ -97,7 +97,7 @@ function DrawerNavLink({
 }) {
   return (
     <DrawerClose
-      render={<Link href={href} />}
+      render={<Link href={href} aria-current={isActive ? "page" : undefined} />}
       className={cn(
         "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent",
         isActive && "bg-accent text-foreground",

@@ -35,10 +35,9 @@ export function ThemeSwitcher() {
     setTheme(next);
   }
 
-  // Before mount, render a static placeholder so SSR and client match.
-  // The Suspense boundary in app-header already shows a skeleton fallback,
-  // but this guards against the hydration window.
-  const active = mounted ? theme : undefined;
+  // Before mount, default to the "system" icon so the button isn't empty
+  // during the hydration window on client-side navigation.
+  const active = mounted ? theme : "system";
 
   return (
     <Button
@@ -51,21 +50,21 @@ export function ThemeSwitcher() {
       <HugeiconsIcon
         icon={Sun02Icon}
         data-visible={active === "light" || undefined}
-        className="absolute transition-all! duration-200 rotate-90 scale-60 blur-xs opacity-0 data-visible:rotate-0 data-visible:scale-100 data-visible:blur-none data-visible:opacity-100 transition-discrete"
+        className="absolute motion-safe:transition-all! motion-safe:duration-200 motion-safe:rotate-90 motion-safe:scale-60 motion-safe:blur-xs opacity-0 data-visible:rotate-0 data-visible:scale-100 data-visible:blur-none data-visible:opacity-100"
         strokeWidth={2}
       />
       {/* Dark mode: moon */}
       <HugeiconsIcon
         icon={Moon02Icon}
         data-visible={active === "dark" || undefined}
-        className="absolute transition-all! duration-200 -rotate-90 scale-60 blur-xs opacity-0 data-visible:rotate-0 data-visible:scale-100 data-visible:blur-none data-visible:opacity-100 transition-discrete"
+        className="absolute motion-safe:transition-all! motion-safe:duration-200 motion-safe:-rotate-90 motion-safe:scale-60 motion-safe:blur-xs opacity-0 data-visible:rotate-0 data-visible:scale-100 data-visible:blur-none data-visible:opacity-100"
         strokeWidth={2}
       />
       {/* System mode: computer */}
       <HugeiconsIcon
         icon={ComputerIcon}
         data-visible={active === "system" || undefined}
-        className="absolute transition-all! duration-200 rotate-90 scale-60 blur-xs opacity-0 data-visible:rotate-0 data-visible:scale-100 data-visible:blur-none data-visible:opacity-100 transition-discrete"
+        className="absolute motion-safe:transition-all! motion-safe:duration-200 motion-safe:rotate-90 motion-safe:scale-60 motion-safe:blur-xs opacity-0 data-visible:rotate-0 data-visible:scale-100 data-visible:blur-none data-visible:opacity-100"
         strokeWidth={2}
       />
     </Button>
