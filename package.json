@@ -9,7 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@base-ui/react": "^1.2.0",
+    "@base-ui/react": "^1.4.0",
     "@clerk/backend": "^3.2.3",
     "@clerk/nextjs": "^7.0.7",
     "@conform-to/react": "^1.16.0",
