@@ -4,7 +4,12 @@ import { useState } from "react";
 import { useConvexAuth } from "convex/react";
 import { useRouter } from "next/navigation";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Cancel01Icon, Copy01Icon, ArrowUpDownIcon, Download01Icon } from "@hugeicons/core-free-icons";
+import {
+  Cancel01Icon,
+  Copy01Icon,
+  ArrowUpDownIcon,
+  Download01Icon,
+} from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/cubby-ui/button";
 import { Sheet, SheetContent } from "@/components/ui/cubby-ui/sheet";
 import { useBundleSelection } from "@/lib/bundle-selection-context";
@@ -41,16 +46,26 @@ export function BundleBar() {
         <SheetContent
           side="bottom"
           variant="floating"
-          showBackdrop={false}
           showCloseButton={false}
-          className="max-sm:inset-x-0 max-sm:bottom-0 max-sm:w-full max-sm:max-w-none max-sm:rounded-none max-sm:ring-0 max-sm:shadow-none max-sm:border-t max-sm:data-starting-style:translate-y-full max-sm:data-ending-style:translate-y-full sm:inset-x-auto sm:left-1/2 sm:right-auto sm:-translate-x-1/2 sm:w-auto sm:max-w-none"
+          className="max-sm:inset-x-0 max-sm:bottom-0 max-sm:w-full max-sm:max-w-none max-sm:rounded-none max-sm:ring-0 max-sm:shadow-none max-sm:border-t max-sm:data-starting-style:translate-y-full max-sm:data-ending-style:translate-y-full sm:inset-x-auto sm:left-1/2 sm:right-auto sm:-translate-x-1/2 sm:w-auto sm:max-w-none sm:shadow-lg sm:ring-border sm:ring-1"
         >
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3 px-4 py-3">
             <div className="flex items-center gap-2 sm:gap-3">
               <span className="text-sm font-medium whitespace-nowrap">
                 {count} skill{count !== 1 ? "s" : ""} selected
               </span>
-              <Button variant="ghost" size="xs" onClick={clearAll} leftSection={<HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="size-3.5" />}>
+              <Button
+                variant="ghost"
+                size="xs"
+                onClick={clearAll}
+                leftSection={
+                  <HugeiconsIcon
+                    icon={Cancel01Icon}
+                    strokeWidth={2}
+                    className="size-3.5"
+                  />
+                }
+              >
                 Clear
               </Button>
             </div>
@@ -58,7 +73,18 @@ export function BundleBar() {
             <div className="hidden sm:block h-4 w-px bg-border" />
 
             <div className="flex items-center gap-2 sm:gap-3">
-              <Button variant="outline" size="sm" onClick={handleCopy} leftSection={<HugeiconsIcon icon={Copy01Icon} strokeWidth={2} className="size-3.5" />}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCopy}
+                leftSection={
+                  <HugeiconsIcon
+                    icon={Copy01Icon}
+                    strokeWidth={2}
+                    className="size-3.5"
+                  />
+                }
+              >
                 {copied ? "Copied!" : "Copy install"}
               </Button>
 
@@ -74,13 +100,30 @@ export function BundleBar() {
                       `/compare?skills=${encodeURIComponent(params)}`,
                     );
                   }}
-                  leftSection={<HugeiconsIcon icon={ArrowUpDownIcon} strokeWidth={2} className="size-3.5" />}
+                  leftSection={
+                    <HugeiconsIcon
+                      icon={ArrowUpDownIcon}
+                      strokeWidth={2}
+                      className="size-3.5"
+                    />
+                  }
                 >
                   Compare
                 </Button>
               )}
 
-              <Button variant="primary" size="sm" onClick={handleSave} leftSection={<HugeiconsIcon icon={Download01Icon} strokeWidth={2} className="size-3.5" />}>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleSave}
+                leftSection={
+                  <HugeiconsIcon
+                    icon={Download01Icon}
+                    strokeWidth={2}
+                    className="size-3.5"
+                  />
+                }
+              >
                 {isSignedIn ? "Save bundle" : "Sign in to save"}
               </Button>
             </div>

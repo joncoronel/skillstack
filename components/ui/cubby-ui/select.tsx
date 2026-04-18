@@ -31,56 +31,13 @@ function SelectPortal({ ...props }: BaseSelect.Portal.Props) {
   return <BaseSelect.Portal data-slot="select-portal" {...props} />;
 }
 
-//should show the label corresponding to the value
-function SelectValue({
-  className,
-  items,
-  children,
-  placeholder,
-  ...props
-}: BaseSelect.Value.Props & {
-  items?: Record<string, string> | { label: string; value: string }[];
-  placeholder?: string;
-}) {
-  // this is to handle the multi select
-  if (items) {
-    const renderValue = (selectedValues: string[]) => {
-      if (selectedValues.length === 0) {
-        return placeholder;
-      }
-
-      const getLabel = (value: string) => {
-        if (Array.isArray(items)) {
-          const item = items.find((item) => item.value === value);
-          return item?.label || value;
-        } else {
-          return items[value] || value;
-        }
-      };
-
-      // Comma-separated with truncation
-      const labels = selectedValues.map(getLabel);
-      return <span className="truncate">{labels.join(", ")}</span>;
-    };
-    return (
-      <BaseSelect.Value
-        data-slot="select-value"
-        className={cn(`text-sm`, className)}
-        {...props}
-      >
-        {renderValue}
-      </BaseSelect.Value>
-    );
-  }
-
+function SelectValue({ className, ...props }: BaseSelect.Value.Props) {
   return (
     <BaseSelect.Value
       data-slot="select-value"
       className={cn(`text-sm`, className)}
       {...props}
-    >
-      {children}
-    </BaseSelect.Value>
+    />
   );
 }
 
@@ -196,8 +153,8 @@ function SelectContent({
             // Shadow
             "shadow-[0_8px_20px_0_oklch(0.18_0_0/0.10)]",
             // Animation (disabled for alignItemWithTrigger via data-[side=none] to prevent Firefox jiggle)
-            "ease-out-cubic origin-(--transform-origin) transition-[transform,scale,opacity] duration-100",
-            "data-ending-style:scale-95 data-ending-style:opacity-0 data-starting-style:scale-95 data-starting-style:opacity-0",
+            "ease-out-cubic origin-(--transform-origin) transition-[transform,scale,opacity] duration-100 data-[side=none]:duration-50",
+            "data-ending-style:scale-97 data-ending-style:opacity-0 data-starting-style:scale-97 data-starting-style:opacity-0",
           )}
         >
           {alignItemWithTrigger && (
@@ -303,6 +260,19 @@ function SelectSeparator({ className, ...props }: BaseSelect.Separator.Props) {
   );
 }
 
+function SelectLabel({ className, ...props }: BaseSelect.Label.Props) {
+  return (
+    <BaseSelect.Label
+      data-slot="select-label"
+      className={cn(
+        "text-foreground text-sm leading-5 font-medium select-none group-data-[disabled=true]:pointer-events-none group-data-[disabled=true]:opacity-50 peer-disabled:cursor-not-allowed peer-disabled:opacity-50",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
 function SelectList({ className, ...props }: BaseSelect.List.Props) {
   return (
     <BaseSelect.List
@@ -324,5 +294,6 @@ export {
   SelectGroupLabel,
   SelectSeparator,
   SelectBackdrop,
+  SelectLabel,
   SelectList,
 };

@@ -1,8 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { HugeiconsIcon } from "@hugeicons/react";
-import { ArrowLeft01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons";
+import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import { DayPicker } from "react-day-picker";
 
 import { buttonVariants } from "@/components/ui/cubby-ui/button";
@@ -104,7 +103,7 @@ function Calendar({
                 classNames?.button_next,
               )}
             >
-              <HugeiconsIcon icon={ArrowRight01Icon} strokeWidth={2} className="size-4" />
+              <ChevronRightIcon className="size-4" />
             </button>
           ),
           PreviousMonthButton: (props) => (
@@ -116,7 +115,7 @@ function Calendar({
                 classNames?.button_previous,
               )}
             >
-              <HugeiconsIcon icon={ArrowLeft01Icon} strokeWidth={2} className="size-4" />
+              <ChevronLeftIcon className="size-4" />
             </button>
           ),
         }}

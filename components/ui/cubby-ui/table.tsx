@@ -88,7 +88,7 @@ function TableHeader({ className, render, ...props }: TableHeaderProps) {
       "[&_tr_th:first-child]:rounded-l-lg [&_tr_th:last-child]:rounded-r-lg",
       "sticky top-0 z-10",
       "before:pointer-events-none before:absolute before:inset-0 before:z-[1] before:content-['']",
-      "before:rounded-lg before:border before:border-border",
+      "before:rounded-lg before:border",
       "before:shadow-xs",
       className,
     ),

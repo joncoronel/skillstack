@@ -6,8 +6,8 @@ import { cn } from "@/lib/utils";
 const cardVariants = cva("text-card-foreground flex flex-col", {
   variants: {
     variant: {
-      default: "bg-card gap-6 rounded-xl border dark:border-border/50 py-6",
-      inset: "rounded-xl p-1 bg-muted",
+      default: "bg-card gap-6 rounded-2xl border dark:border-border/50 py-6",
+      inset: "rounded-2xl p-1 bg-muted",
     },
   },
   defaultVariants: {
@@ -16,8 +16,7 @@ const cardVariants = cva("text-card-foreground flex flex-col", {
 });
 
 export interface CardProps
-  extends
-    React.HTMLAttributes<HTMLDivElement>,
+  extends React.HTMLAttributes<HTMLDivElement>,
     VariantProps<typeof cardVariants> {}
 
 function Card({ className, variant = "default", ...props }: CardProps) {
@@ -50,7 +49,10 @@ function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-title"
-      className={cn("font-semibold", className)}
+      className={cn(
+        "font-semibold [[data-variant=default]_&]:leading-none",
+        className,
+      )}
       {...props}
     />
   );

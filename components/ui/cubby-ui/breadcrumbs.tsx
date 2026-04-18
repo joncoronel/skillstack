@@ -1,6 +1,5 @@
 import * as React from "react";
-import { HugeiconsIcon } from "@hugeicons/react";
-import { ArrowRight01Icon, MoreHorizontalIcon } from "@hugeicons/core-free-icons";
+import { ChevronRight, MoreHorizontal } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -128,7 +127,7 @@ function BreadcrumbSeparator({
       )}
       {...props}
     >
-      {children ?? separator ?? <HugeiconsIcon icon={ArrowRight01Icon} strokeWidth={2} />}
+      {children ?? separator ?? <ChevronRight />}
     </li>
   );
 }
@@ -155,7 +154,7 @@ function BreadcrumbEllipsis({
       )}
       {...props}
     >
-      <HugeiconsIcon icon={MoreHorizontalIcon} strokeWidth={2} className="size-4 group-data-[size=lg]:size-5 group-data-[size=sm]:size-3" />
+      <MoreHorizontal className="size-4 group-data-[size=lg]:size-5 group-data-[size=sm]:size-3" />
       <span className="sr-only">{ariaLabel}</span>
     </span>
   );
