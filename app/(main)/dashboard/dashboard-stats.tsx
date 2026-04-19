@@ -79,7 +79,7 @@ function StatCell({
       )}
     >
       <div className="flex items-center justify-between">
-        <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+        <p className="font-mono text-label uppercase tracking-eyebrow text-muted-foreground">
           {label}
         </p>
         {emphasize && (
@@ -93,7 +93,7 @@ function StatCell({
         {value}
       </p>
       {sub && (
-        <p className="mt-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground/80">
+        <p className="mt-1.5 font-mono text-label uppercase tracking-eyebrow text-muted-foreground/80">
           {sub}
         </p>
       )}

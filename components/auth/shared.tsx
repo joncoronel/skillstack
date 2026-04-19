@@ -14,7 +14,7 @@ export function AuthFieldLabel({
   return (
     <Label
       className={cn(
-        "font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground",
+        "font-mono text-label uppercase tracking-eyebrow text-muted-foreground",
         className,
       )}
       {...props}
@@ -44,7 +44,7 @@ export function AuthDivider({ label }: { label: string }) {
   return (
     <div className="flex items-center gap-4" aria-hidden="true">
       <span className="h-px flex-1 bg-border" />
-      <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+      <span className="font-mono text-label uppercase tracking-eyebrow text-muted-foreground">
         {label}
       </span>
       <span className="h-px flex-1 bg-border" />

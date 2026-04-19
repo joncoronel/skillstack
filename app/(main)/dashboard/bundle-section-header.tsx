@@ -32,14 +32,14 @@ export function BundleSectionHeader({
 
   return (
     <div className="flex items-center justify-between border-b pb-3">
-      <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+      <p className="font-mono text-eyebrow uppercase tracking-eyebrow text-muted-foreground">
         Bundles <span aria-hidden>&middot;</span>{" "}
         <span className="text-foreground tabular-nums">{countStr}</span>
       </p>
       <div className="flex items-center gap-2">
         <label
           htmlFor="bundle-sort"
-          className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground"
+          className="font-mono text-label uppercase tracking-eyebrow text-muted-foreground"
         >
           Sort
         </label>

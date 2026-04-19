@@ -100,7 +100,15 @@ html {
   /* Fonts */
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  --font-display: var(--font-bricolage);
+  --font-display: var(--font-geist-pixel-circle);
+
+  /* Typography — small mono labels (used uppercase with tracking-eyebrow) */
+  --text-label: 0.625rem; /* 10px */
+  --text-eyebrow: 0.6875rem; /* 11px */
+
+  /* Typography — page hero leading + eyebrow tracking */
+  --leading-hero: 0.95;
+  --tracking-eyebrow: 0.14em;
 
   /* Colors */
   --color-background: var(--background);

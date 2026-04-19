@@ -18,7 +18,7 @@ export function TrendingBundles() {
   return (
     <section>
       <div className="mb-5 border-b pb-3">
-        <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+        <p className="font-mono text-label uppercase tracking-eyebrow text-muted-foreground">
           Trending{" "}
           {!isPending && (
             <>
@@ -27,7 +27,7 @@ export function TrendingBundles() {
             </>
           )}
         </p>
-        <h2 className="mt-2 font-display text-2xl font-semibold tracking-tight leading-tight">
+        <h2 className="mt-2 font-display text-2xl font-semibold tracking-tight leading-tight text-balance">
           What&rsquo;s hot right now.
         </h2>
       </div>

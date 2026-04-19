@@ -37,7 +37,7 @@ export function SkillStackPanel() {
       className="relative hidden overflow-hidden border-l border-border bg-[oklch(from_var(--primary)_l_c_h/3%)] lg:col-start-2 lg:flex"
     >
       <div className="sticky top-0 flex h-screen w-full flex-col">
-        <div className="border-b border-border px-10 py-5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+        <div className="border-b border-border px-10 py-5 font-mono text-label uppercase tracking-eyebrow text-muted-foreground">
           <span>{"// popular in the stack"}</span>
         </div>
 
@@ -56,11 +56,11 @@ export function SkillStackPanel() {
                 key={`${skill.name}-${i}`}
                 className="flex items-baseline gap-6 px-10 py-3 font-mono text-sm text-foreground/80"
               >
-                <span className="w-6 text-[10px] tabular-nums text-muted-foreground">
+                <span className="w-6 text-label tabular-nums text-muted-foreground">
                   {((i % SKILLS.length) + 1).toString().padStart(2, "0")}
                 </span>
                 <span className="flex-1 truncate">{skill.name}</span>
-                <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                <span className="text-label uppercase tracking-eyebrow text-muted-foreground">
                   {skill.kind}
                 </span>
               </li>

@@ -39,7 +39,7 @@ export function RecentBundles() {
   return (
     <section>
       <div className="mb-5 border-b pb-3">
-        <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+        <p className="font-mono text-label uppercase tracking-eyebrow text-muted-foreground">
           Recent{" "}
           {!isFirstLoad && (
             <>
@@ -48,7 +48,7 @@ export function RecentBundles() {
             </>
           )}
         </p>
-        <h2 className="mt-2 font-display text-2xl font-semibold tracking-tight leading-tight">
+        <h2 className="mt-2 font-display text-2xl font-semibold tracking-tight leading-tight text-balance">
           Latest additions.
         </h2>
       </div>
@@ -61,10 +61,10 @@ export function RecentBundles() {
         </div>
       ) : results.length === 0 ? (
         <div className="py-20">
-          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+          <p className="font-mono text-label uppercase tracking-eyebrow text-muted-foreground">
             Nothing yet
           </p>
-          <p className="mt-3 font-display text-2xl font-semibold tracking-tight leading-tight">
+          <p className="mt-3 font-display text-2xl font-semibold tracking-tight leading-tight text-balance">
             Be the first to share a bundle.
           </p>
         </div>
@@ -92,7 +92,7 @@ export function RecentBundles() {
             strokeWidth={2}
             className="size-3.5 animate-spin"
           />
-          <span className="font-mono uppercase tracking-[0.14em] text-[10px]">
+          <span className="font-mono uppercase tracking-eyebrow text-label">
             Loading more
           </span>
         </div>

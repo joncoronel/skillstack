@@ -8,10 +8,10 @@ export function DashboardMasthead() {
     <header className="border-b pb-8">
       <div className="flex items-start justify-between gap-6">
         <div>
-          <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+          <p className="font-mono text-eyebrow uppercase tracking-eyebrow text-muted-foreground">
             Dashboard <span aria-hidden>&middot;</span> Bundles
           </p>
-          <h1 className="mt-3 font-display text-5xl font-semibold tracking-tight text-[clamp(2.5rem,5vw,4rem)] leading-[0.95]">
+          <h1 className="mt-3 font-display text-[clamp(2.5rem,5vw,4rem)] font-semibold tracking-tight leading-hero text-balance">
             Your bundles.
           </h1>
           <p className="mt-3 max-w-prose text-sm text-muted-foreground">

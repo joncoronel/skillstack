@@ -28,7 +28,7 @@ export function AuthFrame({
 
       <main className="flex flex-1 items-center py-16">
         <div className="mx-auto w-full max-w-md">
-          <h1 className="font-display text-[clamp(2.5rem,6vw,3.75rem)] font-semibold leading-[0.95] tracking-tight">
+          <h1 className="font-display text-[clamp(2.5rem,6vw,3.75rem)] font-semibold tracking-tight leading-hero text-balance">
             {title}
           </h1>
           <p className="mt-4 max-w-sm text-sm text-muted-foreground sm:text-base">
@@ -40,7 +40,7 @@ export function AuthFrame({
       </main>
 
       {footer ? (
-        <footer className="flex justify-end font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+        <footer className="flex justify-end font-mono text-label uppercase tracking-eyebrow text-muted-foreground">
           {footer}
         </footer>
       ) : null}

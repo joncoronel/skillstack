@@ -18,7 +18,7 @@ export default async function Home() {
   return (
     <HomeContent initialPopularSkills={initialPopularSkills}>
       <section className="mx-auto max-w-5xl px-4 pt-24 pb-16">
-        <h1 className="font-display text-5xl font-bold tracking-tighter leading-[0.9] sm:text-6xl lg:text-7xl">
+        <h1 className="font-display text-5xl font-semibold tracking-tight leading-hero text-balance sm:text-6xl lg:text-7xl">
           Build your
           <br />
           <span className="text-primary">AI skill stack</span>

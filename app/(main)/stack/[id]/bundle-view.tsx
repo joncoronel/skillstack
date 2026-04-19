@@ -111,14 +111,14 @@ export function BundleView({
         <header className="border-b pb-8">
           <div className="flex items-start justify-between gap-6">
             <div className="min-w-0">
-              <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+              <p className="font-mono text-eyebrow uppercase tracking-eyebrow text-muted-foreground">
                 Bundle <span aria-hidden>&middot;</span> by {bundle.creatorName}
               </p>
-              <h1 className="mt-3 font-display text-4xl font-semibold tracking-tight leading-[1.05] wrap-break-word md:text-5xl">
+              <h1 className="mt-3 font-display text-4xl font-semibold tracking-tight leading-hero text-balance wrap-break-word md:text-5xl">
                 {bundle.name}
               </h1>
 
-              <p className="mt-4 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground tabular-nums">
+              <p className="mt-4 font-mono text-label uppercase tracking-eyebrow text-muted-foreground tabular-nums">
                 <MetadataItems
                   skillCount={skillCount}
                   createdAt={bundle.createdAt}
@@ -129,7 +129,7 @@ export function BundleView({
               </p>
 
               {bundle.forkedFrom && (
-                <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                <p className="mt-2 font-mono text-label uppercase tracking-eyebrow text-muted-foreground">
                   Forked from{" "}
                   <Link
                     href={`/stack/${bundle.forkedFrom.urlId}`}
@@ -187,7 +187,7 @@ export function BundleView({
 
         {updatedCount > 0 && (
           <div className="border-y py-4">
-            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+            <p className="font-mono text-label uppercase tracking-eyebrow text-muted-foreground">
               Updates available
             </p>
             <p className="mt-1.5 text-sm">
@@ -298,11 +298,11 @@ function SectionHeader({
 }) {
   return (
     <div className="mb-5 border-b pb-3">
-      <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+      <p className="font-mono text-label uppercase tracking-eyebrow text-muted-foreground">
         {label} <span aria-hidden>&middot;</span>{" "}
         <span className="text-foreground tabular-nums">{count}</span>
       </p>
-      <h2 className="mt-2 font-display text-2xl font-semibold tracking-tight leading-tight">
+      <h2 className="mt-2 font-display text-2xl font-semibold tracking-tight leading-tight text-balance">
         {title}
       </h2>
     </div>
@@ -317,10 +317,10 @@ function BundleNotFound() {
   return (
     <main className="mx-auto max-w-5xl px-4 pt-20 pb-20">
       <div className="border px-8 py-20 md:px-12">
-        <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+        <p className="font-mono text-eyebrow uppercase tracking-eyebrow text-muted-foreground">
           Not found
         </p>
-        <h1 className="mt-3 font-display text-4xl font-semibold tracking-tight md:text-5xl">
+        <h1 className="mt-3 font-display text-4xl font-semibold tracking-tight leading-hero text-balance md:text-5xl">
           This bundle isn&rsquo;t here.
         </h1>
         <p className="mt-3 max-w-md text-sm text-muted-foreground">

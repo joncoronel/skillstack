@@ -183,7 +183,7 @@ function Price({
   if (monthly === 0 && yearly === 0) {
     return (
       <div className="flex items-baseline gap-2">
-        <span className="font-display text-5xl font-bold tracking-tight tabular-nums">
+        <span className="font-display text-5xl font-semibold tracking-tight tabular-nums">
           $0
         </span>
         <span className="text-muted-foreground text-sm">forever</span>
@@ -196,7 +196,7 @@ function Price({
 
   return (
     <div className="flex items-baseline gap-2">
-      <span className="font-display text-5xl font-bold tracking-tight tabular-nums">
+      <span className="font-display text-5xl font-semibold tracking-tight tabular-nums">
         ${amount}
       </span>
       <span className="text-muted-foreground text-sm">{suffix}</span>
