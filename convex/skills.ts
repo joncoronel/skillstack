@@ -300,7 +300,10 @@ export const upsertSkillsBatch = internalMutation({
           lastSynced: now,
           syncHash: newHash,
           lastSeenInApi: now,
-          ...(existing.isDelisted && { isDelisted: false }),
+          // Relisting: the embedding row was hard-deleted on delist, so flag
+          // the skill for re-embedding. Without this the worker never picks
+          // it up (needsEmbedding stays whatever it was before delist).
+          ...(existing.isDelisted && { isDelisted: false, needsEmbedding: true }),
         });
       } else {
         skillDocId = await ctx.db.insert("skills", {
@@ -347,7 +350,11 @@ export const upsertSkillsBatch = internalMutation({
           // computed from summaries stay accurate.
           needsEmbedding: true,
         }),
-        ...(existing?.isDelisted && { isDelisted: false }),
+        ...(existing?.isDelisted && {
+          isDelisted: false,
+          needsEmbedding: true,
+          hasEmbedding: false,
+        }),
       });
     }
   },
