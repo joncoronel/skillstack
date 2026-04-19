@@ -2,6 +2,7 @@ import {
   action,
   internalAction,
   internalMutation,
+  internalQuery,
   query,
 } from "./_generated/server";
 import type { QueryCtx } from "./_generated/server";
@@ -576,6 +577,127 @@ const ALLOWED_URL_PREFIXES = [
   "https://raw.githubusercontent.com/",
   "https://github.com/",
 ];
+
+// Diagnostic: scan delisted skills and bucket by last-known install count.
+// Tells us whether the 50-install floor is delisting skills (bucket clusters
+// near 50) or whether skills.sh is removing them upstream at all install
+// levels.
+export const analyzeDelistedBatch = internalQuery({
+  args: { cursor: v.optional(v.string()) },
+  handler: async (ctx, { cursor }) => {
+    const result = await ctx.db
+      .query("skills")
+      .withIndex("by_isDelisted", (q) => q.eq("isDelisted", true))
+      .paginate({ numItems: 200, cursor: cursor ?? null });
+
+    const buckets = {
+      under50: 0,
+      "50-99": 0,
+      "100-499": 0,
+      "500-999": 0,
+      "1000-4999": 0,
+      "5000plus": 0,
+    };
+    const samples: Array<{
+      source: string;
+      skillId: string;
+      installs: number;
+      lastSeenInApi: number | undefined;
+    }> = [];
+
+    for (const s of result.page) {
+      if (s.installs < 50) buckets.under50++;
+      else if (s.installs < 100) buckets["50-99"]++;
+      else if (s.installs < 500) buckets["100-499"]++;
+      else if (s.installs < 1000) buckets["500-999"]++;
+      else if (s.installs < 5000) buckets["1000-4999"]++;
+      else buckets["5000plus"]++;
+
+      if (samples.length < 5) {
+        samples.push({
+          source: s.source,
+          skillId: s.skillId,
+          installs: s.installs,
+          lastSeenInApi: s.lastSeenInApi,
+        });
+      }
+    }
+
+    return {
+      pageCount: result.page.length,
+      buckets,
+      samples,
+      nextCursor: result.continueCursor,
+      isDone: result.isDone,
+    };
+  },
+});
+
+export const analyzeDelistedSkills = action({
+  args: {},
+  handler: async (
+    ctx,
+  ): Promise<{
+    total: number;
+    buckets: Record<string, number>;
+    samples: Array<{
+      source: string;
+      skillId: string;
+      installs: number;
+      lastSeenInApi: number | undefined;
+    }>;
+  }> => {
+    await assertAdmin(ctx);
+
+    let cursor: string | undefined;
+    let isDone = false;
+    const totals: Record<string, number> = {
+      under50: 0,
+      "50-99": 0,
+      "100-499": 0,
+      "500-999": 0,
+      "1000-4999": 0,
+      "5000plus": 0,
+    };
+    let total = 0;
+    const samples: Array<{
+      source: string;
+      skillId: string;
+      installs: number;
+      lastSeenInApi: number | undefined;
+    }> = [];
+
+    while (!isDone) {
+      const res: {
+        pageCount: number;
+        buckets: Record<string, number>;
+        samples: Array<{
+          source: string;
+          skillId: string;
+          installs: number;
+          lastSeenInApi: number | undefined;
+        }>;
+        nextCursor: string;
+        isDone: boolean;
+      } = await ctx.runQuery(internal.devStats.analyzeDelistedBatch, {
+        cursor,
+      });
+
+      total += res.pageCount;
+      for (const k of Object.keys(totals)) {
+        totals[k] += res.buckets[k];
+      }
+      if (samples.length < 15) {
+        samples.push(...res.samples.slice(0, 15 - samples.length));
+      }
+
+      cursor = res.nextCursor;
+      isDone = res.isDone;
+    }
+
+    return { total, buckets: totals, samples };
+  },
+});
 
 export const probeSkillUrl = action({
   args: { url: v.string() },

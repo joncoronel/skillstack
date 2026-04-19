@@ -1158,13 +1158,23 @@ export const delistSkillsBatch = internalMutation({
   },
   handler: async (ctx, { entries }) => {
     for (const { summaryId, source, skillId } of entries) {
-      // Delete summary
+      // Soft-delete the summary. Keeping the row (~200 bytes) lets the
+      // Delisted stat count correctly and enables the fast-path relist in
+      // upsertSkillsBatch. Clear pipeline flags so background workers skip
+      // the row, and mirror the embedding deletion below.
       const summary = await ctx.db.get(summaryId);
       if (summary) {
-        await ctx.db.delete(summaryId);
+        await ctx.db.patch(summaryId, {
+          isDelisted: true,
+          needsContentFetch: false,
+          needsDiscovery: false,
+          needsEmbedding: false,
+          hasEmbedding: false,
+          skillEmbeddingId: undefined,
+        });
       }
 
-      // Mark skill as delisted
+      // Mark skill as delisted and clear its pipeline flags too.
       const skill = await ctx.db
         .query("skills")
         .withIndex("by_source_skillId", (q) =>
@@ -1172,7 +1182,12 @@ export const delistSkillsBatch = internalMutation({
         )
         .unique();
       if (skill && !skill.isDelisted) {
-        await ctx.db.patch(skill._id, { isDelisted: true });
+        await ctx.db.patch(skill._id, {
+          isDelisted: true,
+          needsContentFetch: false,
+          needsDiscovery: false,
+          needsEmbedding: false,
+        });
 
         // Delete the embedding row entirely — delisted skills are excluded
         // from vector search anyway, so keeping the row just wastes storage.
