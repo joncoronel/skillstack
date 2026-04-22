@@ -8,7 +8,7 @@
  * -------------------------------------------------------------------------------------------------*/
 
 .skeleton-shimmer {
-  animation: shimmer 1.5s linear infinite;
+  animation: shimmer 1.25s linear infinite;
 }
 
 @keyframes shimmer {
