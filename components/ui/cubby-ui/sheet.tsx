@@ -3,38 +3,39 @@
 import * as React from "react";
 import { Dialog as BaseSheet } from "@base-ui/react/dialog";
 import { cva, type VariantProps } from "class-variance-authority";
-import { HugeiconsIcon } from "@hugeicons/react";
-import { Cancel01Icon } from "@hugeicons/core-free-icons";
-
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/cubby-ui/button";
 import {
   ScrollArea,
   type ScrollAreaProps,
 } from "@/components/ui/cubby-ui/scroll-area/scroll-area";
 
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Cancel01Icon } from "@hugeicons/core-free-icons";
+
 const sheetContentVariants = cva(
   [
     "bg-popover text-popover-foreground fixed z-50 flex max-h-full min-h-0 w-full max-w-full min-w-0 flex-col outline-hidden",
-    "ease-[cubic-bezier(0, 0, 0.58, 1)] transition-all duration-250",
+    "ease-[cubic-bezier(.32,.72,0,1)] transition-[translate] duration-400",
     // Nested sheet support
     "scale-[calc(1-0.05*var(--nested-dialogs))]",
     // Overlay (hidden by default, fades in/out when nested using allow-discrete)
-    "after:pointer-events-none after:absolute after:inset-0 after:hidden after:rounded-[inherit] after:bg-black/5 after:opacity-0 after:transition-[opacity,display] after:duration-250 after:transition-discrete",
+    "after:pointer-events-none after:absolute after:inset-0 after:hidden after:rounded-[inherit] after:bg-black/15 after:opacity-0 after:transition-[opacity,display] after:duration-300 after:transition-discrete",
     "data-nested-dialog-open:after:block data-nested-dialog-open:after:opacity-100",
     "starting:data-nested-dialog-open:after:opacity-0",
   ],
   {
     variants: {
       variant: {
-        default: "shadow-lg",
+        default: "shadow-lg ring-border ring-1",
         floating:
-          "ring-border max-h-[calc(100%-2rem)] w-[calc(100%-2rem)] max-w-[calc(100%-2rem)] rounded-2xl shadow-[0_16px_32px_0_oklch(0.18_0_0/0.16)] ring-1",
+          "max-h-[calc(100%-2rem)] w-[calc(100%-2rem)] max-w-[calc(100%-2rem)] rounded-2xl",
       },
       side: {
         top: "",
-        right: "sm:max-w-sm",
+        right: "sm:max-w-md",
         bottom: "",
-        left: "sm:max-w-sm",
+        left: "sm:max-w-md",
       },
     },
     compoundVariants: [
@@ -96,11 +97,32 @@ const sheetContentVariants = cva(
   },
 );
 
-const createSheetHandle = BaseSheet.createHandle;
-
-function Sheet<Payload>({ ...props }: BaseSheet.Root.Props<Payload>) {
-  return <BaseSheet.Root data-slot="sheet" {...props} />;
+interface SheetConfigContextValue {
+  modal: boolean | "trap-focus";
 }
+
+const SheetConfigContext = React.createContext<SheetConfigContextValue>({
+  modal: true,
+});
+
+function Sheet<Payload>({
+  modal = true,
+  disablePointerDismissal,
+  ...props
+}: BaseSheet.Root.Props<Payload>) {
+  const configValue = React.useMemo(() => ({ modal }), [modal]);
+  return (
+    <SheetConfigContext.Provider value={configValue}>
+      <BaseSheet.Root
+        modal={modal}
+        disablePointerDismissal={disablePointerDismissal ?? modal !== true}
+        {...props}
+      />
+    </SheetConfigContext.Provider>
+  );
+}
+
+const createSheetHandle = BaseSheet.createHandle;
 
 function SheetTrigger({ ...props }: BaseSheet.Trigger.Props) {
   return <BaseSheet.Trigger data-slot="sheet-trigger" {...props} />;
@@ -119,7 +141,7 @@ function SheetBackdrop({ className, ...props }: BaseSheet.Backdrop.Props) {
     <BaseSheet.Backdrop
       data-slot="sheet-backdrop"
       className={cn(
-        "ease-[cubic-bezier(0, 0, 0.58, 1)] fixed inset-0 min-h-dvh bg-black/40 transition-all duration-250 supports-[-webkit-touch-callout:none]:absolute",
+        "fixed inset-0 min-h-dvh bg-black/40 transition-all duration-300 supports-[-webkit-touch-callout:none]:absolute",
         "backdrop-blur-sm data-ending-style:opacity-0 data-starting-style:opacity-0",
         className,
       )}
@@ -145,20 +167,18 @@ function SheetContent({
   variant = "default",
   footerVariant = "default",
   showCloseButton = true,
-  showBackdrop = true,
   ...props
 }: BaseSheet.Popup.Props &
   VariantProps<typeof sheetContentVariants> & {
     footerVariant?: "default" | "inset";
     showCloseButton?: boolean;
-    showBackdrop?: boolean;
   }) {
+  const { modal } = React.useContext(SheetConfigContext);
+  const isModal = modal === true;
   return (
     <SheetPortal>
-      {showBackdrop && <SheetBackdrop />}
-      <SheetViewport
-        className={!showBackdrop ? "pointer-events-none" : undefined}
-      >
+      {isModal && <SheetBackdrop />}
+      <SheetViewport className={cn(!isModal && "pointer-events-none")}>
         <BaseSheet.Popup
           data-slot="sheet-content"
           data-side={side}
@@ -166,16 +186,19 @@ function SheetContent({
           data-footer-variant={footerVariant}
           className={cn(
             sheetContentVariants({ variant, side }),
-            !showBackdrop && "pointer-events-auto",
+            !isModal && "pointer-events-auto",
             className,
           )}
           {...props}
         >
           {children}
           {showCloseButton && (
-            <SheetClose className="ring-offset-popover focus:ring-ring text-muted-foreground absolute top-5 right-5 rounded-lg opacity-50 transition-opacity duration-200 hover:opacity-100 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4">
-              <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="size-4" />
-              <span className="sr-only">Close</span>
+            <SheetClose
+              aria-label="Close"
+              className="absolute end-2 top-2"
+              render={<Button size="icon_sm" variant="ghost" />}
+            >
+              <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
             </SheetClose>
           )}
         </BaseSheet.Popup>
@@ -189,13 +212,13 @@ function SheetHeader({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="sheet-header"
       className={cn(
-        "flex flex-col space-y-1.5 px-5 pt-5 pb-3",
-        // Reduce bottom padding when header is directly before footer (no body)
-        "not-has-[+[data-slot=sheet-body]]:has-[+[data-slot=sheet-footer]]:pb-1",
+        "flex flex-col gap-2 px-6 pt-6 pb-3",
+        // Spacious bottom padding when header is directly before footer (no body)
+        "not-has-[+[data-slot=sheet-body]]:has-[+[data-slot=sheet-footer]]:pb-6",
         // Add extra bottom padding when header is alone (no body or footer)
-        "not-has-[+[data-slot=sheet-body]]:not-has-[+[data-slot=sheet-footer]]:pb-5",
+        "not-has-[+[data-slot=sheet-body]]:not-has-[+[data-slot=sheet-footer]]:pb-6",
         // Inset footer variant: add extra bottom padding when header is directly before footer (no body)
-        "in-data-[footer-variant=inset]:not-has-[+[data-slot=sheet-body]]:has-[+[data-slot=sheet-footer]]:pb-5",
+        "in-data-[footer-variant=inset]:not-has-[+[data-slot=sheet-body]]:has-[+[data-slot=sheet-footer]]:pb-6",
         className,
       )}
       {...props}
@@ -222,10 +245,10 @@ function SheetBody({
     <div
       data-slot="sheet-body"
       className={cn(
-        "flex flex-1 min-h-0 flex-col overflow-hidden",
-        "first:pt-4",
-        "not-has-[+[data-slot=sheet-footer]]:pb-4",
-        "in-data-[footer-variant=inset]:has-[+[data-slot=sheet-footer]]:pb-4",
+        "flex min-h-0 flex-1 flex-col overflow-hidden",
+        "first:pt-5",
+        "not-has-[+[data-slot=sheet-footer]]:pb-5",
+        "in-data-[footer-variant=inset]:has-[+[data-slot=sheet-footer]]:pb-5",
       )}
     >
       <ScrollArea
@@ -236,7 +259,7 @@ function SheetBody({
         hideScrollbar={hideScrollbar}
         nativeScroll={nativeScroll}
       >
-        <div className={cn("px-5 py-1", className)} {...props}>
+        <div className={cn("px-6 py-1", className)} {...props}>
           {children}
         </div>
       </ScrollArea>
@@ -249,7 +272,7 @@ function SheetTitle({ className, ...props }: BaseSheet.Title.Props) {
     <BaseSheet.Title
       data-slot="sheet-title"
       className={cn(
-        "text-lg leading-none font-semibold tracking-tight",
+        "text-foreground text-lg leading-none font-semibold tracking-tight text-balance",
         className,
       )}
       {...props}
@@ -264,7 +287,7 @@ function SheetDescription({
   return (
     <BaseSheet.Description
       data-slot="sheet-description"
-      className={cn("text-muted-foreground text-sm", className)}
+      className={cn("text-muted-foreground text-sm text-pretty", className)}
       {...props}
     />
   );
@@ -275,11 +298,13 @@ function SheetFooter({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="sheet-footer"
       className={cn(
-        "mt-auto flex flex-col-reverse gap-2 px-5 pt-3 pb-5 sm:flex-row sm:justify-end",
+        "mt-auto flex flex-col-reverse gap-2 px-6 pt-4 pb-6 sm:flex-row sm:justify-end",
         // Add extra top padding when footer is first (no header or body)
-        "first:pt-5",
+        "first:pt-6",
+        // Reduce top padding when body is present
+        "not-in-data-[footer-variant=inset]:in-[[data-slot=sheet-content]:has([data-slot=sheet-body])]:pt-3",
         // Inset variant: muted background with top border for separation
-        "in-data-[footer-variant=inset]:border-border in-data-[footer-variant=inset]:bg-muted in-data-[footer-variant=inset]:border-t in-data-[footer-variant=inset]:pt-4 in-data-[footer-variant=inset]:pb-4",
+        "in-data-[footer-variant=inset]:border-border in-data-[footer-variant=inset]:bg-muted/72 in-data-[footer-variant=inset]:border-t in-data-[footer-variant=inset]:pt-4 in-data-[footer-variant=inset]:pb-4",
         className,
       )}
       {...props}

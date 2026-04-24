@@ -86,10 +86,12 @@ function TooltipContent({
           data-slot="tooltip-content"
           className={cn(
             "bg-card ring-border/60 h-(--popup-height,auto) w-(--popup-width,auto) origin-(--transform-origin) rounded-sm text-xs shadow-[0_3px_8px_0_oklch(0.18_0_0/0.12)] ring-1",
-            "transition-[width,height,scale,opacity] duration-350 ease-[cubic-bezier(0.22,1,0.36,1)]",
-            "data-starting-style:scale-90 data-starting-style:opacity-0",
-            "data-ending-style:scale-90 data-ending-style:opacity-0",
-            "data-instant:duration-0 motion-reduce:transition-none",
+            "transition-[width,height,scale,translate,opacity] duration-[350ms,350ms,100ms,175ms,100ms] ease-[cubic-bezier(0.22,1,0.36,1),cubic-bezier(0.22,1,0.36,1),var(--ease-out-expo),var(--ease-out-expo),var(--ease-out-expo)]",
+            "data-starting-style:scale-95 data-starting-style:opacity-0",
+            "data-starting-style:data-[side=bottom]:-translate-y-1 data-starting-style:data-[side=left]:translate-x-1 data-starting-style:data-[side=right]:-translate-x-1 data-starting-style:data-[side=top]:translate-y-1",
+            "data-ending-style:scale-95 data-ending-style:opacity-0",
+            "data-ending-style:data-[side=bottom]:-translate-y-1 data-ending-style:data-[side=left]:translate-x-1 data-ending-style:data-[side=right]:-translate-x-1 data-ending-style:data-[side=top]:translate-y-1",
+            "motion-reduce:transition-none",
             className,
           )}
           {...props}
@@ -100,34 +102,20 @@ function TooltipContent({
               // Base viewport styles
               "relative size-full overflow-clip px-2 py-1.5 [--viewport-padding:0.5rem]",
               "not-data-transitioning:overflow-y-auto",
-              // Content width calculation (edge-to-edge minus padding)
+              // Content width and transitions
               "**:data-current:w-[calc(var(--popup-width)-2*var(--viewport-padding))]",
               "**:data-previous:w-[calc(var(--popup-width)-2*var(--viewport-padding))]",
-              // Content base state and transitions
-              "**:data-current:translate-x-0 **:data-current:opacity-100",
-              "**:data-previous:translate-x-0 **:data-previous:opacity-100",
-              "**:data-current:transition-[translate,opacity,filter] **:data-current:duration-[350ms,175ms,175ms]",
-              "**:data-previous:transition-[translate,opacity,filter] **:data-previous:duration-[350ms,175ms,175ms]",
-              "**:data-current:ease-[cubic-bezier(0.22,1,0.36,1)] **:data-previous:ease-[cubic-bezier(0.22,1,0.36,1)]",
-              // Direction-aware slide animations for incoming content
-              "data-[activation-direction~=left]:**:data-current:data-starting-style:-translate-x-1/2",
-              "data-[activation-direction~=left]:**:data-current:data-starting-style:opacity-0",
-              "data-[activation-direction~=right]:**:data-current:data-starting-style:translate-x-1/2",
-              "data-[activation-direction~=right]:**:data-current:data-starting-style:opacity-0",
-              // Direction-aware slide animations for outgoing content
-              "data-[activation-direction~=left]:**:data-previous:data-ending-style:translate-x-1/2",
-              "data-[activation-direction~=left]:**:data-previous:data-ending-style:opacity-0",
-              "data-[activation-direction~=right]:**:data-previous:data-ending-style:-translate-x-1/2",
-              "data-[activation-direction~=right]:**:data-previous:data-ending-style:opacity-0",
-
-              // Blur effect during transitions
-              "**:data-current:data-starting-style:blur-[4px]",
-              "**:data-current:data-ending-style:blur-[4px]",
-              "**:data-previous:data-starting-style:blur-[4px]",
-              "**:data-previous:data-ending-style:blur-[4px]",
-
+              "**:data-current:opacity-100 **:data-previous:opacity-100",
+              "**:data-current:transition-opacity **:data-current:duration-175 **:data-current:ease-[cubic-bezier(0.22,1,0.36,1)]",
+              "**:data-previous:transition-opacity **:data-previous:duration-175 **:data-previous:ease-[cubic-bezier(0.22,1,0.36,1)]",
+              // Fade in/out
+              "**:data-current:data-starting-style:opacity-0",
+              "**:data-current:data-ending-style:opacity-0",
+              "**:data-previous:data-ending-style:opacity-0",
+              // Truncate outgoing content as popup shrinks
+              "**:data-previous:truncate",
               // Disable transitions when instant or motion-reduce
-              "data-instant:transition-none",
+              "[[data-instant]_&_[data-current]]:transition-none [[data-instant]_&_[data-previous]]:transition-none",
               "motion-reduce:**:data-current:transition-none motion-reduce:**:data-previous:transition-none",
             )}
           >

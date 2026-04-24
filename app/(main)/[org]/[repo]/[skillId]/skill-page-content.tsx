@@ -44,7 +44,7 @@ export function SkillPageContent({ skill, content }: SkillPageContentProps) {
       )}
 
       {/* Header */}
-      <h1 className="font-display text-3xl font-bold tracking-tight mb-3">{skill.name}</h1>
+      <h1 className="font-display text-3xl font-semibold tracking-tight mb-3">{skill.name}</h1>
 
       <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
         <span className="tabular-nums">

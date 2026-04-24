@@ -26,7 +26,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuLabel,
 } from "@/components/ui/cubby-ui/dropdown-menu";
-import { Skeleton } from "../ui/cubby-ui/skeleton";
+import { Skeleton } from "../ui/cubby-ui/skeleton/skeleton";
 
 export function UserMenu() {
   const { user, isLoaded } = useUser();
@@ -39,7 +39,7 @@ export function UserMenu() {
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger className="cursor-pointer rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+      <DropdownMenuTrigger className="cursor-pointer rounded-full outline-0 outline-offset-0 outline-transparent outline-solid transition-[outline-width,outline-offset,outline-color] duration-100 ease-out focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring/50">
         <Avatar size="sm">
           <AvatarImage
             src={user?.imageUrl}

@@ -2,14 +2,19 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { HugeiconsIcon } from "@hugeicons/react";
-import { Cancel01Icon, Tick02Icon, ArrowDown01Icon } from "@hugeicons/core-free-icons";
 import { Label } from "@/components/ui/cubby-ui/label";
 import {
   ScrollArea,
   type ScrollAreaProps,
 } from "@/components/ui/cubby-ui/scroll-area/scroll-area";
 import { Combobox as BaseCombobox } from "@base-ui/react/combobox";
+
+import { HugeiconsIcon } from "@hugeicons/react";
+import {
+  ArrowDown01Icon,
+  Cancel01Icon,
+  Tick02Icon,
+} from "@hugeicons/core-free-icons";
 
 const useComboboxFilter = BaseCombobox.useFilter;
 const useComboboxFilteredItems = BaseCombobox.useFilteredItems;
@@ -37,44 +42,44 @@ function Combobox<Value, Multiple extends boolean | undefined = false>(
 function ComboboxInput({
   id: idProp,
   className,
+  showTrigger = true,
+  showClear = true,
   ...props
-}: BaseCombobox.Input.Props) {
+}: BaseCombobox.Input.Props & {
+  showTrigger?: boolean;
+  showClear?: boolean;
+}) {
   const context = React.useContext(ComboboxContext);
   const id = idProp ?? context?.id;
 
   return (
-    <BaseCombobox.Input
-      id={id}
-      data-slot="combobox-input"
-      className={cn(
-        "placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground bg-input dark:bg-input/30 flex h-10 w-full min-w-0 rounded-lg border bg-clip-padding px-3 text-base font-normal shadow-xs disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-60 sm:h-9 md:text-sm",
-        "file:text-foreground file:inline-flex file:h-7 file:rounded-md file:border-0 file:bg-transparent file:text-sm file:font-medium",
-        "focus-visible:outline-ring/50 outline-0 outline-offset-0 outline-transparent transition-[outline-width,outline-offset,outline-color] duration-100 ease-out outline-solid focus-visible:outline-2 focus-visible:outline-offset-2",
-        className,
-      )}
-      {...props}
-    />
-  );
-}
-
-function ComboboxInputWrapper({
-  className,
-  ...props
-}: React.ComponentProps<"div">) {
-  return (
-    <div
-      data-slot="combobox-input-wrapper"
+    <BaseCombobox.InputGroup
+      data-slot="combobox-input-group"
       className={cn(
         "relative",
-        // Auto-adjust input padding based on buttons present (right-3 = 0.75rem, button = 1rem)
         "has-data-[slot=combobox-clear]:**:data-[slot=combobox-input]:pr-7",
         "has-data-[slot=combobox-trigger]:**:data-[slot=combobox-input]:pr-7",
-        // Both buttons present (0.75rem + 1rem + 0.5rem gap + 1rem button = 3.25rem)
         "has-data-[slot=combobox-clear]:has-data-[slot=combobox-trigger]:**:data-[slot=combobox-input]:pr-13",
-        className,
       )}
-      {...props}
-    />
+    >
+      <BaseCombobox.Input
+        id={id}
+        data-slot="combobox-input"
+        className={cn(
+          "placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground bg-input dark:bg-input/30 flex h-10 w-full min-w-0 rounded-lg border bg-clip-padding px-3 text-base font-normal shadow-xs disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-60 sm:h-9 md:text-sm",
+          "file:text-foreground file:inline-flex file:h-7 file:rounded-md file:border-0 file:bg-transparent file:text-sm file:font-medium",
+          "focus-visible:outline-ring/50 outline-0 outline-offset-0 outline-transparent transition-[outline-width,outline-offset,outline-color] duration-100 ease-out outline-solid focus-visible:outline-2 focus-visible:outline-offset-2",
+          className,
+        )}
+        {...props}
+      />
+      {(showClear || showTrigger) && (
+        <div className="absolute inset-y-0 right-3 flex items-center gap-2">
+          {showClear && <ComboboxClear />}
+          {showTrigger && <ComboboxTrigger />}
+        </div>
+      )}
+    </BaseCombobox.InputGroup>
   );
 }
 
@@ -100,7 +105,11 @@ function ComboboxChipInput({
   );
 }
 
-function ComboboxTrigger({ className, ...props }: BaseCombobox.Trigger.Props) {
+function ComboboxTrigger({
+  className,
+  children,
+  ...props
+}: BaseCombobox.Trigger.Props) {
   return (
     <BaseCombobox.Trigger
       data-slot="combobox-trigger"
@@ -108,12 +117,17 @@ function ComboboxTrigger({ className, ...props }: BaseCombobox.Trigger.Props) {
       className={cn(
         "inline-flex size-4 cursor-pointer items-center justify-center rounded-md border-none bg-transparent p-0 text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-60",
         "focus-visible:border-ring focus-visible:ring-ring/30 focus-visible:ring-3",
-
         className,
       )}
       {...props}
     >
-      <HugeiconsIcon icon={ArrowDown01Icon} strokeWidth={2} className="h-4 w-4" />
+      {children ?? (
+        <HugeiconsIcon
+          icon={ArrowDown01Icon}
+          className="h-4 w-4"
+          strokeWidth={2}
+        />
+      )}
     </BaseCombobox.Trigger>
   );
 }
@@ -144,7 +158,7 @@ function ComboboxClear({ className, ...props }: BaseCombobox.Clear.Props) {
       )}
       {...props}
     >
-      <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="h-4 w-4" />
+      <HugeiconsIcon icon={Cancel01Icon} className="h-4 w-4" strokeWidth={2} />
     </BaseCombobox.Clear>
   );
 }
@@ -195,7 +209,7 @@ function ComboboxPopupPrimitive({
     <BaseCombobox.Popup
       data-slot="combobox-popup"
       className={cn(
-        "bg-popover text-popover-foreground ring-border ease-out-cubic flex max-h-(--available-height) w-(--anchor-width) max-w-(--available-width) origin-(--transform-origin) flex-col overflow-clip overscroll-contain rounded-xl shadow-[0_8px_20px_0_oklch(0_0_0/0.08)] ring-1 transition-[transform,scale,opacity] duration-100 data-ending-style:scale-95 data-ending-style:opacity-0 data-starting-style:scale-95 data-starting-style:opacity-0",
+        "bg-popover text-popover-foreground ring-border ease-out-expo flex max-h-(--available-height) w-(--anchor-width) max-w-(--available-width) origin-(--transform-origin) flex-col overflow-clip overscroll-contain rounded-xl shadow-[0_8px_20px_0_oklch(0_0_0/0.08)] ring-1 transition-[transform,scale,opacity] duration-100 data-ending-style:scale-95 data-ending-style:opacity-0 data-starting-style:scale-95 data-starting-style:opacity-0",
         className,
       )}
       {...props}
@@ -371,7 +385,11 @@ function ComboboxItem({
       {...props}
     >
       <div className="break-all">{children}</div>
-      <BaseCombobox.ItemIndicator render={<HugeiconsIcon icon={Tick02Icon} strokeWidth={2} className="size-4" />} />
+      <BaseCombobox.ItemIndicator
+        render={
+          <HugeiconsIcon icon={Tick02Icon} className="size-4" strokeWidth={2} />
+        }
+      />
     </BaseCombobox.Item>
   );
 }
@@ -509,10 +527,25 @@ function ComboboxLabel({
   return <Label htmlFor={context?.id} className={className} {...props} />;
 }
 
+function ComboboxTriggerLabel({
+  className,
+  ...props
+}: BaseCombobox.Label.Props) {
+  return (
+    <BaseCombobox.Label
+      data-slot="combobox-trigger-label"
+      className={cn(
+        "text-foreground text-sm leading-5 font-medium select-none group-data-[disabled=true]:pointer-events-none group-data-[disabled=true]:opacity-50 peer-disabled:cursor-not-allowed peer-disabled:opacity-50",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
 export {
   Combobox,
   ComboboxInput,
-  ComboboxInputWrapper,
   ComboboxChipInput,
   ComboboxTrigger,
   ComboboxIcon,
@@ -539,6 +572,7 @@ export {
   ComboboxChipRemove,
   ComboboxVirtualizedList,
   ComboboxLabel,
+  ComboboxTriggerLabel,
   useComboboxFilter,
   useComboboxFilteredItems,
 };

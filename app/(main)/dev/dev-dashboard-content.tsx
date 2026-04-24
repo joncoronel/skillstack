@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/cubby-ui/select";
 import { Button } from "@/components/ui/cubby-ui/button";
 import { Badge } from "@/components/ui/cubby-ui/badge";
-import { Skeleton } from "@/components/ui/cubby-ui/skeleton";
+import { Skeleton } from "@/components/ui/cubby-ui/skeleton/skeleton";
 import { formatInstalls, timeAgo } from "@/lib/utils";
 import { toast } from "@/components/ui/cubby-ui/toast/toast";
 import {
@@ -121,6 +121,7 @@ export function DevDashboardContent() {
         stats={stats}
       />
       <EmbeddingPanel />
+      <DelistedAnalysis />
       <AdminActions />
     </div>
   );
@@ -685,6 +686,96 @@ function EmbeddingPanel() {
             npx convex run skills:embeddingCoverageStats
           </code>
         </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Delisted Skills Analysis
+// ---------------------------------------------------------------------------
+
+function DelistedAnalysis() {
+  const analyze = useAction(api.devStats.analyzeDelistedSkills);
+  const [result, setResult] = useState<{
+    total: number;
+    buckets: Record<string, number>;
+    samples: Array<{
+      source: string;
+      skillId: string;
+      installs: number;
+      lastSeenInApi: number | undefined;
+    }>;
+  } | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const run = async () => {
+    setLoading(true);
+    try {
+      const res = await analyze({});
+      setResult(res);
+    } catch (e) {
+      toast.error({ title: "Failed to analyze delisted skills" });
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Delisted Skills Analysis</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={loading}
+            onClick={run}
+          >
+            {loading ? "Analyzing..." : "Analyze"}
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            Buckets delisted skills by last-known install count. Clusters near
+            50 → our floor filter; spread across levels → skills.sh upstream
+            removals.
+          </p>
+        </div>
+        {result && (
+          <div className="mt-4 space-y-3 text-sm">
+            <div>
+              Total delisted:{" "}
+              <strong>{result.total.toLocaleString()}</strong>
+            </div>
+            <div>
+              <div className="mb-1 text-xs font-medium text-muted-foreground">
+                Install distribution
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {Object.entries(result.buckets).map(([k, v]) => (
+                  <div key={k} className="rounded border px-2 py-1">
+                    <div className="text-xs text-muted-foreground">{k}</div>
+                    <div className="font-mono">{v.toLocaleString()}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div className="mb-1 text-xs font-medium text-muted-foreground">
+                Samples (spot-check against skills.sh)
+              </div>
+              <ul className="space-y-1 font-mono text-xs">
+                {result.samples.map((s) => (
+                  <li key={`${s.source}/${s.skillId}`}>
+                    {s.source}/{s.skillId} — installs: {s.installs}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

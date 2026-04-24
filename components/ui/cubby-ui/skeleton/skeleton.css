@@ -1,0 +1,21 @@
+/* -------------------------------------------------------------------------------------------------
+ * Skeleton shimmer animation.
+ *
+ * Uses background-position-x on a static gradient (bg-size 200%) so the
+ * browser can composite the shift instead of re-rasterizing the gradient
+ * every frame. Combined with bg-fixed on the skeleton element, all skeletons
+ * on the page sample the same viewport-aligned gradient and stay in phase.
+ * -------------------------------------------------------------------------------------------------*/
+
+.skeleton-shimmer {
+  /* Negative animation-delay shifts the start phase so the sheen enters
+     from the viewport's left edge at page load instead of sitting in the
+     center. Matches the shadcn convention of -1s on 2s (half-cycle). */
+  animation: shimmer 1.25s -0.5s linear infinite;
+}
+
+@keyframes shimmer {
+  to {
+    background-position-x: -200%;
+  }
+}

@@ -60,7 +60,7 @@ const tabsListVariants = cva(
 
 const tabIndicatorVariants = cva(
   [
-    "ease-out-cubic absolute z-[-1] transition-all duration-200",
+    "ease-out-expo absolute z-[-1] transition-all duration-200",
     // Vertical orientation
     "data-[orientation=vertical]:top-0 data-[orientation=vertical]:h-(--active-tab-height) data-[orientation=vertical]:translate-y-(--active-tab-top)",
     // Horizontal orientation
@@ -237,7 +237,7 @@ function TabsPanels({
       data-slot="tabs-panels"
       className={cn(
         "min-h-0 grow",
-        "has-[>_*_>_[data-ending-style]]:transition-[height] has-[>_*_>_[data-ending-style]]:duration-270 has-[>_*_>_[data-ending-style]]:ease-[cubic-bezier(0.25,1,0.5,1)] ",
+        "has-[>_*_>_[data-ending-style]]:ease-out-expo has-[>_*_>_[data-ending-style]]:transition-[height] has-[>_*_>_[data-ending-style]]:duration-400",
         className,
       )}
       {...props}
@@ -256,14 +256,22 @@ function TabsContent({ className, ...props }: BaseTabs.Panel.Props) {
       className={cn(
         "min-w-0 flex-1 outline-none",
         "[grid-area:1/1]",
-        "ease-out-cubic transition-[opacity,translate,filter,scale] duration-[var(--fade-duration,0.2s),400ms,var(--fade-duration,0.2s),200ms]",
-        // Enter/exit: fade and blur
+        "ease-out-expo transition-[opacity,translate,filter] duration-[350ms,350ms,350ms]",
+        // Enter/exit: fade + blur (scale with height diff via --fade-duration)
         "data-starting-style:opacity-0 data-starting-style:blur-sm",
-        "data-ending-style:opacity-0 data-ending-style:contain-[size] data-ending-style:blur-sm",
-        // Horizontal directional slide
-        "data-starting-style:scale-97",
-        "data-ending-style:scale-97",
-        "origin-top",
+        "data-ending-style:opacity-0 data-ending-style:blur-sm data-ending-style:contain-[size]",
+        // Directional slide (fixed 400ms)
+        "data-[activation-direction=right]:data-starting-style:translate-x-3",
+        "data-[activation-direction=right]:data-ending-style:-translate-x-3",
+        "data-[activation-direction=left]:data-starting-style:-translate-x-3",
+        "data-[activation-direction=left]:data-ending-style:translate-x-3",
+        "data-[activation-direction=down]:data-starting-style:translate-y-3",
+        "data-[activation-direction=down]:data-ending-style:-translate-y-3",
+        "data-[activation-direction=up]:data-starting-style:-translate-y-3",
+        "data-[activation-direction=up]:data-ending-style:translate-y-3",
+        // Fallback for none/initial mount
+        "data-[activation-direction=none]:data-starting-style:translate-y-3",
+        "data-[activation-direction=none]:data-ending-style:translate-y-3",
         "motion-reduce:blur-none motion-reduce:transition-none",
         className,
       )}

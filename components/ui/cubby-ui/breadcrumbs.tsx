@@ -1,8 +1,8 @@
 import * as React from "react";
+import { cn } from "@/lib/utils";
+
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowRight01Icon, MoreHorizontalIcon } from "@hugeicons/core-free-icons";
-
-import { cn } from "@/lib/utils";
 
 type BreadcrumbSize = "sm" | "md" | "lg";
 
@@ -155,7 +155,7 @@ function BreadcrumbEllipsis({
       )}
       {...props}
     >
-      <HugeiconsIcon icon={MoreHorizontalIcon} strokeWidth={2} className="size-4 group-data-[size=lg]:size-5 group-data-[size=sm]:size-3" />
+      <HugeiconsIcon icon={MoreHorizontalIcon} className="size-4 group-data-[size=lg]:size-5 group-data-[size=sm]:size-3" strokeWidth={2} />
       <span className="sr-only">{ariaLabel}</span>
     </span>
   );

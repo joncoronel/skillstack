@@ -100,7 +100,15 @@ html {
   /* Fonts */
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  --font-display: var(--font-bricolage);
+  --font-display: var(--font-geist-pixel-circle);
+
+  /* Typography — small mono labels (used uppercase with tracking-eyebrow) */
+  --text-label: 0.625rem; /* 10px */
+  --text-eyebrow: 0.6875rem; /* 11px */
+
+  /* Typography — page hero leading + eyebrow tracking */
+  --leading-hero: 0.95;
+  --tracking-eyebrow: 0.14em;
 
   /* Colors */
   --color-background: var(--background);
@@ -164,12 +172,13 @@ html {
   --ease-in-cubic: cubic-bezier(0.55, 0.055, 0.675, 0.19);
   --ease-out-cubic: cubic-bezier(0.215, 0.61, 0.355, 1);
   --ease-in-out-cubic: cubic-bezier(0.645, 0.045, 0.355, 1);
+  --ease-out-expo: cubic-bezier(0.19, 1, 0.22, 1);
 
   /* Custom Animations */
-
   --animate-fade-in-up: fade-in-up 0.8s ease-out forwards;
-  --animate-float: float 4s ease-in-out infinite;
-  --animate-skeleton: skeleton 2s -1s linear infinite;
+  --animate-scroll-stack: scroll-stack 30s linear infinite;
+  --animate-otp-field-shake-a: otp-field-shake-a 180ms ease-in-out;
+  --animate-otp-field-shake-b: otp-field-shake-b 180ms ease-in-out;
 
   /* Inset shadows for bordered elements (applied to before pseudo-element inset by 1px) */
   --shadow-inset: 0 1px 2px 0 oklch(0 0 0 / 0.08);
@@ -186,9 +195,47 @@ html {
     }
   }
 
-  @keyframes skeleton {
+  @keyframes scroll-stack {
+    from {
+      transform: translateY(0);
+    }
     to {
-      background-position-x: -200%;
+      /* One copy of the list (rendered 3x in the DOM) — keeps loop seamless
+         when the container is taller than a single copy. */
+      transform: translateY(-33.333%);
+    }
+  }
+
+  /*
+   * Paired identical keyframes.
+   * CSS animations don't restart when re-applied to the same element with
+   * the same animation-name, so on each invalid OTP entry we alternate
+   * between the two names to force the browser to treat it as a new
+   * animation and replay the shake. Keep both bodies in sync.
+   */
+  @keyframes otp-field-shake-a {
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+    25% {
+      transform: translateX(-4px);
+    }
+    75% {
+      transform: translateX(4px);
+    }
+  }
+
+  @keyframes otp-field-shake-b {
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+    25% {
+      transform: translateX(-4px);
+    }
+    75% {
+      transform: translateX(4px);
     }
   }
 }

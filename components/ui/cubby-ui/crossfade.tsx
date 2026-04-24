@@ -4,10 +4,12 @@ import * as React from "react";
 import { useAnimatedHeight } from "@/hooks/cubby-ui/use-animated-height";
 import { cn } from "@/lib/utils";
 
-const CROSSFADE_CLASSES = cn(
-  "ease-out-cubic transition-[opacity,filter,transform,scale] duration-200",
+const CROSSFADE_BASE = cn(
+  "transition-[opacity,filter,translate,display] duration-200 ease-out-cubic transition-discrete",
   "motion-reduce:transition-none",
 );
+
+const CROSSFADE_STARTING = "starting:opacity-0 starting:blur-sm";
 
 export function Crossfade({
   active,
@@ -19,6 +21,14 @@ export function Crossfade({
   const { outerRef, innerRef } = useAnimatedHeight();
   const [first, second] = children;
 
+  // Skip @starting-style on initial mount so skeletons render without
+  // a transform context that breaks bg-fixed animation sync.
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
+
   return (
     <div
       ref={outerRef}
@@ -28,10 +38,12 @@ export function Crossfade({
         <div
           className={cn(
             "[grid-area:1/1]",
-            CROSSFADE_CLASSES,
+            CROSSFADE_BASE,
+            mounted && CROSSFADE_STARTING,
+            mounted && "starting:translate-y-3",
             active
-              ? "contain-[size] pointer-events-none scale-97 opacity-0 blur-sm"
-              : "scale-100 opacity-100",
+              ? "contain-[size] hidden opacity-0 blur-sm translate-y-3 pointer-events-none"
+              : "opacity-100",
           )}
           aria-hidden={active}
         >
@@ -41,10 +53,12 @@ export function Crossfade({
         <div
           className={cn(
             "[grid-area:1/1]",
-            CROSSFADE_CLASSES,
+            CROSSFADE_BASE,
+            mounted && CROSSFADE_STARTING,
+            mounted && "starting:-translate-y-3",
             active
-              ? "scale-100 opacity-100"
-              : "contain-[size] pointer-events-none scale-97 opacity-0 blur-sm",
+              ? "opacity-100"
+              : "contain-[size] hidden opacity-0 blur-sm -translate-y-3 pointer-events-none",
           )}
           aria-hidden={!active}
         >

@@ -6,45 +6,56 @@ import {
   type ScrollAreaProps,
 } from "@/components/ui/cubby-ui/scroll-area/scroll-area";
 
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Cancel01Icon } from "@hugeicons/core-free-icons";
+
 const AutocompleteRoot = BaseAutocomplete.Root;
 
 function AutocompleteInput({
   className,
+  showTrigger = false,
+  showClear = false,
   ...props
-}: BaseAutocomplete.Input.Props) {
+}: BaseAutocomplete.Input.Props & {
+  showTrigger?: boolean;
+  showClear?: boolean;
+}) {
   return (
-    <BaseAutocomplete.Input
-      data-slot="autocomplete-input"
-      className={cn(
-        "placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground bg-input dark:bg-input/30 flex h-10 w-full min-w-0 rounded-lg border bg-clip-padding px-3 text-base font-normal shadow-xs disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-60 sm:h-9 md:text-sm",
-        "file:text-foreground file:inline-flex file:h-7 file:rounded-md file:border-0 file:bg-transparent file:text-sm file:font-medium",
-        "focus-visible:outline-ring/50 outline-0 outline-offset-0 outline-transparent transition-[outline-width,outline-offset,outline-color] duration-100 ease-out outline-solid focus-visible:outline-2 focus-visible:outline-offset-2",
-        "aria-invalid:outline-destructive/50 aria-invalid:outline-2 aria-invalid:outline-offset-2 aria-invalid:outline-solid",
-        className,
-      )}
-      {...props}
-    />
-  );
-}
-
-function AutocompleteInputWrapper({
-  className,
-  ...props
-}: React.ComponentProps<"div">) {
-  return (
-    <div
-      data-slot="autocomplete-input-wrapper"
+    <BaseAutocomplete.InputGroup
+      data-slot="autocomplete-input-group"
       className={cn(
         "relative",
-        // Auto-adjust input padding based on buttons present (right-3 = 0.75rem, button = 1rem)
         "has-data-[slot=autocomplete-clear]:**:data-[slot=autocomplete-input]:pr-7",
         "has-data-[slot=autocomplete-trigger]:**:data-[slot=autocomplete-input]:pr-7",
-        // Both buttons present (0.75rem + 1rem + 0.5rem gap + 1rem button = 3.25rem)
         "has-data-[slot=autocomplete-clear]:has-data-[slot=autocomplete-trigger]:**:data-[slot=autocomplete-input]:pr-13",
-        className,
       )}
-      {...props}
-    />
+    >
+      <BaseAutocomplete.Input
+        data-slot="autocomplete-input"
+        className={cn(
+          "placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground bg-input dark:bg-input/30 flex h-10 w-full min-w-0 rounded-lg border bg-clip-padding px-3 text-base font-normal shadow-xs disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-60 sm:h-9 md:text-sm",
+          "file:text-foreground file:inline-flex file:h-7 file:rounded-md file:border-0 file:bg-transparent file:text-sm file:font-medium",
+          "focus-visible:outline-ring/50 outline-0 outline-offset-0 outline-transparent transition-[outline-width,outline-offset,outline-color] duration-100 ease-out outline-solid focus-visible:outline-2 focus-visible:outline-offset-2",
+          "aria-invalid:outline-destructive/50 aria-invalid:outline-2 aria-invalid:outline-offset-2 aria-invalid:outline-solid",
+          className,
+        )}
+        {...props}
+      />
+      {(showClear || showTrigger) && (
+        <div className="absolute inset-y-0 right-3 flex items-center gap-2">
+          {showClear && (
+            <AutocompleteClear>
+              <HugeiconsIcon
+                icon={Cancel01Icon}
+                className="h-4 w-4"
+                strokeWidth={2}
+              />
+            </AutocompleteClear>
+          )}
+          {showTrigger && <AutocompleteTrigger />}
+        </div>
+      )}
+    </BaseAutocomplete.InputGroup>
   );
 }
 
@@ -145,7 +156,7 @@ function AutocompletePopup({
     <BaseAutocomplete.Popup
       data-slot="autocomplete-popup"
       className={cn(
-        "bg-popover text-popover-foreground ring-border ease-out-cubic flex max-h-(--available-height) w-(--anchor-width) max-w-(--available-width) origin-(--transform-origin) flex-col overflow-clip overscroll-contain rounded-xl shadow-[0_8px_20px_0_oklch(0.18_0_0/0.10)] ring-1 transition-[transform,scale,opacity] duration-100 data-ending-style:scale-95 data-ending-style:opacity-0 data-starting-style:scale-95 data-starting-style:opacity-0",
+        "bg-popover text-popover-foreground ring-border ease-out-expo flex max-h-(--available-height) w-(--anchor-width) max-w-(--available-width) origin-(--transform-origin) flex-col overflow-clip overscroll-contain rounded-xl shadow-[0_8px_20px_0_oklch(0.18_0_0/0.10)] ring-1 transition-[transform,scale,opacity] duration-100 data-ending-style:scale-95 data-ending-style:opacity-0 data-starting-style:scale-95 data-starting-style:opacity-0",
         className,
       )}
       {...props}
@@ -384,7 +395,6 @@ function AutocompleteSeparator({
 export const Autocomplete = {
   Root: AutocompleteRoot,
   Input: AutocompleteInput,
-  InputWrapper: AutocompleteInputWrapper,
   Trigger: AutocompleteTrigger,
   Icon: AutocompleteIcon,
   Clear: AutocompleteClear,
@@ -412,7 +422,6 @@ const useAutocompleteFilteredItems = BaseAutocomplete.useFilteredItems;
 export {
   AutocompleteRoot,
   AutocompleteInput,
-  AutocompleteInputWrapper,
   AutocompleteTrigger,
   AutocompleteIcon,
   AutocompleteClear,

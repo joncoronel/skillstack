@@ -1,4 +1,9 @@
-import { action, internalMutation, internalQuery } from "./_generated/server";
+import {
+  action,
+  internalAction,
+  internalMutation,
+  internalQuery,
+} from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
@@ -11,11 +16,7 @@ import {
   type TreeScanResult,
 } from "./github";
 import { embedText } from "./lib/embeddings";
-import {
-  fetchRepoMetadata,
-  fetchRepoTree,
-  NOT_MODIFIED,
-} from "./lib/github";
+import { fetchRepoMetadata, fetchRepoTree, NOT_MODIFIED } from "./lib/github";
 
 // ---------------------------------------------------------------------------
 // Tree scan ↔ cache encoding
@@ -67,6 +68,14 @@ function decodeCachedScan(encoded: string[]): TreeScanResult {
 
 const FINGERPRINT_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
+// Toggle verbose cache-hit/miss logging for analyzeRepo. Flip to false to
+// silence the pipeline logs in production.
+const ANALYZE_REPO_DEBUG = false;
+
+function debugLog(msg: string): void {
+  if (ANALYZE_REPO_DEBUG) console.log(msg);
+}
+
 function makeCacheKey(owner: string, repo: string): string {
   return `${owner.toLowerCase()}/${repo.toLowerCase()}`;
 }
@@ -83,6 +92,7 @@ export const getCachedFingerprint = internalQuery({
     return {
       fingerprint: entry.fingerprint,
       embedding: entry.embedding,
+      recommendations: entry.recommendations ?? null,
     };
   },
 });
@@ -112,6 +122,7 @@ export const setCachedFingerprint = internalMutation({
         fingerprint,
         embedding,
         cachedAt: now,
+        recommendations: undefined,
       });
     } else {
       await ctx.db.insert("repoFingerprintCache", {
@@ -120,6 +131,70 @@ export const setCachedFingerprint = internalMutation({
         embedding,
         cachedAt: now,
       });
+    }
+  },
+});
+
+// Action + batch mutation so the daily cleanup keeps chewing through expired
+// rows if more than one batch has accumulated, without risking a single
+// mutation's write limit.
+export const cleanupExpiredFingerprintCache = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    const cutoff = Date.now() - FINGERPRINT_CACHE_TTL_MS;
+    while (true) {
+      const deleted: number = await ctx.runMutation(
+        internal.recommendations.cleanupExpiredFingerprintCacheBatch,
+        { cutoff },
+      );
+      if (deleted === 0) break;
+    }
+  },
+});
+
+export const cleanupExpiredFingerprintCacheBatch = internalMutation({
+  args: { cutoff: v.number() },
+  handler: async (ctx, { cutoff }) => {
+    const expired = await ctx.db
+      .query("repoFingerprintCache")
+      .filter((q) => q.lt(q.field("cachedAt"), cutoff))
+      .take(100);
+
+    for (const entry of expired) {
+      await ctx.db.delete(entry._id);
+    }
+    return expired.length;
+  },
+});
+
+export const setCachedRecommendations = internalMutation({
+  args: {
+    cacheKey: v.string(),
+    recommendations: v.array(
+      v.object({
+        name: v.string(),
+        variantCount: v.number(),
+        variants: v.array(
+          v.object({
+            source: v.string(),
+            skillId: v.string(),
+            description: v.optional(v.string()),
+            installs: v.number(),
+          }),
+        ),
+      }),
+    ),
+  },
+  handler: async (ctx, { cacheKey, recommendations }) => {
+    const existing = await ctx.db
+      .query("repoFingerprintCache")
+      .withIndex("by_cacheKey", (q) => q.eq("cacheKey", cacheKey))
+      .unique();
+
+    // No-op if the row was deleted between setCachedFingerprint and this call.
+    // The next analyzeRepo request will rebuild everything from scratch.
+    if (existing) {
+      await ctx.db.patch(existing._id, { recommendations });
     }
   },
 });
@@ -208,6 +283,16 @@ export const analyzeRepo = action({
     const cacheKey = makeCacheKey(owner, repo);
     const repoKey = `${owner}/${repo}`;
 
+    const t0 = Date.now();
+    let tPrev = t0;
+    const mark = (label: string): void => {
+      const now = Date.now();
+      debugLog(`[analyzeRepo]   ⏱ ${label}: ${now - tPrev}ms`);
+      tPrev = now;
+    };
+
+    debugLog(`[analyzeRepo] Starting for ${repoName}`);
+
     let fingerprint: RepoFingerprint;
     let queryEmbedding: number[];
 
@@ -220,24 +305,23 @@ export const analyzeRepo = action({
     // of latency. If the tree changed, we invalidate the fingerprint cache
     // and rebuild — so users who just restructured their repo get fresh
     // results immediately.
-    const treeCache = await ctx.runQuery(
-      internal.githubCache.getTreeCache,
-      { repo: repoKey },
-    );
+    const treeCache = await ctx.runQuery(internal.githubCache.getTreeCache, {
+      repo: repoKey,
+    });
 
     let treeChanged = false;
     let scan: TreeScanResult | null = null;
     let branch: string | undefined;
 
     if (treeCache) {
-      const treeResult = await fetchRepoTree(
-        owner,
-        repo,
-        [treeCache.branch],
-        { etag: treeCache.etag },
-      );
+      const treeResult = await fetchRepoTree(owner, repo, [treeCache.branch], {
+        etag: treeCache.etag,
+      });
       if (treeResult === NOT_MODIFIED) {
         // Repo unchanged — fingerprint cache (if any) is still valid
+        debugLog(
+          `[analyzeRepo] ✓ Tree cache HIT (304 Not Modified) — repo unchanged`,
+        );
         await ctx.runMutation(internal.githubCache.touchTreeCache, {
           repo: repoKey,
         });
@@ -245,6 +329,7 @@ export const analyzeRepo = action({
         scan = decodeCachedScan(treeCache.dependencyFilePaths);
       } else if (treeResult) {
         // Repo changed — rebuild fingerprint even if cached
+        debugLog(`[analyzeRepo] ⟳ Tree cache STALE — repo changed, rebuilding`);
         treeChanged = true;
         branch = treeResult.branch;
         scan = scanTree(treeResult.entries);
@@ -258,33 +343,62 @@ export const analyzeRepo = action({
         }
       } else {
         // Tree API failed — trust the fingerprint cache if available
+        debugLog(`[analyzeRepo] ⚠ Tree API failed — falling back to cache`);
         branch = treeCache.branch;
         scan = decodeCachedScan(treeCache.dependencyFilePaths);
       }
     } else {
       // No tree cache at all — need full rebuild
+      debugLog(
+        `[analyzeRepo] ✗ Tree cache MISS — first-time analysis or previously cleared`,
+      );
       treeChanged = true;
     }
+    mark("Tree check");
 
     // ------------------------------------------------------------------
     // Step 2: Check fingerprint cache (skip if tree changed)
     // ------------------------------------------------------------------
     const cached = treeChanged
       ? null
-      : await ctx.runQuery(
-          internal.recommendations.getCachedFingerprint,
-          { cacheKey },
-        );
+      : await ctx.runQuery(internal.recommendations.getCachedFingerprint, {
+          cacheKey,
+        });
 
     if (cached) {
       fingerprint = cached.fingerprint;
       queryEmbedding = cached.embedding;
+      mark("Fingerprint cache check");
+
+      // Full cache hit — skip vector search, summary lookups, and grouping.
+      if (cached.recommendations) {
+        debugLog(
+          `[analyzeRepo] ✓ FULL CACHE HIT — returning ${cached.recommendations.length} cached recommendations (no vector search)`,
+        );
+        debugLog(`[analyzeRepo] Total: ${Date.now() - t0}ms`);
+        return {
+          error: null,
+          repoName,
+          fingerprint,
+          recommendations: cached.recommendations,
+        };
+      }
+      debugLog(
+        `[analyzeRepo] ◐ PARTIAL CACHE HIT — reusing fingerprint+embedding, running vector search`,
+      );
     } else {
+      mark("Fingerprint cache check");
+      debugLog(
+        treeChanged
+          ? `[analyzeRepo] ✗ Fingerprint cache SKIPPED (tree changed) — full rebuild from GitHub`
+          : `[analyzeRepo] ✗ Fingerprint cache MISS — rebuilding fingerprint+embedding (tree data reused from cache)`,
+      );
       // ------------------------------------------------------------------
       // Step 3: Fetch metadata + tree (if not already done)
       // ------------------------------------------------------------------
       const meta = await fetchRepoMetadata(owner, repo);
       if (!branch) branch = meta?.defaultBranch ?? "main";
+      mark("GitHub metadata fetch");
 
       // If we don't have a tree scan yet (no cache existed), fetch fresh
       if (!scan) {
@@ -341,6 +455,9 @@ export const analyzeRepo = action({
       // ------------------------------------------------------------------
       // Step 5: Build fingerprint from resolved inputs
       // ------------------------------------------------------------------
+      debugLog(
+        `[analyzeRepo] Fetching ${filesToFetch.length} files from GitHub...`,
+      );
       fingerprint = await buildRepoFingerprint({
         owner,
         repo,
@@ -350,6 +467,7 @@ export const analyzeRepo = action({
         configFiles: scan?.configFiles ?? [],
         filesToFetch,
       });
+      mark(`GitHub file fetches (${filesToFetch.length} files)`);
 
       if (
         fingerprint.packages.length === 0 &&
@@ -371,7 +489,7 @@ export const analyzeRepo = action({
       // ------------------------------------------------------------------
       const embeddingInput = fingerprintToEmbeddingInput(fingerprint);
       try {
-        queryEmbedding = await embedText(embeddingInput);
+        queryEmbedding = await embedText(embeddingInput, "query");
       } catch (e) {
         console.error("Failed to embed repo fingerprint:", e);
         return {
@@ -381,23 +499,30 @@ export const analyzeRepo = action({
           recommendations: [],
         };
       }
+      mark("Voyage embedding");
 
       await ctx.runMutation(internal.recommendations.setCachedFingerprint, {
         cacheKey,
         fingerprint,
         embedding: queryEmbedding,
       });
+      mark("Save fingerprint cache");
     }
 
     // Vector search over the skillEmbeddings table. Returns embedding-row
     // IDs paired with cosine-similarity scores. We translate those IDs back
     // to summary metadata via the by_skillEmbeddingId index — never reading
     // the heavy embedding rows themselves.
+    debugLog(`[analyzeRepo] Running vector search against skillEmbeddings...`);
     const results = await ctx.vectorSearch("skillEmbeddings", "by_embedding", {
       vector: queryEmbedding,
       limit: SEARCH_LIMIT,
       filter: (q) => q.eq("isDelisted", false),
     });
+    debugLog(
+      `[analyzeRepo] Vector search returned ${results.length} candidates`,
+    );
+    mark("Vector search");
 
     if (results.length === 0) {
       return {
@@ -412,13 +537,12 @@ export const analyzeRepo = action({
     // has a `skillEmbeddingId` back-reference so we can look up summaries
     // directly from the embedding IDs returned by vector search, without
     // ever reading the embedding rows themselves (each is ~12 KB).
-    const embeddingIds = results.map(
-      (r) => r._id as Id<"skillEmbeddings">,
-    );
+    const embeddingIds = results.map((r) => r._id as Id<"skillEmbeddings">);
     const entries = await ctx.runQuery(
       internal.skills.getSummariesByEmbeddingIds,
       { ids: embeddingIds },
     );
+    mark("Summary lookups");
 
     // Index summaries by their corresponding skillEmbedding _id so we can
     // preserve the vector-search ranking when looping over results below.
@@ -453,23 +577,40 @@ export const analyzeRepo = action({
     // useful. The frontend can show "showing N of M" using `variantCount`.
     const packageSet = fingerprint.packages.map((p) => p.toLowerCase());
 
-    // Helper: compute the composite score (vector + package bonus + popularity)
-    // for a single variant, given its raw vector score.
+    // Helper: compute the composite score for a single variant.
+    //
+    // Uses multiplicative bonuses so everything scales with the underlying
+    // vector relevance. An off-topic skill can't vault over relevant skills
+    // no matter how many packages it mentions or how popular it is — its
+    // low vector score keeps it low even after multipliers.
+    //
+    // Package multiplier — rewards skills whose name/description mentions
+    // exact packages from the repo. Log-scaled so matches have diminishing
+    // returns (1 match is a lot, 10th match is barely extra):
+    //   1 match   → 1.03x
+    //   3 matches → 1.06x
+    //   7 matches → 1.09x
+    //   15 matches→ 1.12x
+    //   30 matches→ 1.15x
+    //
+    // Popularity multiplier — rewards skills with higher install counts:
+    //   100 installs    → 1.10x
+    //   1,000 installs  → 1.15x
+    //   10,000 installs → 1.20x
+    //   100,000 installs→ 1.25x
     function computeScore(
       summary: (typeof entries)[number]["summary"],
       vectorScore: number,
     ): number {
       const haystack =
         `${summary.name} ${summary.description ?? ""}`.toLowerCase();
-      let packageBonus = 0;
+      let matchCount = 0;
       for (const pkg of packageSet) {
-        if (pkg.length >= 3 && haystack.includes(pkg)) {
-          packageBonus += 0.2;
-          if (packageBonus >= 0.6) break; // Cap the bonus
-        }
+        if (pkg.length >= 4 && haystack.includes(pkg)) matchCount++;
       }
-      const popBonus = 0.1 * Math.log10(summary.installs + 1);
-      return vectorScore + packageBonus + popBonus;
+      const packageMultiplier = 1 + 0.03 * Math.log2(matchCount + 1);
+      const popMultiplier = 1 + 0.05 * Math.log10(summary.installs + 1);
+      return vectorScore * packageMultiplier * popMultiplier;
     }
 
     interface PendingGroup {
@@ -534,6 +675,19 @@ export const analyzeRepo = action({
         variants: sortedVariants.slice(0, MAX_VARIANTS_PER_GROUP),
       };
     });
+
+    mark("Grouping + scoring");
+
+    // Cache recommendations so repeat analyses skip the vector search.
+    debugLog(
+      `[analyzeRepo] Saving ${recommendations.length} recommendations to cache`,
+    );
+    await ctx.runMutation(internal.recommendations.setCachedRecommendations, {
+      cacheKey,
+      recommendations,
+    });
+    mark("Save recommendations cache");
+    debugLog(`[analyzeRepo] Total: ${Date.now() - t0}ms`);
 
     return {
       error: null,

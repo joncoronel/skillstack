@@ -246,21 +246,18 @@ export const upsertSkillsBatch = internalMutation({
             )
             .unique();
           if (existing) {
-            await ctx.db.patch(existing._id, { isDelisted: false });
+            await ctx.db.patch(existing._id, {
+              isDelisted: false,
+              needsEmbedding: true,
+            });
             await ctx.db.patch(summary._id, {
               lastSeenInApi: now,
               isDelisted: false,
               installs: skill.installs,
+              needsEmbedding: true,
+              hasEmbedding: false,
+              skillEmbeddingId: undefined,
             });
-            // Mirror the relist into skillEmbeddings so the vector index
-            // filter starts including this row again.
-            const skillEmbedding = await ctx.db
-              .query("skillEmbeddings")
-              .withIndex("by_skillId", (q) => q.eq("skillId", existing._id))
-              .unique();
-            if (skillEmbedding) {
-              await ctx.db.patch(skillEmbedding._id, { isDelisted: false });
-            }
           }
         } else if (summary.installs !== skill.installs) {
           // Installs changed but nothing structural — lightweight patch
@@ -303,7 +300,10 @@ export const upsertSkillsBatch = internalMutation({
           lastSynced: now,
           syncHash: newHash,
           lastSeenInApi: now,
-          ...(existing.isDelisted && { isDelisted: false }),
+          // Relisting: the embedding row was hard-deleted on delist, so flag
+          // the skill for re-embedding. Without this the worker never picks
+          // it up (needsEmbedding stays whatever it was before delist).
+          ...(existing.isDelisted && { isDelisted: false, needsEmbedding: true }),
         });
       } else {
         skillDocId = await ctx.db.insert("skills", {
@@ -350,7 +350,11 @@ export const upsertSkillsBatch = internalMutation({
           // computed from summaries stay accurate.
           needsEmbedding: true,
         }),
-        ...(existing?.isDelisted && { isDelisted: false }),
+        ...(existing?.isDelisted && {
+          isDelisted: false,
+          needsEmbedding: true,
+          hasEmbedding: false,
+        }),
       });
     }
   },
@@ -1154,13 +1158,23 @@ export const delistSkillsBatch = internalMutation({
   },
   handler: async (ctx, { entries }) => {
     for (const { summaryId, source, skillId } of entries) {
-      // Delete summary
+      // Soft-delete the summary. Keeping the row (~200 bytes) lets the
+      // Delisted stat count correctly and enables the fast-path relist in
+      // upsertSkillsBatch. Clear pipeline flags so background workers skip
+      // the row, and mirror the embedding deletion below.
       const summary = await ctx.db.get(summaryId);
       if (summary) {
-        await ctx.db.delete(summaryId);
+        await ctx.db.patch(summaryId, {
+          isDelisted: true,
+          needsContentFetch: false,
+          needsDiscovery: false,
+          needsEmbedding: false,
+          hasEmbedding: false,
+          skillEmbeddingId: undefined,
+        });
       }
 
-      // Mark skill as delisted
+      // Mark skill as delisted and clear its pipeline flags too.
       const skill = await ctx.db
         .query("skills")
         .withIndex("by_source_skillId", (q) =>
@@ -1168,16 +1182,21 @@ export const delistSkillsBatch = internalMutation({
         )
         .unique();
       if (skill && !skill.isDelisted) {
-        await ctx.db.patch(skill._id, { isDelisted: true });
+        await ctx.db.patch(skill._id, {
+          isDelisted: true,
+          needsContentFetch: false,
+          needsDiscovery: false,
+          needsEmbedding: false,
+        });
 
-        // Mirror the delisted state into skillEmbeddings so the vector
-        // index filter (`q.eq("isDelisted", false)`) excludes this row.
+        // Delete the embedding row entirely — delisted skills are excluded
+        // from vector search anyway, so keeping the row just wastes storage.
         const skillEmbedding = await ctx.db
           .query("skillEmbeddings")
           .withIndex("by_skillId", (q) => q.eq("skillId", skill._id))
           .unique();
         if (skillEmbedding) {
-          await ctx.db.patch(skillEmbedding._id, { isDelisted: true });
+          await ctx.db.delete(skillEmbedding._id);
         }
       }
     }
@@ -1690,7 +1709,7 @@ export const embedSkillsBatch = internalAction({
       );
 
       try {
-        const vectors = await embedTexts(inputs);
+        const vectors = await embedTexts(inputs, "document");
         const entries = result.skills.map((s, i) => ({
           skillId: s.id,
           embedding: vectors[i],
@@ -1731,7 +1750,7 @@ export const embedSkillsBatch = internalAction({
               skill.content,
             );
             try {
-              const [vector] = await embedTexts([fullInput]);
+              const [vector] = await embedTexts([fullInput], "document");
               entries.push({
                 skillId: skill.id,
                 embedding: vector,
@@ -1755,7 +1774,7 @@ export const embedSkillsBatch = internalAction({
               undefined,
             );
             try {
-              const [vector] = await embedTexts([minimalInput]);
+              const [vector] = await embedTexts([minimalInput], "document");
               entries.push({
                 skillId: skill.id,
                 embedding: vector,

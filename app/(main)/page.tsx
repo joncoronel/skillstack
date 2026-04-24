@@ -17,17 +17,15 @@ export default async function Home() {
 
   return (
     <HomeContent initialPopularSkills={initialPopularSkills}>
-      <section className="mx-auto max-w-5xl px-4 pt-16 pb-10 text-center">
-        <h1 className="font-display text-4xl font-bold tracking-tight sm:text-5xl">
-          Build your{" "}
-          <mark className="bg-primary/10 text-primary rounded px-1">
-            AI skill stack
-          </mark>
+      <section className="mx-auto max-w-5xl px-4 pt-24 pb-16">
+        <h1 className="font-display text-5xl font-semibold tracking-tight leading-hero text-balance sm:text-6xl lg:text-7xl">
+          Build your
+          <br />
+          <span className="text-primary">AI skill stack</span>
         </h1>
-        <p className="mx-auto mt-4 max-w-2xl text-lg text-muted-foreground">
+        <p className="mt-6 max-w-lg text-muted-foreground sm:text-lg sm:leading-relaxed lg:max-w-xl">
           Discover, compare, and bundle skills for AI coding assistants like
-          Cursor and Claude. Pick your technologies, find the best skills, and
-          share your stack.
+          Cursor and Claude. Pick your stack, share with a link.
         </p>
       </section>
     </HomeContent>

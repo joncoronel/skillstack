@@ -1,10 +1,11 @@
 import { Suspense } from "react";
 import Link from "next/link";
+import { BrandMark } from "@/components/brand-mark";
 import { DesktopNav } from "@/components/header-nav";
 import { MobileNav } from "@/components/mobile-nav";
 import { HeaderAuth } from "@/components/header-auth";
 import { ThemeSwitcher } from "@/components/theme-switcher";
-import { Skeleton } from "@/components/ui/cubby-ui/skeleton";
+import { Skeleton } from "@/components/ui/cubby-ui/skeleton/skeleton";
 
 export function AppHeader() {
   return (
@@ -15,12 +16,8 @@ export function AppHeader() {
             <MobileNav />
           </Suspense>
 
-          <Link
-            href="/"
-            className="font-display text-lg font-bold tracking-tight"
-          >
-            SkillStack
-            <span className="ml-0.5 inline-block size-1.5 rounded-full bg-primary align-super" />
+          <Link href="/" className="flex items-center">
+            <BrandMark />
           </Link>
 
           <Suspense fallback={<NavSkeleton />}>
@@ -47,9 +44,9 @@ export function AppHeader() {
 function NavSkeleton() {
   return (
     <nav className="max-sm:hidden flex items-center gap-1">
-      <Skeleton className="h-8 w-20 rounded-md" />
-      <Skeleton className="h-8 w-24 rounded-md" />
-      <Skeleton className="h-8 w-18 rounded-md" />
+      <Skeleton className="h-8 w-[82px] rounded-md" />
+      <Skeleton className="h-8 w-[102px] rounded-md" />
+      <Skeleton className="h-8 w-[78px] rounded-md" />
     </nav>
   );
 }

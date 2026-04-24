@@ -2,16 +2,40 @@
 
 import * as React from "react";
 import { Dialog as BaseDialog } from "@base-ui/react/dialog";
-import { HugeiconsIcon } from "@hugeicons/react";
-import { Cancel01Icon } from "@hugeicons/core-free-icons";
-
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/cubby-ui/button";
 import {
   ScrollArea,
   type ScrollAreaProps,
 } from "@/components/ui/cubby-ui/scroll-area/scroll-area";
 
-const Dialog = BaseDialog.Root;
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Cancel01Icon } from "@hugeicons/core-free-icons";
+
+interface DialogConfigContextValue {
+  modal: boolean | "trap-focus";
+}
+
+const DialogConfigContext = React.createContext<DialogConfigContextValue>({
+  modal: true,
+});
+
+function Dialog<Payload>({
+  modal = true,
+  disablePointerDismissal,
+  ...props
+}: BaseDialog.Root.Props<Payload>) {
+  const configValue = React.useMemo(() => ({ modal }), [modal]);
+  return (
+    <DialogConfigContext.Provider value={configValue}>
+      <BaseDialog.Root
+        modal={modal}
+        disablePointerDismissal={disablePointerDismissal ?? modal !== true}
+        {...props}
+      />
+    </DialogConfigContext.Provider>
+  );
+}
 
 const createDialogHandle = BaseDialog.createHandle;
 
@@ -31,7 +55,7 @@ function DialogBackdrop({ className, ...props }: BaseDialog.Backdrop.Props) {
   return (
     <BaseDialog.Backdrop
       className={cn(
-        "ease-out-cubic fixed inset-0 min-h-dvh bg-black/40 transition-all duration-200 supports-[-webkit-touch-callout:none]:absolute",
+        "ease-out-expo fixed inset-0 min-h-dvh bg-black/40 transition-all duration-200 supports-[-webkit-touch-callout:none]:absolute",
         "backdrop-blur-sm data-ending-style:opacity-0 data-starting-style:opacity-0",
         className,
       )}
@@ -64,11 +88,14 @@ function DialogContent({
   showCloseButton?: boolean;
   variant?: "default" | "inset";
 }) {
+  const { modal } = React.useContext(DialogConfigContext);
+  const isModal = modal === true;
   return (
     <DialogPortal>
-      <DialogBackdrop />
-      <DialogViewport>
+      {isModal && <DialogBackdrop />}
+      <DialogViewport className={cn(!isModal && "pointer-events-none")}>
         <BaseDialog.Popup
+          data-slot="dialog-content"
           data-variant={variant}
           className={cn(
             "bg-popover text-popover-foreground relative z-50 flex max-h-full min-h-0 w-full max-w-full min-w-0 flex-col overflow-hidden shadow-lg",
@@ -81,7 +108,7 @@ function DialogContent({
             // Scale effect for nested dialogs on desktop
             "scale-[calc(1-0.1*var(--nested-dialogs))]",
             // Animation duration
-            "ease-out-cubic transition-all duration-200",
+            "ease-out-expo transition-all duration-200",
             // Desktop animations: scale and fade
             "data-starting-style:translate-y-[calc(1.25rem)] data-starting-style:scale-95 data-starting-style:opacity-0",
             "data-ending-style:translate-y-[calc(1.25rem)] data-ending-style:scale-95 data-ending-style:opacity-0",
@@ -89,15 +116,19 @@ function DialogContent({
             "after:pointer-events-none after:absolute after:inset-0 after:hidden after:rounded-[inherit] after:bg-black/5 after:opacity-0 after:transition-[opacity,display] after:transition-discrete after:duration-200",
             "data-nested-dialog-open:after:block data-nested-dialog-open:after:opacity-100",
             "starting:data-nested-dialog-open:after:opacity-0",
+            !isModal && "pointer-events-auto",
             className,
           )}
           {...props}
         >
           {children}
           {showCloseButton && (
-            <DialogClose className="focus-visible:outline-ring/50 absolute top-4 right-4 rounded-sm opacity-70 outline-0 outline-offset-0 outline-transparent transition-opacity outline-solid hover:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:pointer-events-none">
-              <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="h-4 w-4" />
-              <span className="sr-only">Close</span>
+            <DialogClose
+              aria-label="Close"
+              className="absolute end-2 top-2"
+              render={<Button size="icon_sm" variant="ghost" />}
+            >
+              <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
             </DialogClose>
           )}
         </BaseDialog.Popup>
@@ -115,9 +146,9 @@ function DialogHeader({
     <div
       data-slot="dialog-header"
       className={cn(
-        "flex flex-col space-y-1.5 px-6 pt-6 pb-4",
-        // Reduce bottom padding when header is directly before footer (no body) to maintain p-5 total gap
-        "not-has-[+[data-slot=dialog-body]]:has-[+[data-slot=dialog-footer]]:pb-1",
+        "flex flex-col gap-2 px-6 pt-6 pb-3",
+        // Reduce bottom padding when header is directly before footer (no body)
+        "not-has-[+[data-slot=dialog-body]]:has-[+[data-slot=dialog-footer]]:pb-6",
         // Add extra bottom padding when header is alone (no body or footer)
         "not-has-[+[data-slot=dialog-body]]:not-has-[+[data-slot=dialog-footer]]:pb-6",
         // Inset variant: add extra bottom padding when header is directly before footer (no body)
@@ -183,8 +214,10 @@ function DialogFooter({
         "flex flex-col-reverse gap-2 px-6 pt-4 pb-6 sm:flex-row sm:justify-end",
         // Add extra top padding when footer is first (no header or body)
         "first:pt-6",
+        // Reduce top padding when body is present
+        "not-in-data-[variant=inset]:in-[[data-slot=dialog-content]:has([data-slot=dialog-body])]:pt-3",
         // Inset variant: muted background with top border for separation
-        "in-data-[variant=inset]:border-border in-data-[variant=inset]:bg-muted in-data-[variant=inset]:rounded-b-2xl in-data-[variant=inset]:border-t in-data-[variant=inset]:pt-4 in-data-[variant=inset]:pb-4",
+        "in-data-[variant=inset]:border-border in-data-[variant=inset]:bg-muted/72 in-data-[variant=inset]:rounded-b-2xl in-data-[variant=inset]:border-t in-data-[variant=inset]:pt-4 in-data-[variant=inset]:pb-4",
         className,
       )}
       {...props}
@@ -197,7 +230,7 @@ function DialogTitle({ className, ...props }: BaseDialog.Title.Props) {
   return (
     <BaseDialog.Title
       className={cn(
-        "text-lg leading-none font-semibold tracking-tight",
+        "text-foreground text-lg leading-none font-semibold tracking-tight text-balance",
         className,
       )}
       {...props}
@@ -212,7 +245,7 @@ function DialogDescription({
 }: BaseDialog.Description.Props) {
   return (
     <BaseDialog.Description
-      className={cn("text-muted-foreground text-sm", className)}
+      className={cn("text-muted-foreground text-sm text-pretty", className)}
       {...props}
     />
   );

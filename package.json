@@ -9,7 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@base-ui/react": "^1.2.0",
+    "@base-ui/react": "^1.4.0",
     "@clerk/backend": "^3.2.3",
     "@clerk/nextjs": "^7.0.7",
     "@conform-to/react": "^1.16.0",
@@ -28,8 +28,10 @@
     "dayjs": "^1.11.19",
     "embla-carousel-react": "^8.6.0",
     "fuse.js": "^7.1.0",
+    "geist": "^1.7.0",
     "hast-util-to-jsx-runtime": "^2.3.6",
     "input-otp": "^1.4.2",
+    "jotai": "^2.19.1",
     "lucide-react": "^0.563.0",
     "motion": "^12.33.0",
     "next": "16.1.6",

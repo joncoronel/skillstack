@@ -41,11 +41,7 @@ export function DesktopNav() {
       <NavLink
         href="/pricing"
         icon={
-          <HugeiconsIcon
-            icon={Tag01Icon}
-            strokeWidth={2}
-            className="size-4"
-          />
+          <HugeiconsIcon icon={Tag01Icon} strokeWidth={2} className="size-4" />
         }
       >
         Pricing
@@ -71,8 +67,8 @@ function NavLink({
       nativeButton={false}
       variant="ghost"
       size="sm"
-      render={<Link href={href} />}
-      className={cn(isActive && "text-foreground font-medium")}
+      render={<Link href={href} aria-current={isActive ? "page" : undefined} />}
+      className={cn("gap-1.5", isActive && "bg-accent text-foreground")}
       leftSection={icon}
     >
       {children}

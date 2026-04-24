@@ -17,8 +17,8 @@ import {
   repoUrlParser,
   type ModeValue,
 } from "@/lib/search-params";
-import { BundleSelectionProvider } from "@/lib/bundle-selection-context";
 import { Input } from "@/components/ui/cubby-ui/input";
+import { Kbd } from "@/components/ui/cubby-ui/kbd";
 import { Button } from "@/components/ui/cubby-ui/button";
 import {
   Tabs,
@@ -95,7 +95,7 @@ export function SkillExplorer({
   const Icon = isText ? Search01Icon : GithubIcon;
 
   return (
-    <BundleSelectionProvider>
+    <>
       <Tabs value={mode} onValueChange={(value) => setMode(value as ModeValue)}>
         <TabsList variant="underline" className="mb-3">
           <TabsTrigger value="text">
@@ -104,7 +104,7 @@ export function SkillExplorer({
               strokeWidth={2}
               className="size-3.5"
             />
-            Text
+            Search
           </TabsTrigger>
           <TabsTrigger value="repo">
             <HugeiconsIcon
@@ -144,9 +144,20 @@ export function SkillExplorer({
               }}
               className="pl-9 pr-9"
             />
+            {!inputValue && (
+              <Kbd
+                size="sm"
+                variant="ghost"
+                className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none max-sm:hidden"
+                aria-hidden="true"
+              >
+                /
+              </Kbd>
+            )}
             {inputValue && (
               <button
                 type="button"
+                aria-label="Clear search"
                 onClick={() => {
                   if (isText) {
                     setTextQuery("");
@@ -155,7 +166,7 @@ export function SkillExplorer({
                     setRepoUrl("");
                   }
                 }}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:text-foreground focus-visible:outline-2 focus-visible:outline-ring/50 focus-visible:outline-offset-2"
               >
                 <HugeiconsIcon
                   icon={Cancel01Icon}
@@ -217,6 +228,6 @@ export function SkillExplorer({
 
       <BundleBar />
       <SkillDetailSheet handle={skillDetailHandle} />
-    </BundleSelectionProvider>
+    </>
   );
 }

@@ -78,6 +78,7 @@ export interface SliderProps
   extends React.ComponentProps<typeof BaseSlider.Root>,
     VariantProps<typeof sliderVariants> {
   showSteps?: boolean;
+  getAriaLabel?: ((index: number) => string) | null;
 }
 
 function Slider({
@@ -89,13 +90,20 @@ function Slider({
   max = 100,
   variant,
   showSteps = false,
+  getAriaLabel,
   ...props
 }: SliderProps) {
-  const thumbCount = React.useMemo(() => {
-    if (Array.isArray(value)) return value.length;
-    if (Array.isArray(defaultValue)) return defaultValue.length;
-    return 1; // Single thumb for single values
-  }, [value, defaultValue]);
+  const values = React.useMemo(() => {
+    if (value !== undefined) {
+      return Array.isArray(value) ? value : [value];
+    }
+    if (defaultValue !== undefined) {
+      return Array.isArray(defaultValue) ? defaultValue : [defaultValue];
+    }
+    return [min];
+  }, [value, defaultValue, min]);
+
+  const isRange = values.length > 1;
 
   const steps = React.useMemo(() => {
     if (!showSteps) return [];
@@ -115,6 +123,7 @@ function Slider({
       thumbAlignment={variant === "contained" ? "edge" : "center"}
       {...props}
     >
+      {children}
       <BaseSlider.Control
         data-slot="slider-control"
         className="flex flex-1 items-center data-[orientation=horizontal]:py-1 data-[orientation=vertical]:min-h-full data-[orientation=vertical]:flex-col data-[orientation=vertical]:justify-center data-[orientation=vertical]:px-1"
@@ -127,9 +136,7 @@ function Slider({
             data-slot="slider-indicator"
             className={cn(
               sliderIndicatorVariants({ variant }),
-              ((Array.isArray(defaultValue) && defaultValue.length > 1) ||
-                (Array.isArray(value) && value.length > 1)) &&
-                "rounded-none",
+              isRange && "rounded-none",
             )}
           />
 
@@ -186,18 +193,18 @@ function Slider({
             })}
 
           {/* Automatically render the correct number of thumbs based on value/defaultValue */}
-          {Array.from({ length: thumbCount }, (_, index) => (
+          {values.map((_, index) => (
             <BaseSlider.Thumb
               data-slot="slider-thumb"
               data-orientation={props.orientation}
               key={index}
               index={index}
+              getAriaLabel={getAriaLabel}
               className={cn(sliderThumbVariants({ variant }))}
             />
           ))}
         </BaseSlider.Track>
       </BaseSlider.Control>
-      {children}
     </BaseSlider.Root>
   );
 }
@@ -211,7 +218,7 @@ function SliderValue({
     <BaseSlider.Value
       data-slot="slider-value"
       className={cn(
-        "text-foreground mt-2 flex justify-end text-sm font-medium",
+        "text-foreground text-sm font-medium",
         className,
       )}
       {...props}
@@ -221,4 +228,20 @@ function SliderValue({
   );
 }
 
-export { Slider, SliderValue };
+function SliderLabel({
+  className,
+  ...props
+}: BaseSlider.Label.Props) {
+  return (
+    <BaseSlider.Label
+      data-slot="slider-label"
+      className={cn(
+        "text-foreground text-sm leading-5 font-medium select-none group-data-[disabled=true]:pointer-events-none group-data-[disabled=true]:opacity-50 peer-disabled:cursor-not-allowed peer-disabled:opacity-50",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+export { Slider, SliderValue, SliderLabel };

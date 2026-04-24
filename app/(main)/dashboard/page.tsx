@@ -2,45 +2,37 @@ import { Suspense } from "react";
 import { preloadQuery } from "convex/nextjs";
 import { api } from "@/convex/_generated/api";
 import { verifySession, getAuthToken } from "@/lib/auth";
-import { Skeleton } from "@/components/ui/cubby-ui/skeleton";
 import { DashboardContent } from "./dashboard-content";
+import { DashboardMasthead } from "./dashboard-masthead";
+import { DashboardSkeleton } from "./dashboard-skeleton";
 
 export default function DashboardPage() {
   return (
     <main className="mx-auto max-w-5xl px-4 pt-12 pb-20">
-      <div className="mb-8">
-        <h1 className="font-display text-3xl font-bold tracking-tight">Your bundles</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Manage your saved skill bundles.
-        </p>
-      </div>
+      <div className="space-y-10">
+        <DashboardMasthead />
 
-      <Suspense fallback={<BundleGridSkeleton />}>
-        <DashboardLoader />
-      </Suspense>
+        <Suspense fallback={<DashboardSkeleton />}>
+          <DashboardLoader />
+        </Suspense>
+      </div>
     </main>
   );
 }
 
 async function DashboardLoader() {
   // Note: verifySession() + getAuthToken() both access cookies, which "unlocks"
-  // Math.random() for the preloadQuery below. cacheComponents requires dynamic
-  // data access before any code that uses Math.random().
+  // Math.random() for the preloadQuery calls below. cacheComponents requires
+  // dynamic data access before any code that uses Math.random().
   const [, token] = await Promise.all([verifySession(), getAuthToken()]);
-  const preloadedBundles = await preloadQuery(
-    api.bundles.listByUser,
-    {},
-    { token },
-  );
-  return <DashboardContent preloadedBundles={preloadedBundles} />;
-}
-
-function BundleGridSkeleton() {
+  const [preloadedBundles, preloadedPlan] = await Promise.all([
+    preloadQuery(api.bundles.listByUser, {}, { token }),
+    preloadQuery(api.plans.currentPlan, {}, { token }),
+  ]);
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {Array.from({ length: 3 }).map((_, i) => (
-        <Skeleton key={i} className="h-36 rounded-xl" />
-      ))}
-    </div>
+    <DashboardContent
+      preloadedBundles={preloadedBundles}
+      preloadedPlan={preloadedPlan}
+    />
   );
 }
