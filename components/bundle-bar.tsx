@@ -19,6 +19,11 @@ import {
 } from "@/components/ui/cubby-ui/collapsible";
 import { Sheet, SheetContent } from "@/components/ui/cubby-ui/sheet";
 import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/cubby-ui/tooltip";
+import {
   useBundleActions,
   useSelectedSkills,
 } from "@/lib/bundle-selection";
@@ -180,21 +185,26 @@ export function BundleBar() {
             <div className="hidden h-5 w-px shrink-0 bg-border sm:block" />
 
             <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-              <Button
-                variant="ghost"
-                size="xs"
-                onClick={clearAll}
-                className="max-sm:hidden"
-                leftSection={
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon_sm"
+                      onClick={clearAll}
+                      aria-label="Clear all selected skills"
+                      className="max-sm:hidden text-muted-foreground"
+                    />
+                  }
+                >
                   <HugeiconsIcon
                     icon={Cancel01Icon}
                     strokeWidth={2}
                     className="size-3.5"
                   />
-                }
-              >
-                Clear
-              </Button>
+                </TooltipTrigger>
+                <TooltipContent sideOffset={8}>Clear all</TooltipContent>
+              </Tooltip>
 
               <Button
                 variant="outline"
