@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { convexQuery } from "@convex-dev/react-query";
-import Markdown from "react-markdown";
+import { LabeledSection } from "@/components/labeled-section";
+import { MarkdownContent } from "@/components/markdown-content";
 import { api } from "@/convex/_generated/api";
 import {
   Sheet,
@@ -59,12 +60,14 @@ function SkillDetailSheetContent({
   skill: SkillData;
   handle: SkillDetailHandle;
 }) {
-  const { data: content, isPending: contentLoading } = useQuery(
+  const { data: contentData, isPending: contentLoading } = useQuery(
     convexQuery(api.skills.getContent, {
       source: skill.source,
       skillId: skill.skillId,
     }),
   );
+  const content = contentData?.content ?? null;
+  const baseUrl = contentData?.skillMdUrl ?? null;
 
   const isSelected = useIsSkillSelected(skill.source, skill.skillId);
   const { toggleSkill } = useBundleActions();
@@ -96,15 +99,21 @@ function SkillDetailSheetContent({
             <Skeleton className="h-4 w-5/6" />
             <Skeleton className="h-4 w-2/3" />
           </div>
-        ) : content ? (
-          <div className="prose prose-sm dark:prose-invert max-w-none">
+        ) : content || skill.description ? (
+          <div className="space-y-8">
             {skill.description && (
-              <p className="lead text-muted-foreground">{skill.description}</p>
+              <LabeledSection label="Overview">
+                <p className="text-base leading-relaxed text-pretty text-muted-foreground">
+                  {skill.description}
+                </p>
+              </LabeledSection>
             )}
-            <Markdown>{content}</Markdown>
+            {content && (
+              <LabeledSection label="Documentation">
+                <MarkdownContent baseUrl={baseUrl}>{content}</MarkdownContent>
+              </LabeledSection>
+            )}
           </div>
-        ) : skill.description ? (
-          <p className="text-sm text-muted-foreground">{skill.description}</p>
         ) : (
           <p className="text-sm text-muted-foreground">
             No detailed content available for this skill.

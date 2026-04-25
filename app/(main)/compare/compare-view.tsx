@@ -4,7 +4,8 @@ import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { convexQuery } from "@convex-dev/react-query";
 import Link from "next/link";
-import Markdown from "react-markdown";
+import { LabeledSection } from "@/components/labeled-section";
+import { MarkdownContent } from "@/components/markdown-content";
 import { api } from "@/convex/_generated/api";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowLeft01Icon } from "@hugeicons/core-free-icons";
@@ -48,9 +49,11 @@ function CompareColumn({ source, skillId }: SkillRef) {
   const { data: skill, isPending: skillLoading } = useQuery(
     convexQuery(api.skills.getBySourceAndSkillId, { source, skillId }),
   );
-  const { data: content, isPending: contentLoading } = useQuery(
+  const { data: contentData, isPending: contentLoading } = useQuery(
     convexQuery(api.skills.getContent, { source, skillId }),
   );
+  const content = contentData?.content ?? null;
+  const baseUrl = contentData?.skillMdUrl ?? null;
   const isSelected = useIsSkillSelected(source, skillId);
   const { toggleSkill } = useBundleActions();
 
@@ -99,15 +102,21 @@ function CompareColumn({ source, skillId }: SkillRef) {
             <Skeleton className="h-4 w-full" />
             <Skeleton className="h-4 w-5/6" />
           </div>
-        ) : content ? (
-          <div className="prose prose-sm dark:prose-invert max-w-none">
+        ) : content || skill.description ? (
+          <div className="space-y-8">
             {skill.description && (
-              <p className="lead text-muted-foreground">{skill.description}</p>
+              <LabeledSection label="Overview">
+                <p className="text-base leading-relaxed text-pretty text-muted-foreground">
+                  {skill.description}
+                </p>
+              </LabeledSection>
             )}
-            <Markdown>{content}</Markdown>
+            {content && (
+              <LabeledSection label="Documentation">
+                <MarkdownContent baseUrl={baseUrl}>{content}</MarkdownContent>
+              </LabeledSection>
+            )}
           </div>
-        ) : skill.description ? (
-          <p className="text-sm text-muted-foreground">{skill.description}</p>
         ) : (
           <p className="text-sm text-muted-foreground">
             No detailed content available.

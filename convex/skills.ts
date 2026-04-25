@@ -2272,7 +2272,10 @@ export const getContent = query({
         q.eq("source", source).eq("skillId", skillId),
       )
       .unique();
-    return skill?.content ?? null;
+    return {
+      content: skill?.content ?? null,
+      skillMdUrl: skill?.skillMdUrl ?? null,
+    };
   },
 });
 
