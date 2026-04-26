@@ -371,24 +371,41 @@ function extractFrontmatterDescription(content: string): string | null {
 
   const frontmatter = match[1];
 
-  // Look for description field in YAML
-  const descMatch = frontmatter.match(
-    /^description:\s*["']?([^\s|>].*?)["']?\s*$/m,
+  // Single-line: `description: text` or `description: "text"`.
+  // Use [ \t]* (not \s*) so the match can't accidentally span newlines and
+  // truncate an implicit multi-line value at the first wrapped line.
+  const singleLine = frontmatter.match(
+    /^description:[ \t]*["']?([^\s|>"'].*?)["']?[ \t]*$/m,
   );
-  if (descMatch) return descMatch[1].trim();
+  if (singleLine) return singleLine[1].trim();
 
-  // Fallback: try multi-line description (YAML block scalar with > or |)
-  const multiLineMatch = frontmatter.match(
-    /^description:\s*[|>]-?\s*\n((?:[ \t]+.*(?:\n|$))*)/m,
+  // Block scalar: `description: |` or `description: >` followed by indented lines.
+  const blockScalar = frontmatter.match(
+    /^description:[ \t]*[|>]-?[ \t]*\n((?:[ \t]+.*(?:\n|$))*)/m,
   );
-  if (multiLineMatch) {
-    const result = multiLineMatch[1]
+  if (blockScalar) {
+    const folded = blockScalar[1]
       .split("\n")
       .map((l) => l.trim())
       .filter(Boolean)
       .join(" ")
       .trim();
-    if (result) return result;
+    if (folded) return folded;
+  }
+
+  // Implicit multi-line plain scalar — value starts on the next line, indented,
+  // with no `|`/`>` indicator. YAML folds such lines into a single space-joined string.
+  const plainMultiline = frontmatter.match(
+    /^description:[ \t]*\n((?:[ \t]+.+(?:\n|$))+)/m,
+  );
+  if (plainMultiline) {
+    const folded = plainMultiline[1]
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+    if (folded) return folded;
   }
 
   return null;
@@ -825,6 +842,72 @@ export const markStaleContent = internalAction({
 
     // Chain into URL discovery
     await ctx.scheduler.runAfter(0, internal.skills.backfillDiscoverUrls, {});
+  },
+});
+
+/** One-shot: flip needsContentFetch=true on rows whose stored description looks
+ *  truncated by the pre-fix YAML parser (didn't end in terminal punctuation).
+ *  See extractFrontmatterDescription — implicit multi-line plain scalars used
+ *  to be cut at the first wrapped line.
+ */
+export const markTruncatedDescriptionsBatch = internalMutation({
+  args: { cursor: v.optional(v.string()) },
+  handler: async (ctx, { cursor }) => {
+    const paginationOpts = cursor
+      ? { numItems: 200, cursor }
+      : { numItems: 200, cursor: null };
+    const result = await ctx.db
+      .query("skillSummaries")
+      .paginate(paginationOpts);
+
+    let marked = 0;
+    for (const s of result.page) {
+      if (s.isDelisted) continue;
+      if (s.needsContentFetch) continue;
+      if (!s.skillMdUrl || s.skillMdUrl === "") continue;
+      if (!s.description) continue;
+
+      const last = s.description.trim().slice(-1);
+      if (".!?)\"']".includes(last)) continue;
+
+      await ctx.db.patch(s.skillDocId, { needsContentFetch: true });
+      await ctx.db.patch(s._id, { needsContentFetch: true });
+      marked++;
+    }
+
+    return {
+      nextCursor: result.continueCursor,
+      isDone: result.isDone,
+      marked,
+    };
+  },
+});
+
+export const markTruncatedDescriptions = internalAction({
+  args: { drain: v.optional(v.boolean()) },
+  handler: async (ctx, { drain }) => {
+    let cursor: string | undefined;
+    let isDone = false;
+    let total = 0;
+
+    while (!isDone) {
+      const result: { nextCursor: string; isDone: boolean; marked: number } =
+        await ctx.runMutation(
+          internal.skills.markTruncatedDescriptionsBatch,
+          { cursor },
+        );
+      total += result.marked;
+      cursor = result.nextCursor;
+      isDone = result.isDone;
+    }
+
+    console.log(
+      `Marked ${total} skills with likely-truncated descriptions for re-fetch`,
+    );
+
+    if (drain && total > 0) {
+      await ctx.scheduler.runAfter(0, internal.skills.backfillFetchContent, {});
+    }
   },
 });
 
