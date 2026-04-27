@@ -193,6 +193,8 @@ export function MarkdownContent({
         "[--tw-prose-invert-bullets:var(--color-muted-foreground)]",
         "[--tw-prose-quotes:var(--color-foreground)]",
         "[--tw-prose-invert-quotes:var(--color-foreground)]",
+        "[--tw-prose-quote-borders:var(--color-border)]",
+        "[--tw-prose-invert-quote-borders:var(--color-border)]",
       )}
     >
       <Streamdown
