@@ -17,7 +17,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/cubby-ui/breadcrumbs";
-import { cn, formatInstalls, timeAgo } from "@/lib/utils";
+import { cn, formatInstalls } from "@/lib/utils";
 
 type Params = Promise<{ org: string }>;
 
@@ -25,14 +25,15 @@ async function loadOrg(org: string) {
   "use cache";
   cacheLife("days");
 
-  const { repos, totalSkillCount, totalInstalls, latestUpdate } =
-    await fetchQuery(api.skills.listRepoAggregatesByOrg, { org });
+  const { repos, totalSkillCount, totalInstalls } = await fetchQuery(
+    api.skills.listRepoAggregatesByOrg,
+    { org },
+  );
 
   return {
     repos,
     skillCount: totalSkillCount,
     totalInstalls,
-    latestUpdate,
   };
 }
 
@@ -99,7 +100,7 @@ export default async function OrgPage({ params }: { params: Params }) {
 }
 
 async function OrgListContent({ org }: { org: string }) {
-  const { repos, skillCount, totalInstalls, latestUpdate } = await loadOrg(org);
+  const { repos, skillCount, totalInstalls } = await loadOrg(org);
 
   if (repos.length === 0) {
     notFound();
@@ -118,12 +119,6 @@ async function OrgListContent({ org }: { org: string }) {
           </span>
           <span aria-hidden="true">·</span>
           <span>{formatInstalls(totalInstalls)} installs</span>
-          {latestUpdate > 0 && (
-            <>
-              <span aria-hidden="true">·</span>
-              <span>updated {timeAgo(latestUpdate)}</span>
-            </>
-          )}
         </div>
         <div className="ml-auto">
           <Button

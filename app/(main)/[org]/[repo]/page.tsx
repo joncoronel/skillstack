@@ -21,7 +21,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/cubby-ui/breadcrumbs";
-import { cn, formatInstalls, timeAgo } from "@/lib/utils";
+import { cn, formatInstalls } from "@/lib/utils";
 
 type Params = Promise<{ org: string; repo: string }>;
 
@@ -35,12 +35,8 @@ async function loadRepo(source: string) {
     .sort((a, b) => b.installs - a.installs);
 
   const totalInstalls = visible.reduce((sum, s) => sum + s.installs, 0);
-  const latestUpdate = visible.reduce(
-    (max, s) => Math.max(max, s.contentFetchedAt ?? 0),
-    0,
-  );
 
-  return { skills: visible, totalInstalls, latestUpdate };
+  return { skills: visible, totalInstalls };
 }
 
 export async function generateMetadata({
@@ -116,7 +112,7 @@ export default async function RepoPage({ params }: { params: Params }) {
 }
 
 async function RepoListContent({ source }: { source: string }) {
-  const { skills, totalInstalls, latestUpdate } = await loadRepo(source);
+  const { skills, totalInstalls } = await loadRepo(source);
 
   if (skills.length === 0) {
     notFound();
@@ -131,12 +127,6 @@ async function RepoListContent({ source }: { source: string }) {
           </span>
           <span aria-hidden="true">·</span>
           <span>{formatInstalls(totalInstalls)} installs</span>
-          {latestUpdate > 0 && (
-            <>
-              <span aria-hidden="true">·</span>
-              <span>updated {timeAgo(latestUpdate)}</span>
-            </>
-          )}
         </div>
         <div className="ml-auto">
           <Button
@@ -225,10 +215,6 @@ function RepoListSkeleton() {
             ·
           </span>
           <Skeleton className="h-4 w-24" />
-          <span aria-hidden="true" className="text-muted-foreground">
-            ·
-          </span>
-          <Skeleton className="h-4 w-28" />
         </div>
         <div className="ml-auto">
           <Skeleton className="h-8 w-32 rounded-lg" />

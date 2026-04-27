@@ -2035,19 +2035,15 @@ export const listRepoAggregatesByOrg = query({
         source: string;
         skillCount: number;
         totalInstalls: number;
-        latestUpdate: number;
       }
     >();
     let totalSkillCount = 0;
     let totalInstalls = 0;
-    let latestUpdate = 0;
 
     for (const skill of summaries) {
       if (skill.isDelisted) continue;
       totalSkillCount += 1;
       totalInstalls += skill.installs;
-      const fetched = skill.contentFetchedAt ?? 0;
-      if (fetched > latestUpdate) latestUpdate = fetched;
 
       const slash = skill.source.indexOf("/");
       const repo =
@@ -2056,14 +2052,12 @@ export const listRepoAggregatesByOrg = query({
       if (existing) {
         existing.skillCount += 1;
         existing.totalInstalls += skill.installs;
-        if (fetched > existing.latestUpdate) existing.latestUpdate = fetched;
       } else {
         map.set(skill.source, {
           repo,
           source: skill.source,
           skillCount: 1,
           totalInstalls: skill.installs,
-          latestUpdate: fetched,
         });
       }
     }
@@ -2072,7 +2066,7 @@ export const listRepoAggregatesByOrg = query({
       (a, b) => b.totalInstalls - a.totalInstalls,
     );
 
-    return { repos, totalSkillCount, totalInstalls, latestUpdate };
+    return { repos, totalSkillCount, totalInstalls };
   },
 });
 
