@@ -5,6 +5,7 @@ import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { Button } from "@/components/ui/cubby-ui/button";
+import { CopyButton } from "@/components/ui/cubby-ui/copy-button/copy-button";
 import {
   generateInstallCommands,
   generateAllCommandsText,
@@ -19,26 +20,20 @@ interface InstallCommandsProps {
 export function InstallCommands({ skills, bundleId }: InstallCommandsProps) {
   const commands = generateInstallCommands(skills);
   const [copiedAll, setCopiedAll] = useState(false);
-  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const recordEvent = useMutation(api.bundleEvents.recordEvent);
+
+  function trackCopy() {
+    if (bundleId) {
+      recordEvent({ bundleId, eventType: "copy" }).catch(() => {});
+    }
+  }
 
   async function handleCopyAll() {
     const text = generateAllCommandsText(skills);
     await navigator.clipboard.writeText(text);
     setCopiedAll(true);
     setTimeout(() => setCopiedAll(false), 2000);
-    if (bundleId) {
-      recordEvent({ bundleId, eventType: "copy" }).catch(() => {});
-    }
-  }
-
-  async function handleCopyOne(index: number, command: string) {
-    await navigator.clipboard.writeText(command);
-    setCopiedIndex(index);
-    setTimeout(() => setCopiedIndex(null), 2000);
-    if (bundleId) {
-      recordEvent({ bundleId, eventType: "copy" }).catch(() => {});
-    }
+    trackCopy();
   }
 
   if (commands.length === 0) return null;
@@ -53,26 +48,25 @@ export function InstallCommands({ skills, bundleId }: InstallCommandsProps) {
       </div>
 
       <div className="space-y-3">
-        {commands.map((cmd, i) => (
-          <div key={cmd.source} className="group">
+        {commands.map((cmd) => (
+          <div key={cmd.source}>
             <p className="text-xs text-muted-foreground mb-1">
               {cmd.source}
               <span className="ml-1">
                 ({cmd.skills.length} skill{cmd.skills.length !== 1 ? "s" : ""})
               </span>
             </p>
-            <div className="relative">
-              <pre className="overflow-x-auto rounded-lg bg-muted px-4 py-3 text-sm font-mono">
+            <div className="group relative rounded-xl bg-muted w-fit max-w-full">
+              <pre className="overflow-x-auto px-4 py-3 text-sm font-mono pr-16">
                 {cmd.command}
               </pre>
-              <Button
-                variant="ghost"
-                size="xs"
-                className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
-                onClick={() => handleCopyOne(i, cmd.command)}
-              >
-                {copiedIndex === i ? "Copied!" : "Copy"}
-              </Button>
+              <div className="absolute top-1/2 right-1.5 -translate-y-1/2">
+                <CopyButton
+                  content={cmd.command}
+                  className="backdrop-blur-sm"
+                  onCopied={trackCopy}
+                />
+              </div>
             </div>
             {cmd.hasWarning && (
               <p className="mt-1.5 text-[11px] text-warning-foreground">
