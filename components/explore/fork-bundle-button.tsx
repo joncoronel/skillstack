@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useMutation, useQuery, useConvexAuth } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -13,14 +13,18 @@ import { toast } from "@/components/ui/cubby-ui/toast/toast";
 
 interface ForkBundleButtonProps {
   bundleId: Id<"bundles">;
+  // Resolved server-side from the JWT cookie and passed down. Avoids the
+  // client-side useConvexAuth() loading window that could otherwise bounce
+  // a signed-in user to /sign-in if they click during the first ~100ms.
+  isAuthenticated: boolean;
   className?: string;
 }
 
 export function ForkBundleButton({
   bundleId,
+  isAuthenticated,
   className,
 }: ForkBundleButtonProps) {
-  const { isAuthenticated } = useConvexAuth();
   const router = useRouter();
   const forkBundle = useMutation(api.bundles.forkBundle);
   const [forking, setForking] = useState(false);
