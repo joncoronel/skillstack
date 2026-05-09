@@ -13,6 +13,7 @@ import { v } from "convex/values";
 // and stops being retried automatically.
 export const MAX_DISCOVERY_FAILURES = 3;
 
+
 // ---------------------------------------------------------------------------
 // Admin guard — checks caller's email against ADMIN_EMAILS env var
 // ---------------------------------------------------------------------------
@@ -546,11 +547,7 @@ export const triggerSync = action({
 
 export const triggerBackfill = action({
   args: {
-    type: v.union(
-      v.literal("summaries"),
-      v.literal("syncFlags"),
-      v.literal("embeddings"),
-    ),
+    type: v.union(v.literal("summaries"), v.literal("embeddings")),
   },
   handler: async (ctx, { type }) => {
     await assertAdmin(ctx);
@@ -559,13 +556,6 @@ export const triggerBackfill = action({
         await ctx.scheduler.runAfter(
           0,
           internal.skills.backfillSkillSummaries,
-          {},
-        );
-        break;
-      case "syncFlags":
-        await ctx.scheduler.runAfter(
-          0,
-          internal.skills.backfillAllSyncFlags,
           {},
         );
         break;

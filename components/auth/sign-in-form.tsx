@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useSignIn } from "@clerk/nextjs";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/cubby-ui/input";
 import { AuthFrame } from "./auth-frame";
 import { OAuthButtons } from "./oauth-buttons";
@@ -22,7 +22,6 @@ export function SignInForm() {
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const router = useRouter();
-  const searchParams = useSearchParams();
 
   // Cache Components keeps this route mounted via React Activity on
   // navigation, which otherwise preserves input values between visits.
@@ -47,7 +46,16 @@ export function SignInForm() {
     if (error) return;
 
     if (signIn.status === "complete") {
-      const redirectUrl = getSafeRedirectUrl(searchParams.get("redirect_url"));
+      // Read redirect_url directly from window.location instead of via
+      // useSearchParams. Cache Components forces any component that calls
+      // useSearchParams to opt out of static prerendering, which would
+      // push the auth flow into dynamic rendering on every request. This
+      // runs after submit (client-side), so window is available and we
+      // avoid the prerender penalty. Don't "fix" back to the hook without
+      // weighing the cache impact.
+      const redirectUrl = getSafeRedirectUrl(
+        new URLSearchParams(window.location.search).get("redirect_url"),
+      );
       await signIn.finalize({
         navigate: ({ session, decorateUrl }) => {
           if (session?.currentTask) return;

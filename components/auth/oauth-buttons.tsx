@@ -1,7 +1,6 @@
 "use client";
 
 import { useSignIn, useSignUp } from "@clerk/nextjs";
-import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/cubby-ui/button";
 import { getSafeRedirectUrl } from "./shared";
 
@@ -50,11 +49,19 @@ interface OAuthButtonsProps {
 export function OAuthButtons({ mode }: OAuthButtonsProps) {
   const { signIn } = useSignIn();
   const { signUp } = useSignUp();
-  const searchParams = useSearchParams();
 
   const handleOAuth = async (strategy: OAuthStrategy) => {
     const auth = mode === "sign-in" ? signIn : signUp;
-    const redirectUrl = getSafeRedirectUrl(searchParams.get("redirect_url"));
+    // Read redirect_url directly from window.location instead of via
+    // useSearchParams. Cache Components forces any component that calls
+    // useSearchParams to opt out of static prerendering, which would push
+    // the entire auth flow into dynamic rendering on every request.
+    // This handler only runs on click (client-side), so window.location is
+    // available and avoids the prerender penalty. Don't "fix" back to the
+    // hook without weighing the cache impact.
+    const redirectUrl = getSafeRedirectUrl(
+      new URLSearchParams(window.location.search).get("redirect_url"),
+    );
 
     await auth.sso({
       strategy,
