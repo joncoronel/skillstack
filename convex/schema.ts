@@ -204,6 +204,15 @@ export default defineSchema({
     // Hot rail: walk by hotChange descending. Same undefined-skip rule applies
     // — queries MUST use `q.eq("isDelisted", false).gt("hotChange", 0)`.
     .index("by_isDelisted_hotChange", ["isDelisted", "hotChange"])
+    // Companion index for the applyHot cleanup walk. A row that "spikes to
+    // flat" can end up with hotChange=0 but hotInstallsYesterday still set;
+    // the by_isDelisted_hotChange walk's `gt(0)` range would miss it, so the
+    // cleanup unions both indices to clear orphaned hotInstallsYesterday.
+    // Queries MUST use `q.eq("isDelisted", false).gt("hotInstallsYesterday", 0)`.
+    .index("by_isDelisted_hotInstallsYesterday", [
+      "isDelisted",
+      "hotInstallsYesterday",
+    ])
     // Curated/official browsing — owner pages and the "Official only" filter.
     // Queries MUST use `q.gt("curatedOwner", "")` so the walk skips the
     // overwhelmingly-undefined rows at the start of the index.
@@ -248,6 +257,20 @@ export default defineSchema({
   })
     .index("by_skillDocId", ["skillDocId"])
     .index("by_source_skillId", ["source", "skillId"]),
+
+  // Denormalized owner-level rollup powering the /official directory page.
+  // Computed by syncCurated from the same curated set that drives the
+  // per-skill `curatedOwner` stamp. Reading this table is O(N owners),
+  // ~hundreds of rows, instead of O(N curated skills) which today is ~4,400
+  // and growing. The /official page is hour-cached at the Next.js layer,
+  // but on cache miss the previous .collect() of every curated summary was
+  // a ~4 KB-per-row read budget hit; this table caps that to ~50 bytes per
+  // owner.
+  curatedOwnerSummaries: defineTable({
+    owner: v.string(),
+    skillCount: v.number(),
+    repoCount: v.number(),
+  }),
 
   githubTreeCache: defineTable({
     repo: v.string(),

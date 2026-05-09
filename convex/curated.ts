@@ -15,7 +15,6 @@
 import {
   internalAction,
   internalMutation,
-  internalQuery,
   query,
 } from "./_generated/server";
 import { internal } from "./_generated/api";
@@ -100,8 +99,33 @@ export const syncCurated = internalAction({
       isDone = result.isDone;
     }
 
+    // Pass 3: rebuild the owner-level rollup that drives /official. This
+    // is computed entirely from `curatedEntries` (the API response we
+    // already have in scope), so it doesn't need to read the per-skill
+    // table again. The rollup is small (~hundreds of owners) so it fits
+    // in a single mutation under the 4096-read limit.
+    type OwnerAcc = { skillCount: number; sources: Set<string> };
+    const byOwner = new Map<string, OwnerAcc>();
+    for (const e of curatedEntries) {
+      const acc = byOwner.get(e.owner);
+      if (acc) {
+        acc.skillCount++;
+        acc.sources.add(e.source);
+      } else {
+        byOwner.set(e.owner, { skillCount: 1, sources: new Set([e.source]) });
+      }
+    }
+    const ownerRows = Array.from(byOwner.entries()).map(([owner, acc]) => ({
+      owner,
+      skillCount: acc.skillCount,
+      repoCount: acc.sources.size,
+    }));
+    await ctx.runMutation(internal.curated.applyCuratedOwnerRollup, {
+      owners: ownerRows,
+    });
+
     console.log(
-      `syncCurated: stamped ${totalStamped}, cleared ${totalCleared}`,
+      `syncCurated: stamped ${totalStamped}, cleared ${totalCleared}, owners ${ownerRows.length}`,
     );
   },
 });
@@ -134,6 +158,54 @@ export const applyCuratedSetBatch = internalMutation({
       }
     }
     return { stamped };
+  },
+});
+
+/**
+ * Rebuild the curatedOwnerSummaries rollup table from the latest sync's
+ * per-owner counts. Single mutation: the table is small (~hundreds of
+ * owners), so the read budget is not a concern. Upserts current rows and
+ * deletes any owner that's no longer present in `owners`.
+ */
+export const applyCuratedOwnerRollup = internalMutation({
+  args: {
+    owners: v.array(
+      v.object({
+        owner: v.string(),
+        skillCount: v.number(),
+        repoCount: v.number(),
+      }),
+    ),
+  },
+  handler: async (ctx, { owners }) => {
+    const wanted = new Map(owners.map((o) => [o.owner, o]));
+
+    // Update / insert. Patch only when something changed to avoid spurious
+    // reactivity on subscribed components.
+    const existing = await ctx.db.query("curatedOwnerSummaries").collect();
+    const existingByOwner = new Map(existing.map((e) => [e.owner, e]));
+
+    for (const target of owners) {
+      const current = existingByOwner.get(target.owner);
+      if (!current) {
+        await ctx.db.insert("curatedOwnerSummaries", target);
+      } else if (
+        current.skillCount !== target.skillCount ||
+        current.repoCount !== target.repoCount
+      ) {
+        await ctx.db.patch(current._id, {
+          skillCount: target.skillCount,
+          repoCount: target.repoCount,
+        });
+      }
+    }
+
+    // Delete owners that fell out of the curated set entirely.
+    for (const row of existing) {
+      if (!wanted.has(row.owner)) {
+        await ctx.db.delete(row._id);
+      }
+    }
   },
 });
 
@@ -178,45 +250,22 @@ export const clearStaleCuratedOwnersBatch = internalMutation({
  * owner — name, skill count, and distinct-source (repo) count. Sorted
  * alphabetically (this is a directory, not a popularity ranking).
  *
- * Lightweight by design: no skill arrays. The /official page is a directory
- * linking to per-org pages (`/[org]`) that already render the full skill
- * list, so duplicating that data here would be redundant.
+ * Reads the denormalized curatedOwnerSummaries table directly. Counts are
+ * computed at sync time inside syncCurated, so this query is O(N owners)
+ * — typically a few hundred — instead of O(N curated skills). Note: the
+ * counts here include delisted/duplicate skills (they were curated when
+ * stamped). If that drift becomes a problem, syncCurated can subtract
+ * delisted/duplicate rows during Pass 3 — but it's a low-scale effect.
  */
 export const listCuratedOwners = query({
   args: {},
   handler: async (ctx) => {
-    const summaries = await ctx.db
-      .query("skillSummaries")
-      .withIndex("by_curatedOwner", (q) => q.gt("curatedOwner", ""))
-      .collect();
-
-    type OwnerAcc = {
-      owner: string;
-      skillCount: number;
-      sources: Set<string>;
-    };
-    const byOwner = new Map<string, OwnerAcc>();
-
-    for (const s of summaries) {
-      if (s.isDelisted || s.isDuplicate) continue;
-      const owner = s.curatedOwner!;
-      const existing = byOwner.get(owner);
-      if (existing) {
-        existing.skillCount += 1;
-        existing.sources.add(s.source);
-      } else {
-        byOwner.set(owner, {
-          owner,
-          skillCount: 1,
-          sources: new Set([s.source]),
-        });
-      }
-    }
-
-    return Array.from(byOwner.values())
-      .map(({ sources, ...rest }) => ({
-        ...rest,
-        repoCount: sources.size,
+    const rows = await ctx.db.query("curatedOwnerSummaries").collect();
+    return rows
+      .map((r) => ({
+        owner: r.owner,
+        skillCount: r.skillCount,
+        repoCount: r.repoCount,
       }))
       .sort((a, b) => a.owner.localeCompare(b.owner));
   },

@@ -207,17 +207,38 @@ export const applyHot = internalMutation({
       }
     }
 
-    // Clear hot fields from rows that fell off. Walk the by_isDelisted_hotChange
-    // index with a positive-only range so we skip the ~75k rows where
-    // hotChange is undefined.
-    const previouslyHot = await ctx.db
-      .query("skillSummaries")
-      .withIndex("by_isDelisted_hotChange", (q) =>
-        q.eq("isDelisted", false).gt("hotChange", 0),
-      )
-      .collect();
+    // Clear hot fields from rows that fell off. Walk BOTH the hotChange and
+    // hotInstallsYesterday indices and union the IDs — a row that "spiked to
+    // flat" can have hotChange=0 (or even negative) while hotInstallsYesterday
+    // is still > 0, so the hotChange walk's `gt(0)` would miss it and leave
+    // hotInstallsYesterday set forever. Walking both indices catches that
+    // orphan case. Each index walk skips its respective undefined range,
+    // keeping the totals bounded (at most a few hundred rows after dedup).
+    const [previouslyHotByChange, previouslyHotByInstalls] = await Promise.all(
+      [
+        ctx.db
+          .query("skillSummaries")
+          .withIndex("by_isDelisted_hotChange", (q) =>
+            q.eq("isDelisted", false).gt("hotChange", 0),
+          )
+          .collect(),
+        ctx.db
+          .query("skillSummaries")
+          .withIndex("by_isDelisted_hotInstallsYesterday", (q) =>
+            q.eq("isDelisted", false).gt("hotInstallsYesterday", 0),
+          )
+          .collect(),
+      ],
+    );
 
-    for (const summary of previouslyHot) {
+    const previouslyHot = new Map<
+      string,
+      (typeof previouslyHotByChange)[number]
+    >();
+    for (const s of previouslyHotByChange) previouslyHot.set(s._id, s);
+    for (const s of previouslyHotByInstalls) previouslyHot.set(s._id, s);
+
+    for (const summary of previouslyHot.values()) {
       const key = `${summary.source}|${summary.skillId}`;
       if (!seen.has(key)) {
         await ctx.db.patch(summary._id, {

@@ -46,6 +46,13 @@ export function SignInForm() {
     if (error) return;
 
     if (signIn.status === "complete") {
+      // Read redirect_url directly from window.location instead of via
+      // useSearchParams. Cache Components forces any component that calls
+      // useSearchParams to opt out of static prerendering, which would
+      // push the auth flow into dynamic rendering on every request. This
+      // runs after submit (client-side), so window is available and we
+      // avoid the prerender penalty. Don't "fix" back to the hook without
+      // weighing the cache impact.
       const redirectUrl = getSafeRedirectUrl(
         new URLSearchParams(window.location.search).get("redirect_url"),
       );

@@ -22,6 +22,7 @@ import {
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
+import { dequal } from "dequal";
 import {
   getSkillAudits,
   SkillsApiNotFoundError,
@@ -75,6 +76,7 @@ function reduceWorst(audits: V1AuditEntry[]): {
   }
   return { worstStatus, worstRiskLevel: worstRisk };
 }
+
 
 // ---------------------------------------------------------------------------
 // Audit-fetch queue (per-skill, drained by the daily chain)
@@ -143,13 +145,15 @@ export const writeAuditResult = internalMutation({
       )
       .unique();
 
-    // Deep-compare via JSON. Convex/V8 serialize objects in stable key order,
-    // and skills.sh's API also returns a consistent shape, so structural
-    // equality maps to string equality here. This catches "audit unchanged"
-    // including cases where partners re-stamped auditedAt without changing
-    // the verdict (we treat re-stamps as real change events worth recording).
-    const auditsChanged =
-      !existing || JSON.stringify(existing.audits) !== JSON.stringify(args.audits);
+    // Deep compare via dequal. Catches "audit unchanged" including cases
+    // where partners re-stamped auditedAt without changing the verdict (we
+    // treat re-stamps as real change events worth recording). Immune to
+    // upstream key-order changes and forward-compatible: any new field
+    // skills.sh adds is automatically part of the comparison without us
+    // needing to update a typed schema. Was previously JSON.stringify which
+    // relied on V8's de-facto stable key ordering, not a language-level
+    // guarantee.
+    const auditsChanged = !existing || !dequal(existing.audits, args.audits);
     const worstStatusChanged =
       !existing || existing.worstStatus !== args.worstStatus;
     const worstRiskChanged =
@@ -330,144 +334,6 @@ export const syncAudits = internalAction({
     await ctx.scheduler.runAfter(0, internal.audits.fetchAuditBatch, {});
   },
 });
-
-// ---------------------------------------------------------------------------
-// One-shot backfill — flag every active skill for audit
-// ---------------------------------------------------------------------------
-//
-// After switching to per-skill audit refresh, existing skills don't have
-// `needsAudit` set. This walks every active row and flags it so the
-// fetchAuditBatch chain picks them up. Run once after the schema migration.
-// Idempotent — already-flagged rows are skipped.
-//
-// Run via: npx convex run audits:flagAllForAudit
-
-export const flagAllForAuditBatch = internalMutation({
-  args: { cursor: v.optional(v.string()) },
-  handler: async (ctx, { cursor }) => {
-    const result = await ctx.db
-      .query("skillSummaries")
-      .paginate({ numItems: 200, cursor: cursor ?? null });
-
-    let flagged = 0;
-    for (const summary of result.page) {
-      if (summary.isDelisted) continue;
-      if (summary.isDuplicate) continue;
-      if (summary.needsAudit === true) continue;
-
-      await ctx.db.patch(summary._id, { needsAudit: true });
-      await ctx.db.patch(summary.skillDocId, { needsAudit: true });
-      flagged++;
-    }
-
-    return {
-      nextCursor: result.continueCursor,
-      isDone: result.isDone,
-      flagged,
-    };
-  },
-});
-
-export const flagAllForAudit = internalAction({
-  args: {},
-  handler: async (ctx) => {
-    let cursor: string | undefined;
-    let isDone = false;
-    let total = 0;
-
-    while (!isDone) {
-      const result: {
-        nextCursor: string;
-        isDone: boolean;
-        flagged: number;
-      } = await ctx.runMutation(internal.audits.flagAllForAuditBatch, {
-        cursor,
-      });
-      total += result.flagged;
-      cursor = result.nextCursor;
-      isDone = result.isDone;
-    }
-
-    console.log(`Flagged ${total} skills for audit fetch`);
-
-    if (total > 0) {
-      await ctx.scheduler.runAfter(0, internal.audits.fetchAuditBatch, {});
-    }
-
-    return { flagged: total };
-  },
-});
-
-// ---------------------------------------------------------------------------
-// One-shot: re-flag rows that came back as "unknown" the first time
-// ---------------------------------------------------------------------------
-//
-// skills.sh's audit pipeline is async — when we fetched audits during the
-// initial backfill, some skills hadn't been audited yet (API returned 404,
-// stored as worstStatus="unknown"). Their audits trickle in over hours/days.
-// This action re-flags every row currently marked "unknown" so we re-fetch
-// and pick up audits that have since landed. Run via:
-//   npx convex run audits:reflagUnknownAudits
-
-export const reflagUnknownAuditsBatch = internalMutation({
-  args: { cursor: v.optional(v.string()) },
-  handler: async (ctx, { cursor }) => {
-    const result = await ctx.db
-      .query("skillSummaries")
-      .paginate({ numItems: 200, cursor: cursor ?? null });
-
-    let flagged = 0;
-    for (const summary of result.page) {
-      if (summary.isDelisted) continue;
-      if (summary.isDuplicate) continue;
-      if (summary.needsAudit === true) continue;
-      // Only re-flag rows whose audit came back as "unknown" — leave already-
-      // populated pass/warn/fail rows alone (their data is current).
-      if (summary.worstAuditStatus !== "unknown") continue;
-
-      await ctx.db.patch(summary._id, { needsAudit: true });
-      await ctx.db.patch(summary.skillDocId, { needsAudit: true });
-      flagged++;
-    }
-
-    return {
-      nextCursor: result.continueCursor,
-      isDone: result.isDone,
-      flagged,
-    };
-  },
-});
-
-export const reflagUnknownAudits = internalAction({
-  args: {},
-  handler: async (ctx) => {
-    let cursor: string | undefined;
-    let isDone = false;
-    let total = 0;
-
-    while (!isDone) {
-      const result: {
-        nextCursor: string;
-        isDone: boolean;
-        flagged: number;
-      } = await ctx.runMutation(internal.audits.reflagUnknownAuditsBatch, {
-        cursor,
-      });
-      total += result.flagged;
-      cursor = result.nextCursor;
-      isDone = result.isDone;
-    }
-
-    console.log(`Re-flagged ${total} unknown-audit skills for re-fetch`);
-
-    if (total > 0) {
-      await ctx.scheduler.runAfter(0, internal.audits.fetchAuditBatch, {});
-    }
-
-    return { flagged: total };
-  },
-});
-
 
 // ---------------------------------------------------------------------------
 // Public queries

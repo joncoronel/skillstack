@@ -558,236 +558,6 @@ function extractBodyContent(raw: string): string | null {
 }
 
 // ---------------------------------------------------------------------------
-// One-shot v1 migration backfill
-// ---------------------------------------------------------------------------
-//
-// Existing skill rows from the pre-v1 sync chain have `syncHash` in the
-// legacy "name|leaderboard" format and `needsContentFetch: false`. The new
-// `upsertSkillsBatch` only flags NEW or RELISTED skills for detail fetch, so
-// existing rows are stuck with their old (GitHub-scraped) content forever
-// without an explicit backfill.
-//
-// This action walks every active skillSummaries row, and for any row whose
-// `syncHash` isn't a SHA-256 hex string yet, sets `needsContentFetch: true`
-// (and clears `hasContentFetchError`, giving previously-failed rows another
-// shot via the v1 API). Then it kicks off `fetchSkillDetailBatch` to drain
-// the queue.
-//
-// One-shot: safe to run only when migrating off the legacy pipeline. Idempotent
-// (re-running after success is a no-op since all rows will then have SHA-256
-// hashes).
-//
-// Run via: npx convex run skills:flagLegacySyncHashForRefetch
-
-function isSha256Hex(s: string | undefined): boolean {
-  return s !== undefined && s.length === 64 && /^[0-9a-f]+$/.test(s);
-}
-
-// ---------------------------------------------------------------------------
-// One-shot: re-flag all hasContentFetchError rows for a fresh attempt
-// ---------------------------------------------------------------------------
-//
-// After switching from pure-v1 to the hybrid pipeline, the previously-failed
-// rows can be retried via the better discovery (GitHub) or v1 detail (well-
-// known) path. Most of them were flagged because skills.sh's snapshot was
-// empty for the skill — but our recursive case-insensitive Tree-API walk
-// will find SKILL.md files at deep / unconventional paths that skills.sh
-// missed.
-//
-// Run via: npx convex run skills:reflagErroredSkills
-
-export const reflagErroredSkillsBatch = internalMutation({
-  args: { cursor: v.optional(v.string()) },
-  handler: async (ctx, { cursor }) => {
-    const result = await ctx.db
-      .query("skillSummaries")
-      .withIndex("by_hasContentFetchError", (q) =>
-        q.eq("hasContentFetchError", true),
-      )
-      .paginate({ numItems: 200, cursor: cursor ?? null });
-
-    let flagged = 0;
-    for (const summary of result.page) {
-      if (summary.isDelisted) continue;
-      const isGitHub = isGitHubSource(summary.source);
-
-      // Clear the error flag and route to the right re-fetch path. For GitHub
-      // sources we always send back through discovery (clearing skillMdUrl)
-      // because we want the recursive Tree walk to find paths the v1 endpoint
-      // missed. For well-known we just re-flag for v1 detail.
-      if (isGitHub) {
-        await ctx.db.patch(summary._id, {
-          hasContentFetchError: false,
-          needsDiscovery: true,
-          needsContentFetch: false,
-          skillMdUrl: "",
-          hasSkillMdUrl: false,
-          discoveryFailCount: 0,
-        });
-        await ctx.db.patch(summary.skillDocId, {
-          hasContentFetchError: false,
-          needsDiscovery: true,
-          needsContentFetch: false,
-          skillMdUrl: "",
-          discoveryFailCount: 0,
-        });
-      } else {
-        await ctx.db.patch(summary._id, {
-          hasContentFetchError: false,
-          needsContentFetch: true,
-        });
-        await ctx.db.patch(summary.skillDocId, {
-          hasContentFetchError: false,
-          needsContentFetch: true,
-        });
-      }
-      flagged++;
-    }
-
-    return {
-      nextCursor: result.continueCursor,
-      isDone: result.isDone,
-      flagged,
-    };
-  },
-});
-
-export const reflagErroredSkills = internalAction({
-  args: {},
-  handler: async (ctx) => {
-    let cursor: string | undefined;
-    let isDone = false;
-    let total = 0;
-
-    while (!isDone) {
-      const result: {
-        nextCursor: string;
-        isDone: boolean;
-        flagged: number;
-      } = await ctx.runMutation(internal.skills.reflagErroredSkillsBatch, {
-        cursor,
-      });
-      total += result.flagged;
-      cursor = result.nextCursor;
-      isDone = result.isDone;
-    }
-
-    console.log(`Re-flagged ${total} previously-errored skills for re-fetch`);
-
-    if (total > 0) {
-      await ctx.scheduler.runAfter(
-        0,
-        internal.skills.backfillDiscoverUrls,
-        {},
-      );
-      await ctx.scheduler.runAfter(
-        2_000,
-        internal.skills.fetchSkillDetailBatch,
-        {},
-      );
-    }
-
-    return { flagged: total };
-  },
-});
-
-export const flagLegacySyncHashForRefetchBatch = internalMutation({
-  args: { cursor: v.optional(v.string()) },
-  handler: async (ctx, { cursor }) => {
-    const result = await ctx.db
-      .query("skillSummaries")
-      .paginate({ numItems: 200, cursor: cursor ?? null });
-
-    let flagged = 0;
-    for (const summary of result.page) {
-      if (summary.isDelisted) continue;
-      if (isSha256Hex(summary.syncHash)) continue;
-
-      const isGitHub = isGitHubSource(summary.source);
-      // Route by source type: GitHub goes through discovery (rediscover or
-      // re-fetch depending on whether we have a URL). Well-known goes through
-      // v1 detail directly.
-      if (isGitHub) {
-        const hasUrl = summary.skillMdUrl && summary.skillMdUrl !== "";
-        if (hasUrl && summary.needsContentFetch === true) continue;
-        if (!hasUrl && summary.needsDiscovery === true) continue;
-        await ctx.db.patch(summary._id, {
-          ...(hasUrl
-            ? { needsContentFetch: true }
-            : { needsDiscovery: true }),
-          hasContentFetchError: false,
-        });
-        await ctx.db.patch(summary.skillDocId, {
-          ...(hasUrl
-            ? { needsContentFetch: true }
-            : { needsDiscovery: true }),
-          hasContentFetchError: false,
-        });
-      } else {
-        if (summary.needsContentFetch === true) continue;
-        await ctx.db.patch(summary._id, {
-          needsContentFetch: true,
-          hasContentFetchError: false,
-        });
-        await ctx.db.patch(summary.skillDocId, {
-          needsContentFetch: true,
-          hasContentFetchError: false,
-        });
-      }
-      flagged++;
-    }
-
-    return {
-      nextCursor: result.continueCursor,
-      isDone: result.isDone,
-      flagged,
-    };
-  },
-});
-
-export const flagLegacySyncHashForRefetch = internalAction({
-  args: {},
-  handler: async (ctx) => {
-    let cursor: string | undefined;
-    let isDone = false;
-    let total = 0;
-
-    while (!isDone) {
-      const result: {
-        nextCursor: string;
-        isDone: boolean;
-        flagged: number;
-      } = await ctx.runMutation(
-        internal.skills.flagLegacySyncHashForRefetchBatch,
-        { cursor },
-      );
-      total += result.flagged;
-      cursor = result.nextCursor;
-      isDone = result.isDone;
-    }
-
-    console.log(`Flagged ${total} skills for re-fetch`);
-
-    if (total > 0) {
-      // Kick off the discovery + raw-fetch chain (covers GitHub) and the
-      // v1 detail chain (covers well-known). Both self-schedule until drained.
-      await ctx.scheduler.runAfter(
-        0,
-        internal.skills.backfillDiscoverUrls,
-        {},
-      );
-      await ctx.scheduler.runAfter(
-        2_000,
-        internal.skills.fetchSkillDetailBatch,
-        {},
-      );
-    }
-
-    return { flagged: total };
-  },
-});
-
-// ---------------------------------------------------------------------------
 // Phase 1 — URL Discovery (GitHub Tree API)
 // ---------------------------------------------------------------------------
 //
@@ -1886,6 +1656,15 @@ export const delistSkillsBatch = internalMutation({
           needsEmbedding: false,
           hasEmbedding: false,
           skillEmbeddingId: undefined,
+          // Clear leaderboard denormalizations on delist. Listing/search
+          // queries already filter on isDelisted: false, so leaving these
+          // populated isn't user-facing — but it confuses anyone debugging
+          // raw rows ("why does this delisted skill have a trendingRank?")
+          // and causes drift if the row ever relists later via
+          // upsertSkillsBatch's fast-path.
+          trendingRank: undefined,
+          hotChange: undefined,
+          hotInstallsYesterday: undefined,
         });
       }
 
@@ -1902,6 +1681,10 @@ export const delistSkillsBatch = internalMutation({
           needsContentFetch: false,
           needsDiscovery: false,
           needsEmbedding: false,
+          // Mirror the leaderboard cleanup from skillSummaries above.
+          trendingRank: undefined,
+          hotChange: undefined,
+          hotInstallsYesterday: undefined,
         });
 
         // Delete the embedding row entirely — delisted skills are excluded

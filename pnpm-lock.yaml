@@ -59,6 +59,9 @@ importers:
       dayjs:
         specifier: ^1.11.19
         version: 1.11.19
+      dequal:
+        specifier: ^2.0.3
+        version: 2.0.3
       embla-carousel-react:
         specifier: ^8.6.0
         version: 8.6.0(react@19.2.3)
