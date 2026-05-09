@@ -2,7 +2,11 @@
 
 import { useQueryState } from "nuqs";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Search01Icon, Cancel01Icon } from "@hugeicons/core-free-icons";
+import {
+  Search01Icon,
+  Cancel01Icon,
+  Loading03Icon,
+} from "@hugeicons/core-free-icons";
 import { exploreQueryParser } from "@/lib/search-params";
 import {
   InputGroup,
@@ -11,13 +15,19 @@ import {
   InputGroupButton,
 } from "@/components/ui/cubby-ui/input-group";
 import { Kbd } from "@/components/ui/cubby-ui/kbd";
+import { cn } from "@/lib/utils";
 
 interface ExploreFiltersProps {
   className?: string;
   ref?: React.Ref<HTMLInputElement>;
+  loading?: boolean;
 }
 
-export function ExploreFilters({ className, ref }: ExploreFiltersProps) {
+export function ExploreFilters({
+  className,
+  ref,
+  loading,
+}: ExploreFiltersProps) {
   const [query, setQuery] = useQueryState("q", exploreQueryParser);
   const hasQuery = query.length > 0;
 
@@ -26,9 +36,13 @@ export function ExploreFilters({ className, ref }: ExploreFiltersProps) {
       <InputGroup className="max-w-md">
         <InputGroupAddon align="inline-start">
           <HugeiconsIcon
-            icon={Search01Icon}
+            icon={loading ? Loading03Icon : Search01Icon}
             strokeWidth={2}
-            className="size-4"
+            className={cn(
+              "size-4",
+              loading && "animate-spin motion-reduce:animate-none",
+            )}
+            aria-label={loading ? "Searching" : undefined}
           />
         </InputGroupAddon>
         <InputGroupInput
