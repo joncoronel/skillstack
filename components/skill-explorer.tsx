@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryState } from "nuqs";
-import { useDebounce } from "use-debounce";
 import type { FunctionReturnType } from "convex/server";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
@@ -44,7 +43,7 @@ interface SkillExplorerProps {
   initialHot: FunctionReturnType<typeof api.leaderboards.listHot>;
 }
 
-const TEXT_DEBOUNCE_MS = 300;
+const TEXT_DEBOUNCE_MS = 200;
 
 const skillDetailHandle = createSkillDetailHandle();
 
@@ -59,9 +58,24 @@ export function SkillExplorer({
   const [repoUrl, setRepoUrl] = useQueryState("repo", repoUrlParser);
 
   // Debounce the search query so results don't re-fetch on every keystroke.
-  // If the input is cleared, skip the debounce and show defaults immediately.
-  const [debouncedText] = useDebounce(textQuery.trim(), TEXT_DEBOUNCE_MS);
-  const effectiveTextQuery = textQuery.trim() ? debouncedText : "";
+  // The empty-input case is reset synchronously at render time — without that,
+  // a fast retype after clearing would see the previous query's value leak
+  // through and break the fresh-search-after-clear skeleton heuristic in
+  // SkillSearchResults.
+  const trimmedTextQuery = textQuery.trim();
+  const [debouncedText, setDebouncedText] = useState(trimmedTextQuery);
+  if (!trimmedTextQuery && debouncedText) {
+    setDebouncedText("");
+  }
+  useEffect(() => {
+    if (!trimmedTextQuery) return;
+    const timer = setTimeout(
+      () => setDebouncedText(trimmedTextQuery),
+      TEXT_DEBOUNCE_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [trimmedTextQuery]);
+  const effectiveTextQuery = trimmedTextQuery ? debouncedText : "";
 
   // Local input state for the repo field — only pushed to the URL on submit.
   const [repoInput, setRepoInput] = useState(repoUrl);
@@ -207,11 +221,15 @@ export function SkillExplorer({
             (search results, repo analysis) survives mode switches. */}
         <TabsPanels>
           <TabsContent value="text">
-            {/* Both lists stay mounted so the default list preserves scroll
-                + pagination state across type-and-clear. `hidden` maps to
-                display:none, which makes the IntersectionObserver sentinel
-                non-intersecting while the user is searching — no spurious
-                background fetches. */}
+            {/* Both lists stay mounted: the default list preserves scroll +
+                pagination state across type-and-clear, and the search list
+                preserves its 60+ rows (each with jotai subscriptions) across
+                browse ↔ search toggles. `hidden` maps to display:none, which
+                also makes the default list's IntersectionObserver sentinel
+                non-intersecting while the user is searching. The search list
+                tracks "did the user clear in between" via a lastSettledQuery
+                state so the skeleton still fires for fresh-search-after-clear
+                without paying remount cost on every toggle. */}
             <div hidden={!!effectiveTextQuery}>
               <DefaultSkillsList
                 initialPage={initialPopularSkills}
