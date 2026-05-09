@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import {
+  useQuery,
+  useQueryClient,
+  keepPreviousData,
+} from "@tanstack/react-query";
 import { convexQuery } from "@convex-dev/react-query";
 import type { FunctionReturnType } from "convex/server";
 import { useQueryState } from "nuqs";
@@ -35,8 +39,25 @@ export function ExploreContent() {
     const timer = setTimeout(() => setDebouncedQuery(trimmedQuery), 300);
     return () => clearTimeout(timer);
   }, [trimmedQuery]);
-  // If raw query is empty, bypass debounce and show browse view immediately.
-  const effectiveQuery = trimmedQuery ? debouncedQuery : "";
+
+  // If the trimmed query already has cached data in TanStack Query's cache,
+  // bypass the 300ms debounce and use it directly — useQuery hits the cache
+  // synchronously and renders results without waiting. Falls back to the
+  // debounced value for queries that haven't been searched yet (so the
+  // backend isn't pinged on every keystroke).
+  const queryClient = useQueryClient();
+  const cachedQueryKey = trimmedQuery
+    ? convexQuery(api.bundles.searchPublic, { query: trimmedQuery }).queryKey
+    : null;
+  const isCachedForTrimmed = cachedQueryKey
+    ? queryClient.getQueryData(cachedQueryKey) !== undefined
+    : false;
+
+  const effectiveQuery = trimmedQuery
+    ? isCachedForTrimmed
+      ? trimmedQuery
+      : debouncedQuery
+    : "";
 
   const {
     data: results,
@@ -72,6 +93,7 @@ export function ExploreContent() {
   const showResults = effectiveQuery.length > 0 && hasSettled;
   const isInputLoading =
     trimmedQuery.length > 0 &&
+    !isCachedForTrimmed &&
     (trimmedQuery !== effectiveQuery || isFetching || isPlaceholderData);
 
   const inputRef = useRef<HTMLInputElement>(null);
