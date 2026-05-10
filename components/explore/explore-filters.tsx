@@ -2,11 +2,7 @@
 
 import { useQueryState } from "nuqs";
 import { HugeiconsIcon } from "@hugeicons/react";
-import {
-  Search01Icon,
-  Cancel01Icon,
-  Loading03Icon,
-} from "@hugeicons/core-free-icons";
+import { Search01Icon, Cancel01Icon } from "@hugeicons/core-free-icons";
 import { exploreQueryParser } from "@/lib/search-params";
 import {
   InputGroup,
@@ -15,7 +11,7 @@ import {
   InputGroupButton,
 } from "@/components/ui/cubby-ui/input-group";
 import { Kbd } from "@/components/ui/cubby-ui/kbd";
-import { cn } from "@/lib/utils";
+import { DotMatrixRipple } from "@/components/ui/dot-matrix-ripple";
 
 interface ExploreFiltersProps {
   className?: string;
@@ -35,15 +31,15 @@ export function ExploreFilters({
     <section className={className}>
       <InputGroup className="max-w-md">
         <InputGroupAddon align="inline-start">
-          <HugeiconsIcon
-            icon={loading ? Loading03Icon : Search01Icon}
-            strokeWidth={2}
-            className={cn(
-              "size-4",
-              loading && "animate-spin motion-reduce:animate-none",
-            )}
-            aria-label={loading ? "Searching" : undefined}
-          />
+          {loading ? (
+            <DotMatrixRipple size="xs" ariaLabel="Searching" />
+          ) : (
+            <HugeiconsIcon
+              icon={Search01Icon}
+              strokeWidth={2}
+              className="size-4"
+            />
+          )}
         </InputGroupAddon>
         <InputGroupInput
           ref={ref}

@@ -15,8 +15,8 @@ import {
   Cancel01Icon,
   GithubIcon,
   FlashIcon,
-  Loading03Icon,
 } from "@hugeicons/core-free-icons";
+import { DotMatrixRipple } from "@/components/ui/dot-matrix-ripple";
 import {
   modeParser,
   searchQueryParser,
@@ -42,7 +42,6 @@ import {
   createSkillDetailHandle,
 } from "@/components/skill-detail-sheet";
 import { api } from "@/convex/_generated/api";
-import { cn } from "@/lib/utils";
 
 interface SkillExplorerProps {
   canAutoDetect: boolean;
@@ -166,11 +165,7 @@ export function SkillExplorer({
     (trimmedTextQuery !== effectiveTextQuery ||
       isFetching ||
       isPlaceholderData);
-  const Icon = isText
-    ? isInputLoading
-      ? Loading03Icon
-      : Search01Icon
-    : GithubIcon;
+  const Icon = isText ? Search01Icon : GithubIcon;
 
   return (
     <>
@@ -199,15 +194,17 @@ export function SkillExplorer({
             input/placeholder/icon renders. */}
         <div className="flex gap-2">
           <div className="relative flex-1">
-            <HugeiconsIcon
-              icon={Icon}
-              strokeWidth={2}
-              className={cn(
-                "absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none",
-                isInputLoading && "animate-spin motion-reduce:animate-none",
-              )}
-              aria-label={isInputLoading ? "Searching" : undefined}
-            />
+            {isInputLoading ? (
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 size-4 flex items-center justify-center text-muted-foreground pointer-events-none">
+                <DotMatrixRipple size="xs" ariaLabel="Searching" />
+              </span>
+            ) : (
+              <HugeiconsIcon
+                icon={Icon}
+                strokeWidth={2}
+                className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none"
+              />
+            )}
             <Input
               ref={inputRef}
               placeholder={placeholder}
