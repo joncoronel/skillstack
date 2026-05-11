@@ -18,7 +18,8 @@
       "Read(//tmp/**)",
       "Read(//c/tmp/**)",
       "Bash(pnpm --version)",
-      "Bash(pnpm test *)"
+      "Bash(pnpm test *)",
+      "Bash(git -C \"c:\\\\Users\\\\jonny\\\\Documents\\\\Projects\\\\skillstack\" show 5fcea90 --stat)"
     ]
   }
 }

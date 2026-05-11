@@ -1,4 +1,5 @@
 import {
+  action,
   internalAction,
   internalMutation,
   internalQuery,
@@ -8,7 +9,7 @@ import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { paginationOptsValidator } from "convex/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import {
   embedTexts,
   truncateForEmbedding,
@@ -16,6 +17,7 @@ import {
 } from "./lib/embeddings";
 import {
   listSkills as v1ListSkills,
+  getSkillDetail as v1GetSkillDetail,
   getSkillSyncData as v1GetSkillSyncData,
   SkillsApiNotFoundError,
   SkillsApiRateLimitError,
@@ -26,7 +28,8 @@ import {
   fetchRepoTree,
   NOT_MODIFIED,
 } from "./lib/github";
-import { MAX_DISCOVERY_FAILURES } from "./devStats";
+import { MAX_DISCOVERY_FAILURES, assertAdmin } from "./devStats";
+import { parseSkillInput } from "../lib/parse-skill-input";
 
 // ---------------------------------------------------------------------------
 // Sync actions
@@ -2813,6 +2816,340 @@ export const getContent = query({
       content: skill?.content ?? null,
       skillMdUrl: skill?.skillMdUrl ?? null,
     };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Manual skill add (admin-only) and weekly refresh
+// ---------------------------------------------------------------------------
+//
+// Lets the dev/owner insert a skill that exists on skills.sh but sits below
+// syncSkills' MIN_INSTALLS=50 leaderboard threshold (and so would never reach
+// the catalog via the regular cron). The skill is verified against skills.sh
+// before insert, so audits, install commands, and security infra all work the
+// same as for any other skill — this just bypasses the popularity floor.
+//
+// Rows get `leaderboard: "manual"` as an origin tag. The weekly refresh cron
+// keeps their `lastSeenInApi` ahead of the 30-day delisting window for the
+// case where installs never cross 50 (so syncSkills never sees them).
+// Once installs DO cross 50, syncSkills picks them up and updates them
+// daily; the refresh self-prunes via a `lastSeenInApi < now - 23h` filter
+// so it doesn't duplicate the work.
+
+const MANUAL_LEADERBOARD = "manual";
+// Skip refresh for any manual skill the regular sync already touched today.
+// 23h (not 24h) leaves a small buffer for cron drift between the daily
+// syncSkills run and our weekly refresh, so we never accidentally re-fetch
+// a skill the main sync just handled.
+const MANUAL_REFRESH_FRESHNESS_MS = 23 * 60 * 60 * 1000;
+
+// parseSkillInput lives at lib/parse-skill-input.ts so the /dev/add-skill form
+// can import it and validate input client-side. Validating before calling the
+// action prevents Convex's dev-mode "Server Error" console overlay for what's
+// really just bad input. The action below still calls parseSkillInput as
+// defense-in-depth (and wraps thrown Error → ConvexError for production).
+
+// Mirror the loose regex used by the discovery path (~line 734): "name: X",
+// optionally quoted. Restricted to the YAML frontmatter block so we don't
+// accidentally pick up a "name:" line in the body.
+function extractSkillMdName(content: string): string | null {
+  const fm = content.match(/^---\s*\n([\s\S]*?)\n---/);
+  if (!fm) return null;
+  const nameMatch = fm[1].match(/^name:\s*(.+)$/m);
+  if (!nameMatch) return null;
+  return nameMatch[1].trim().replace(/^["']|["']$/g, "");
+}
+
+function humanizeSlug(slug: string): string {
+  return slug
+    .split(/[-_/]+/)
+    .filter(Boolean)
+    .map((w) => w[0].toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+/**
+ * Tiny pre-check: is this skill already in our catalog? Used by
+ * addSkillManually so the action can return `already_exists` without burning
+ * a skills.sh detail call or hitting upsertSkillsBatch needlessly.
+ */
+export const getManualAddPrecheck = internalQuery({
+  args: { source: v.string(), skillId: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      name: v.string(),
+      isDelisted: v.boolean(),
+    }),
+  ),
+  handler: async (ctx, { source, skillId }) => {
+    const summary = await ctx.db
+      .query("skillSummaries")
+      .withIndex("by_source_skillId", (q) =>
+        q.eq("source", source).eq("skillId", skillId),
+      )
+      .unique();
+    if (!summary) return null;
+    return {
+      name: summary.name,
+      isDelisted: summary.isDelisted ?? false,
+    };
+  },
+});
+
+/**
+ * Promote a skill's `leaderboard` origin tag to "manual". Used by
+ * addSkillManually when relisting a previously-delisted skill whose row was
+ * originally inserted under a different leaderboard (e.g., "all-time" before
+ * the skill dropped below MIN_INSTALLS). Without this, upsertSkillsBatch's
+ * "never patch leaderboard" invariant would leave the row tagged under its
+ * original origin — and refreshManualSkills (which filters on
+ * leaderboard === "manual") would skip it, so the 30-day delist window would
+ * close on it again. Patching here ensures the weekly refresh cron owns it.
+ */
+export const promoteSkillToManual = internalMutation({
+  args: { source: v.string(), skillId: v.string() },
+  handler: async (ctx, { source, skillId }) => {
+    const skill = await ctx.db
+      .query("skills")
+      .withIndex("by_source_skillId", (q) =>
+        q.eq("source", source).eq("skillId", skillId),
+      )
+      .unique();
+    if (!skill) return;
+    if (skill.leaderboard === MANUAL_LEADERBOARD) return; // already manual
+    await ctx.db.patch(skill._id, { leaderboard: MANUAL_LEADERBOARD });
+  },
+});
+
+/**
+ * Admin-only manual skill add. Verifies the skill exists on skills.sh, then
+ * routes through the canonical upsertSkillsBatch with `leaderboard: "manual"`.
+ * Kicks the discovery/content-fetch chain so SKILL.md is downloaded within
+ * seconds rather than waiting for the next syncSkills run.
+ */
+export const addSkillManually = action({
+  args: { input: v.string() },
+  returns: v.object({
+    status: v.union(
+      v.literal("inserted"),
+      v.literal("relisted"),
+      v.literal("already_exists"),
+    ),
+    source: v.string(),
+    skillId: v.string(),
+    name: v.string(),
+  }),
+  // Explicit return-type annotation breaks the inference cycle introduced by
+  // `ctx.runQuery(internal.skills.*)` referencing the same file's api type.
+  handler: async (
+    ctx,
+    { input },
+  ): Promise<{
+    status: "inserted" | "relisted" | "already_exists";
+    source: string;
+    skillId: string;
+    name: string;
+  }> => {
+    await assertAdmin(ctx);
+
+    // Wrap parseSkillInput's plain Error → ConvexError so production preserves
+    // the message instead of redacting to a generic "Server Error". (Defense-
+    // in-depth — the form already validates client-side; this only matters if
+    // someone calls the action via the Convex dashboard or programmatically.)
+    let source: string;
+    let skillId: string;
+    try {
+      ({ source, skillId } = parseSkillInput(input));
+    } catch (err) {
+      if (err instanceof Error) throw new ConvexError(err.message);
+      throw err;
+    }
+
+    // Skip the API call if the catalog already has this skill in good standing.
+    // Re-adding is harmless (upsertSkillsBatch is idempotent), but we'd rather
+    // give the admin a clear "no-op" signal than a silent success.
+    const precheck: {
+      name: string;
+      isDelisted: boolean;
+    } | null = await ctx.runQuery(internal.skills.getManualAddPrecheck, {
+      source,
+      skillId,
+    });
+    if (precheck && !precheck.isDelisted) {
+      return {
+        status: "already_exists" as const,
+        source,
+        skillId,
+        name: precheck.name,
+      };
+    }
+
+    // Verify against skills.sh. Throws SkillsApiNotFoundError on 404, which
+    // the action handler surfaces to the caller as a normal error string.
+    const detail = await withTransientRetry(() =>
+      v1GetSkillDetail(source, skillId),
+    );
+
+    // Pull the human name out of SKILL.md frontmatter (the listing endpoint
+    // would have given it to us directly, but detail doesn't include name as
+    // a top-level field). Fall back to a humanized slug if the SKILL.md
+    // doesn't parse cleanly.
+    const skillMd = detail.files?.find((f) => f.path === "SKILL.md");
+    const parsedName = skillMd ? extractSkillMdName(skillMd.contents) : null;
+    const name = parsedName ?? humanizeSlug(detail.slug);
+
+    await ctx.runMutation(internal.skills.upsertSkillsBatch, {
+      skills: [
+        {
+          source: detail.source,
+          skillId: detail.slug,
+          name,
+          installs: detail.installs,
+          // detail endpoint doesn't expose isDuplicate; default to false. If
+          // the skill is later flagged as a duplicate upstream, syncSkills
+          // will mirror that into our row once it crosses MIN_INSTALLS.
+          isDuplicate: false,
+        },
+      ],
+      leaderboard: MANUAL_LEADERBOARD,
+    });
+
+    // On relist: upsertSkillsBatch deliberately doesn't patch `leaderboard`
+    // (origin tag, set on insert only). If the existing row's origin tag isn't
+    // already "manual", promote it so refreshManualSkills owns it going forward
+    // — otherwise the row falls back through the delisting window.
+    if (precheck?.isDelisted) {
+      await ctx.runMutation(internal.skills.promoteSkillToManual, {
+        source: detail.source,
+        skillId: detail.slug,
+      });
+    }
+
+    // Drain the discovery + content-fetch + audit chain so the new row's
+    // SKILL.md and audit data fill in within seconds. Mirrors syncCurated's
+    // pattern. Idempotent — if the row already exists, the workers find
+    // nothing flagged and exit.
+    await ctx.scheduler.runAfter(0, internal.skills.backfillDiscoverUrls, {});
+
+    return {
+      status: precheck?.isDelisted
+        ? ("relisted" as const)
+        : ("inserted" as const),
+      source: detail.source,
+      skillId: detail.slug,
+      name,
+    };
+  },
+});
+
+/**
+ * Manual skills that haven't been touched by any sync in the last 23h. Set is
+ * tiny in practice (single digits to low dozens), so collecting is safe.
+ * Anything refreshed within 23h was almost certainly handled by the daily
+ * syncSkills (which means its installs have crossed MIN_INSTALLS and the
+ * regular path is now keeping it current).
+ */
+export const listManualSkills = internalQuery({
+  args: {},
+  returns: v.array(
+    v.object({
+      source: v.string(),
+      skillId: v.string(),
+      name: v.string(),
+      isDuplicate: v.boolean(),
+    }),
+  ),
+  handler: async (ctx) => {
+    const cutoff = Date.now() - MANUAL_REFRESH_FRESHNESS_MS;
+    const rows = await ctx.db
+      .query("skills")
+      .withIndex("by_leaderboard_active", (q) =>
+        q.eq("leaderboard", MANUAL_LEADERBOARD).eq("isDelisted", false),
+      )
+      .collect();
+    return rows
+      .filter((s) => (s.lastSeenInApi ?? 0) < cutoff)
+      .map((s) => ({
+        source: s.source,
+        skillId: s.skillId,
+        name: s.name,
+        isDuplicate: s.isDuplicate ?? false,
+      }));
+  },
+});
+
+/**
+ * Weekly cron: refresh manual skills so the 30-day delisting window in
+ * markDelistedSkills doesn't auto-delist skills whose installs haven't
+ * crossed MIN_INSTALLS=50 (and so never appear in syncSkills' listing).
+ *
+ * Once a manual skill's installs cross 50, syncSkills starts touching its
+ * `lastSeenInApi` daily and listManualSkills self-prunes via the 23h filter,
+ * so this cron naturally narrows to just the below-threshold subset.
+ */
+export const refreshManualSkills = internalAction({
+  args: {},
+  // Same explicit annotation as addSkillManually — the runQuery/runMutation
+  // references into internal.skills.* otherwise pull the whole api type into
+  // an inference cycle.
+  handler: async (ctx): Promise<void> => {
+    const manualSkills: Array<{
+      source: string;
+      skillId: string;
+      name: string;
+      isDuplicate: boolean;
+    }> = await ctx.runQuery(internal.skills.listManualSkills, {});
+
+    let refreshed = 0;
+    let notFound = 0;
+
+    for (const skill of manualSkills) {
+      try {
+        const detail = await withTransientRetry(() =>
+          v1GetSkillDetail(skill.source, skill.skillId),
+        );
+        await ctx.runMutation(internal.skills.upsertSkillsBatch, {
+          skills: [
+            {
+              source: skill.source,
+              skillId: skill.skillId,
+              name: skill.name,
+              installs: detail.installs,
+              isDuplicate: skill.isDuplicate,
+            },
+          ],
+          leaderboard: MANUAL_LEADERBOARD,
+        });
+        refreshed++;
+      } catch (err) {
+        if (err instanceof SkillsApiNotFoundError) {
+          // skills.sh has dropped this skill. Don't force-delist — let the
+          // natural 30-day window expire so the admin notices it disappear.
+          notFound++;
+          continue;
+        }
+        if (err instanceof SkillsApiRateLimitError) {
+          console.warn(
+            `Rate-limited during refreshManualSkills; rescheduling in ${err.retryAfterSeconds}s`,
+          );
+          await ctx.scheduler.runAfter(
+            err.retryAfterSeconds * 1000,
+            internal.skills.refreshManualSkills,
+            {},
+          );
+          return;
+        }
+        console.error(
+          `refreshManualSkills failed for ${skill.source}/${skill.skillId}:`,
+          err,
+        );
+      }
+    }
+
+    console.log(
+      `refreshManualSkills: refreshed ${refreshed}, not found ${notFound}, total ${manualSkills.length}`,
+    );
   },
 });
 

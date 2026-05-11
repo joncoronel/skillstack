@@ -54,4 +54,16 @@ crons.daily(
   internal.recommendations.cleanupExpiredFingerprintCache,
 );
 
+// Weekly Sunday 07:00 UTC: refresh manually-added skills. Only purpose is to
+// keep their lastSeenInApi ahead of the 30-day delisting threshold for the
+// case where installs never cross MIN_INSTALLS=50 (and so syncSkills never
+// sees them). Manual skills above that threshold get picked up by syncSkills
+// daily; this cron self-prunes via a 23h freshness filter so it doesn't
+// duplicate work.
+crons.weekly(
+  "refresh manual skills",
+  { dayOfWeek: "sunday", hourUTC: 7, minuteUTC: 0 },
+  internal.skills.refreshManualSkills,
+);
+
 export default crons;
