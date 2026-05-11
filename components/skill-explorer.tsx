@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  keepPreviousData,
   useQuery,
   useQueryClient,
-  keepPreviousData,
 } from "@tanstack/react-query";
 import { convexQuery } from "@convex-dev/react-query";
 import { useQueryState } from "nuqs";
@@ -21,6 +21,7 @@ import {
   modeParser,
   searchQueryParser,
   repoUrlParser,
+  SEARCH_DEBOUNCE_MS,
   type ModeValue,
 } from "@/lib/search-params";
 import { Input } from "@/components/ui/cubby-ui/input";
@@ -50,8 +51,6 @@ interface SkillExplorerProps {
   initialHot: FunctionReturnType<typeof api.leaderboards.listHot>;
 }
 
-const TEXT_DEBOUNCE_MS = 200;
-
 const skillDetailHandle = createSkillDetailHandle();
 
 export function SkillExplorer({
@@ -78,13 +77,13 @@ export function SkillExplorer({
     if (!trimmedTextQuery) return;
     const timer = setTimeout(
       () => setDebouncedText(trimmedTextQuery),
-      TEXT_DEBOUNCE_MS,
+      SEARCH_DEBOUNCE_MS,
     );
     return () => clearTimeout(timer);
   }, [trimmedTextQuery]);
 
   // If the trimmed query already has cached data in TanStack Query's cache,
-  // bypass the 300ms debounce and use it directly — the inner useQuery in
+  // bypass the debounce and use it directly — the inner useQuery in
   // SkillSearchResults hits the cache synchronously and renders results
   // without waiting. Falls back to the debounced value for queries that
   // haven't been searched yet (so the backend isn't pinged on every keystroke).
@@ -104,15 +103,19 @@ export function SkillExplorer({
     : "";
 
   // Subscribe to the same useQuery here (TanStack dedupes; the real consumer
-  // lives in SkillSearchResults) so we can drive the input-spinner state from
-  // the parent. Skipped when the trimmed query is already in cache — instant
-  // results don't need a loading indicator.
+  // lives in SkillSearchResults) so we can drive the input-spinner state
+  // synchronously — useQuery itself initiates the fetch on key change and
+  // marks `isPlaceholderData` true in the same render. Destructuring just
+  // these two props means TanStack's Proxy tracking won't re-render the
+  // parent when `data` changes (Convex live updates, fetch settles), so we
+  // get the perf isolation for free without an explicit `notifyOnChangeProps`.
   const { isFetching, isPlaceholderData } = useQuery({
     ...convexQuery(
       api.skills.searchSkills,
       effectiveTextQuery ? { query: effectiveTextQuery } : "skip",
     ),
     placeholderData: keepPreviousData,
+    staleTime: 60_000,
     gcTime: 5 * 60_000,
   });
 

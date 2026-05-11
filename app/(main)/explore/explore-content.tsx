@@ -12,7 +12,7 @@ import { useQueryState } from "nuqs";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Search01Icon } from "@hugeicons/core-free-icons";
 import { api } from "@/convex/_generated/api";
-import { exploreQueryParser } from "@/lib/search-params";
+import { exploreQueryParser, SEARCH_DEBOUNCE_MS } from "@/lib/search-params";
 import { Crossfade } from "@/components/ui/cubby-ui/crossfade";
 import { Button } from "@/components/ui/cubby-ui/button";
 import { ExploreFilters } from "@/components/explore/explore-filters";
@@ -27,7 +27,7 @@ export function ExploreContent() {
   const trimmedQuery = query.trim();
   // Debounce with synchronous reset on clear — without that, a fast retype
   // after clearing would see the previous query's debounced value leak through
-  // (e.g. type "f", clear, type "g" within 300ms → effectiveQuery briefly
+  // (e.g. type "f", clear, type "g" within the debounce window → effectiveQuery briefly
   // resolves to "f" and `hasSettled` flips back to true on the cached "f"
   // hit, crossfading the user to the wrong query's results).
   const [debouncedQuery, setDebouncedQuery] = useState(trimmedQuery);
@@ -36,12 +36,15 @@ export function ExploreContent() {
   }
   useEffect(() => {
     if (!trimmedQuery) return;
-    const timer = setTimeout(() => setDebouncedQuery(trimmedQuery), 300);
+    const timer = setTimeout(
+      () => setDebouncedQuery(trimmedQuery),
+      SEARCH_DEBOUNCE_MS,
+    );
     return () => clearTimeout(timer);
   }, [trimmedQuery]);
 
   // If the trimmed query already has cached data in TanStack Query's cache,
-  // bypass the 300ms debounce and use it directly — useQuery hits the cache
+  // bypass the debounce and use it directly — useQuery hits the cache
   // synchronously and renders results without waiting. Falls back to the
   // debounced value for queries that haven't been searched yet (so the
   // backend isn't pinged on every keystroke).
@@ -71,6 +74,10 @@ export function ExploreContent() {
     // Keep prior rows visible during refinement ("d" → "dd") so the user
     // never sees the results disappear into a skeleton between keystrokes.
     placeholderData: keepPreviousData,
+    // Suppress the background refetch that fires on every remount/key
+    // switch — the convex subscription keeps cached data live, so a cached
+    // hit doesn't need to re-hit the backend just to confirm freshness.
+    staleTime: 60_000,
     gcTime: 5 * 60_000,
   });
 

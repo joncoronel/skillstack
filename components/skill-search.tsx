@@ -35,6 +35,10 @@ export function SkillSearchResults({
     // (which we need to fire skeleton for fresh-search-after-clear) is
     // tracked via `lastSettledQuery` below.
     placeholderData: keepPreviousData,
+    // Suppress the background refetch that fires on every remount/key
+    // switch — the convex subscription keeps cached data live, so a cached
+    // hit doesn't need to re-hit the backend just to confirm freshness.
+    staleTime: 60_000,
     gcTime: 5 * 60_000,
   });
 
