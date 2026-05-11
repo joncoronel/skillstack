@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryState } from "nuqs";
-import { useDebounce } from "use-debounce";
 import type { FunctionReturnType } from "convex/server";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
@@ -11,12 +10,14 @@ import {
   GithubIcon,
   FlashIcon,
 } from "@hugeicons/core-free-icons";
+import { DotMatrixRipple } from "@/components/ui/dot-matrix-ripple";
 import {
   modeParser,
   searchQueryParser,
   repoUrlParser,
   type ModeValue,
 } from "@/lib/search-params";
+import { useDebouncedCachedSearch } from "@/hooks/use-debounced-cached-search";
 import { Input } from "@/components/ui/cubby-ui/input";
 import { Kbd } from "@/components/ui/cubby-ui/kbd";
 import { Button } from "@/components/ui/cubby-ui/button";
@@ -35,7 +36,7 @@ import {
   SkillDetailSheet,
   createSkillDetailHandle,
 } from "@/components/skill-detail-sheet";
-import type { api } from "@/convex/_generated/api";
+import { api } from "@/convex/_generated/api";
 
 interface SkillExplorerProps {
   canAutoDetect: boolean;
@@ -43,8 +44,6 @@ interface SkillExplorerProps {
   initialTrending: FunctionReturnType<typeof api.leaderboards.listTrending>;
   initialHot: FunctionReturnType<typeof api.leaderboards.listHot>;
 }
-
-const TEXT_DEBOUNCE_MS = 300;
 
 const skillDetailHandle = createSkillDetailHandle();
 
@@ -58,10 +57,16 @@ export function SkillExplorer({
   const [textQuery, setTextQuery] = useQueryState("q", searchQueryParser);
   const [repoUrl, setRepoUrl] = useQueryState("repo", repoUrlParser);
 
-  // Debounce the search query so results don't re-fetch on every keystroke.
-  // If the input is cleared, skip the debounce and show defaults immediately.
-  const [debouncedText] = useDebounce(textQuery.trim(), TEXT_DEBOUNCE_MS);
-  const effectiveTextQuery = textQuery.trim() ? debouncedText : "";
+  // Search machinery (debounce + cache bypass + spinner state) lives in the
+  // shared hook. The data consumer is `<SkillSearchResults>`, not this
+  // component, so we deliberately don't destructure `query.data` here —
+  // that keeps Proxy tracking from re-rendering the parent on Convex
+  // live updates of search results.
+  const { effectiveQuery: effectiveTextQuery, isInputLoading: textIsLoading } =
+    useDebouncedCachedSearch({
+      rawQuery: textQuery,
+      fn: api.skills.searchSkills,
+    });
 
   // Local input state for the repo field — only pushed to the URL on submit.
   const [repoInput, setRepoInput] = useState(repoUrl);
@@ -91,16 +96,24 @@ export function SkillExplorer({
     setRepoUrl(trimmed);
   }
 
+  const handleModeChange = useCallback(
+    (value: string) => setMode(value as ModeValue),
+    [setMode],
+  );
+
   const isText = mode === "text";
   const inputValue = isText ? textQuery : repoInput;
   const placeholder = isText
     ? "Search skills by name…"
     : "https://github.com/owner/repo";
+  // Spinner only shows in text mode — the hook's `textIsLoading` covers
+  // every "pending search work" state for the text input.
+  const isInputLoading = isText && textIsLoading;
   const Icon = isText ? Search01Icon : GithubIcon;
 
   return (
     <>
-      <Tabs value={mode} onValueChange={(value) => setMode(value as ModeValue)}>
+      <Tabs value={mode} onValueChange={handleModeChange}>
         <TabsList variant="underline" className="mb-3">
           <TabsTrigger value="text">
             <HugeiconsIcon
@@ -125,11 +138,17 @@ export function SkillExplorer({
             input/placeholder/icon renders. */}
         <div className="flex gap-2">
           <div className="relative flex-1">
-            <HugeiconsIcon
-              icon={Icon}
-              strokeWidth={2}
-              className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none"
-            />
+            {isInputLoading ? (
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 size-4 flex items-center justify-center text-muted-foreground pointer-events-none">
+                <DotMatrixRipple size="xs" ariaLabel="Searching" />
+              </span>
+            ) : (
+              <HugeiconsIcon
+                icon={Icon}
+                strokeWidth={2}
+                className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none"
+              />
+            )}
             <Input
               ref={inputRef}
               placeholder={placeholder}
@@ -202,11 +221,15 @@ export function SkillExplorer({
             (search results, repo analysis) survives mode switches. */}
         <TabsPanels>
           <TabsContent value="text">
-            {/* Both lists stay mounted so the default list preserves scroll
-                + pagination state across type-and-clear. `hidden` maps to
-                display:none, which makes the IntersectionObserver sentinel
-                non-intersecting while the user is searching — no spurious
-                background fetches. */}
+            {/* Both lists stay mounted: the default list preserves scroll +
+                pagination state across type-and-clear, and the search list
+                preserves its 60+ rows (each with jotai subscriptions) across
+                browse ↔ search toggles. `hidden` maps to display:none, which
+                also makes the default list's IntersectionObserver sentinel
+                non-intersecting while the user is searching. The search list
+                tracks "did the user clear in between" via a lastSettledQuery
+                state so the skeleton still fires for fresh-search-after-clear
+                without paying remount cost on every toggle. */}
             <div hidden={!!effectiveTextQuery}>
               <DefaultSkillsList
                 initialPage={initialPopularSkills}

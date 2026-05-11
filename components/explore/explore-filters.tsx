@@ -11,13 +11,19 @@ import {
   InputGroupButton,
 } from "@/components/ui/cubby-ui/input-group";
 import { Kbd } from "@/components/ui/cubby-ui/kbd";
+import { DotMatrixRipple } from "@/components/ui/dot-matrix-ripple";
 
 interface ExploreFiltersProps {
   className?: string;
   ref?: React.Ref<HTMLInputElement>;
+  loading?: boolean;
 }
 
-export function ExploreFilters({ className, ref }: ExploreFiltersProps) {
+export function ExploreFilters({
+  className,
+  ref,
+  loading,
+}: ExploreFiltersProps) {
   const [query, setQuery] = useQueryState("q", exploreQueryParser);
   const hasQuery = query.length > 0;
 
@@ -25,11 +31,15 @@ export function ExploreFilters({ className, ref }: ExploreFiltersProps) {
     <section className={className}>
       <InputGroup className="max-w-md">
         <InputGroupAddon align="inline-start">
-          <HugeiconsIcon
-            icon={Search01Icon}
-            strokeWidth={2}
-            className="size-4"
-          />
+          {loading ? (
+            <DotMatrixRipple size="xs" ariaLabel="Searching" />
+          ) : (
+            <HugeiconsIcon
+              icon={Search01Icon}
+              strokeWidth={2}
+              className="size-4"
+            />
+          )}
         </InputGroupAddon>
         <InputGroupInput
           ref={ref}

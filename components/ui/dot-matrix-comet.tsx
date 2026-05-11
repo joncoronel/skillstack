@@ -14,7 +14,7 @@ interface DotMatrixCometProps {
 }
 
 const PRESETS: Record<LoaderPreset, { px: number; dotPx: number }> = {
-  xs: { px: 14, dotPx: 2 },
+  xs: { px: 16, dotPx: 2 },
   sm: { px: 18, dotPx: 2 },
   md: { px: 28, dotPx: 4 },
   lg: { px: 40, dotPx: 5 },
@@ -31,10 +31,18 @@ interface Cell {
 
 const CELLS: Cell[] = (() => {
   const ringPath: Array<[number, number]> = [
-    [0, 1], [0, 2], [0, 3],
-    [1, 4], [2, 4], [3, 4],
-    [4, 3], [4, 2], [4, 1],
-    [3, 0], [2, 0], [1, 0],
+    [0, 1],
+    [0, 2],
+    [0, 3],
+    [1, 4],
+    [2, 4],
+    [3, 4],
+    [4, 3],
+    [4, 2],
+    [4, 1],
+    [3, 0],
+    [2, 0],
+    [1, 0],
   ];
   const ringIndexAt = (row: number, col: number) =>
     ringPath.findIndex(([r, c]) => r === row && c === col);
@@ -83,10 +91,7 @@ export function DotMatrixComet({
         } as CSSProperties
       }
     >
-      <span
-        className="dmxc-grid"
-        style={{ width: px, height: px, gap }}
-      >
+      <span className="dmxc-grid" style={{ width: px, height: px, gap }}>
         {CELLS.map((cell, i) => {
           if (cell.kind === "corner") {
             return (

@@ -14,7 +14,7 @@ interface DotMatrixRippleProps {
 }
 
 const PRESETS: Record<LoaderPreset, { px: number; dotPx: number }> = {
-  xs: { px: 14, dotPx: 2 },
+  xs: { px: 16, dotPx: 2 },
   sm: { px: 18, dotPx: 2 },
   md: { px: 28, dotPx: 4 },
   lg: { px: 40, dotPx: 5 },
@@ -69,10 +69,7 @@ export function DotMatrixRipple({
         } as CSSProperties
       }
     >
-      <span
-        className="dmxr-grid"
-        style={{ width: px, height: px, gap }}
-      >
+      <span className="dmxr-grid" style={{ width: px, height: px, gap }}>
         {CELLS.map((cell, i) => {
           if (cell.kind === "corner") {
             return (

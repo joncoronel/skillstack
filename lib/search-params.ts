@@ -1,5 +1,10 @@
 import { parseAsString, parseAsStringLiteral } from "nuqs";
 
+// Shared debounce duration for all search inputs (home, /explore). Picked
+// short enough to feel responsive on a typing pause, long enough that mid-
+// word keystrokes don't fire a fetch.
+export const SEARCH_DEBOUNCE_MS = 200;
+
 // -- Home page (/) parsers --
 
 const modeValues = ["text", "repo"] as const;
