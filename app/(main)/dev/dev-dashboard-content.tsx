@@ -217,7 +217,7 @@ function StatsCards({
                 {card.tooltip}
               </TooltipContent>
             </Tooltip>
-            <p className="mt-1 text-2xl font-bold tabular-nums">
+            <p className="mt-1 text-2xl font-semibold tabular-nums">
               {loading ? "..." : card.value.toLocaleString()}
               {card.warn && (
                 <Badge variant="warning" className="ml-2 align-middle text-xs">

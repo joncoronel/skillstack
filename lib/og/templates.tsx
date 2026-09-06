@@ -233,7 +233,7 @@ export function WordHero({
   );
 }
 
-/** A single-line entity name in Geist (used where text is variable-length). */
+/** A single-line entity name in the sans (used where text is variable-length). */
 export function Title({ text, size = 60 }: { text: string; size?: number }) {
   return (
     <div

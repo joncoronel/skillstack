@@ -52,7 +52,7 @@ export function renderHighlight(value: string): React.ReactNode {
     const text = decodeEntities(segment);
     if (!text) return null;
     return i % 2 === 1 ? (
-      <mark key={i} className="bg-transparent font-bold text-primary">
+      <mark key={i} className="bg-transparent font-semibold text-primary">
         {text}
       </mark>
     ) : (

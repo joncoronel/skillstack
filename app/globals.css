@@ -15,9 +15,9 @@ html {
 
 @theme inline {
   /* Fonts */
-  --font-sans: var(--font-sn-pro);
+  --font-sans: var(--font-open-runde);
   --font-mono: var(--font-google-sans-code);
-  /* No `--font-display`: SN Pro carries every text role, so the hook would
+  /* No `--font-display`: Open Runde carries every text role, so the hook would
      resolve to the body face and read as a no-op at 20 call sites. The display
      ROLE lives in the tokens below, which carry the treatment, not a family.
 
@@ -25,21 +25,26 @@ html {
      wrong relative to the ladder under it: a page whose content sits at 12-14px
      cannot carry the hero a pricing page can. Each ships its own leading,
      weight and tracking, so a call site is one class and nothing else. Weight
-     is 640 throughout and tracking tightens as size grows, because optical
-     tracking runs opposite to size. Re-measure whenever the family moves. */
+     is 600 throughout and tracking tightens as size grows, because optical
+     tracking runs opposite to size. Re-measure whenever the family moves.
+
+     600 is a ceiling here, not a preference. It was 640 against SN Pro's
+     variable axis; Open Runde is static instances, so anything above 600
+     matches the 700 face, which this app deliberately does not ship. See the
+     note in app/layout.tsx before raising it. */
 
   /* Hero — moment pages, where the heading IS the content and there is no
      dense material under it: pricing, 404, the route error. */
   --text-hero: clamp(2.5rem, 3.9vw, 3.5rem);
   --text-hero--line-height: 0.95;
-  --text-hero--font-weight: 640;
+  --text-hero--font-weight: 600;
   --text-hero--letter-spacing: -0.03em;
 
   /* Display — an app page's title, above dense material. Lands about 3x the
      body. Its floor is the headline size: on a phone the two converge. */
   --text-display: clamp(1.875rem, 2.8vw, 2.5rem);
   --text-display--line-height: 1;
-  --text-display--font-weight: 640;
+  --text-display--font-weight: 600;
   --text-display--letter-spacing: -0.025em;
 
   /* Display small — the same job for strings we do not control: bundle names,
@@ -47,7 +52,7 @@ html {
      wrap where the fixed titles above do not. */
   --text-display-sm: clamp(1.75rem, 2.4vw, 2.125rem);
   --text-display-sm--line-height: 1.1;
-  --text-display-sm--font-weight: 640;
+  --text-display-sm--font-weight: 600;
   --text-display-sm--letter-spacing: -0.02em;
 
   --color-background: var(--background);
