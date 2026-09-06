@@ -63,29 +63,24 @@ const openRunde = localFont({
   // Arial face ahead of everything below. That is the anti-CLS mechanism and it
   // stays in sync with the files automatically.
   //
-  // An earlier version of this turned it off and hand-wrote that face, purely
-  // to rank a `local("Inter")` rule above it. That bought better letterforms
-  // for a sub-100ms swap window and cost four font metrics maintained by hand
-  // with nothing to catch them going stale. Not worth it. If you ever do need
-  // to reorder, know that Next always inserts its generated fallback directly
-  // after the real family, so turning it off is the only lever.
+  // Two attempts to beat that face have been made and both were removed. First
+  // `adjustFontFallback: false` plus a hand-written `local("Inter")` family
+  // ranked above it; then plain `"Open Runde", "Inter"` entries in the list
+  // below. The reasoning behind both: Open Runde IS Inter with rounded corners
+  // (upm 2816, x-height 1536, cap 2048, identical), so a reader's own Inter is
+  // a perfect metric match.
+  //
+  // It does not pay, and the reason generalises: A FALLBACK IS MATCHED WITH
+  // `local()`, so its only value is who already has it installed. Arial is on
+  // effectively every Windows and macOS machine, and Linux fontconfig usually
+  // aliases it to metric-compatible Liberation Sans. Inter is a webfont almost
+  // nobody installs as a system font. So entries behind the generated face are
+  // reached only when the woff2 has not loaded AND Arial resolves to nothing,
+  // which is close to no one. Next also always inserts its generated fallback
+  // directly after the real family, so ranking anything above it means turning
+  // it off and hand-maintaining four font metrics with nothing to catch them
+  // going stale. Don't.
   fallback: [
-    // WHY ARIAL ABOVE AND NOT INTER: a fallback is matched with `local()`, so
-    // the only thing that decides its value is who already has it installed.
-    // Arial is on effectively every Windows and macOS machine, which is the
-    // whole reason Next picks it — it is not chosen for looking like Open
-    // Runde, it is chosen for being present, and the metric overrides then make
-    // it hold the right amount of space.
-    //
-    // Inter is a webfont almost nobody installs as a system font, and Open
-    // Runde installed locally is rarer still. Both entries below are therefore
-    // close to dead weight: they only fire on a machine with neither Arial nor
-    // the generated face, mostly some Linux. They are kept because they cost
-    // two strings and are exactly right when they do fire — Open Runde IS Inter
-    // with rounded corners (upm 2816, x-height 1536, cap 2048 in both), so
-    // either one is an exact metric match. Delete them if they read as noise.
-    "Open Runde",
-    "Inter",
     "system-ui",
     "-apple-system",
     "Segoe UI",
