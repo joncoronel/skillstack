@@ -52,6 +52,10 @@ typography:
     fontSize: "0.875rem"
     fontWeight: 400
     lineHeight: 1.6
+  control:
+    fontFamily: "var(--font-sans), openRunde Fallback, system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+    fontSize: "0.875rem"
+    fontWeight: 500
   section:
     fontFamily: "var(--font-sans), openRunde Fallback, system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
     fontSize: "0.875rem"
@@ -204,6 +208,7 @@ The live consequence: **the ramp's numbers are now nominal, not optical.** Sizin
 - **Title** (Open Runde 600, 1.125rem): Card titles, panel headers.
 - **Section** (Open Runde 600, 0.875rem, `text-foreground`): Named blocks inside a page — the `LabeledSection` heading, sidebar sections, comparison groups. A real heading element, sentence case.
 - **Body** (Open Runde 400, 0.875rem, line-height 1.6): Default UI and prose; cap prose at 65–75ch.
+- **Control** (Open Runde 500, 0.875rem): Anything the reader can click — nav links, buttons, filter triggers, tab and toggle labels. Body's size, one weight step up, because a control has to read as actionable next to the prose it sits in. Documented Sep 2026 after an audit found it on 17 elements across three routes and, checked one by one, **every one was interactive**. It is a real role, not drift; it just had no name. Don't reach for it on static text — that is what made it look like drift.
 - **Field label** (Open Runde 500, 0.75rem, `text-muted-foreground`): What names a column, a `dt`, or a value — table headers, stat cells, metadata. Sentence case, normal tracking.
 - **Micro** (Open Runde 500, `text-micro` / 0.6875rem): Pills and dense chips only. The floor; nothing smaller.
 
@@ -245,7 +250,9 @@ because it has no instance between 600 and 700 to land on.
 
 **The Built-Display Rule.** A one-family system has to BUILD its display end; scaled-up body text is what makes one look undesigned. Weight climbs to 600 and tracking tightens to -0.03em at hero sizes, because optical tracking runs opposite to size — what reads as open at 14px reads as loose at 64px. Both display steps ship their own size, leading, weight and tracking, so a call site is `text-display` and nothing else. This is not a style preference: the six near-identical arbitrary clamps that preceded the token, all spelling out `font-medium tracking-tight` by hand, are what it replaced. Never hand-roll a hero out of `text-5xl` plus weight and tracking classes.
 
-**The Weight Ladder Rule.** Display 600, headline and title 600, section 600, body 400, labels 500. Weight climbs with size and then stops: 600 is the top of the family the app ships, so the display end separates itself from a headline by size, leading and tracking rather than by out-weighing it. That flat top is a constraint, not a preference — under SN Pro's variable axis display sat at 640, half a step above headline, and Open Runde has no instance there.
+**The Weight Ladder Rule.** Display 600, headline and title 600, section 600, controls and labels 500, body 400. Weight climbs with size and then stops: 600 is the top of the family the app ships, so the display end separates itself from a headline by size, leading and tracking rather than by out-weighing it. That flat top is a constraint, not a preference — under SN Pro's variable axis display sat at 640, half a step above headline, and Open Runde has no instance there.
+
+**500 is a role, never a default.** At the bottom of the ladder the steps are one unit apart, so a single stray 500 erases the gap that does the work. This is not hypothetical: every skill row and card wraps its contents in cubby-ui's `<Label>` — borrowed for its click behaviour, since the label makes the whole row a target for its checkbox — and `Label` ships `font-medium`. Unreset, that made **500 the inherited default of every row**. Measured on the home list: `vercel-labs/skills` and `1.5M` both computed to 500 while carrying no weight class at all, so the skill name sat one step above its own metadata instead of two and had to lean on colour for the rest. `SelectableWrapper` now resets to `font-normal`. When you borrow a primitive for its behaviour, check what typography rides along with it.
 
 This rule is worth stating because the app once broke it invisibly: the display role sat at `font-medium` (500) while headline sat at 600, which was survivable only while display was a different family. The moment one face carries both, a 500 hero above a 600 subhead reads as less important than the thing under it. Nothing below 600 may ever sit above something at 600.
 

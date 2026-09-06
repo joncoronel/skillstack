@@ -63,8 +63,8 @@ WEB_UNICODES = (
 
 # Wider, because OG cards set skill and owner names straight from the catalog,
 # and a card is the one place a name renders with no browser font fallback
-# behind it. Greek and Cyrillic are in here because Geist carried them; `verify`
-# below reports whatever a Geist reader could see that these still cannot.
+# behind it. Greek and Cyrillic are in here because the outgoing Geist faces
+# carried them and dropping them would have narrowed what a card can render.
 OG_UNICODES = (
     "U+0000-024F,U+0259,U+02B0-02FF,U+0300-036F,U+0370-03FF,U+0400-052F,"
     "U+1E00-1EFF,U+2000-206F,U+2070-209F,U+20A0-20BF,U+2100-214F,"
@@ -218,23 +218,6 @@ def measure(source: Path) -> None:
     print("chosen (DESIGN.md 3). Read them as the size of that gap.")
 
 
-def verify() -> None:
-    """Report OG coverage against the Geist faces these replace. Goes quiet
-    once those files are gone, which is when it stops mattering.
-    """
-    geist = ROOT / "assets" / "og" / "Geist-Regular.ttf"
-    if not geist.exists():
-        return
-    theirs = set(TTFont(geist).getBestCmap())
-    ours = set(TTFont(ROOT / "assets" / "og" / "OpenRunde-Regular.otf").getBestCmap())
-    missing = sorted(theirs - ours)
-    print(f"\nOG coverage: {len(ours)} codepoints against Geist's {len(theirs)}.")
-    print(
-        f"  {len(missing)} of Geist's not covered"
-        + (": " + ", ".join("U+%04X" % c for c in missing) if missing else "")
-    )
-
-
 def main() -> None:
     args = sys.argv[1:]
     measure_only = "--measure" in args
@@ -274,7 +257,6 @@ def main() -> None:
     )
     print("\n  app/fonts/OFL-open-runde.txt")
 
-    verify()
 
 
 if __name__ == "__main__":

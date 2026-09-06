@@ -635,7 +635,7 @@ function GitHubCandidateCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Not on skills.sh — add from GitHub?</CardTitle>
+        <CardTitle>Not on skills.sh. Add from GitHub?</CardTitle>
       </CardHeader>
       <CardContent>
         <p className="mb-4 text-sm text-muted-foreground">

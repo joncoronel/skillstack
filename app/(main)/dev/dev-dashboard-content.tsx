@@ -688,13 +688,13 @@ function EmbeddingPanel() {
         <div className="space-y-6">
           <EmbeddingSkillList
             title="Unembeddable skills"
-            tooltip="Skills the worker permanently gave up on — usually because content was too dense to fit OpenAI's per-input token limit even after truncation. Investigate individually if you want to recover them."
+            tooltip="Skills the worker permanently gave up on, usually because content was too dense to fit OpenAI's per-input token limit even after truncation. Investigate individually if you want to recover them."
             skills={skipped}
             badgeVariant="warning"
           />
           <EmbeddingSkillList
             title="Minimal-mode skills"
-            tooltip="Skills embedded with name + description only because their content was too dense to embed in full. These have degraded embeddings — if the count grows large, consider improving the truncation strategy (tiktoken, chunking)."
+            tooltip="Skills embedded with name + description only because their content was too dense to embed in full. These have degraded embeddings. If the count grows large, consider improving the truncation strategy (tiktoken, chunking)."
             skills={minimal}
             badgeVariant="info"
             badgeLabel="minimal"

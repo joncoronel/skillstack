@@ -173,7 +173,7 @@ export function LeaderboardSheet({
             ) : isLoading ? (
               <LeaderboardSkeleton />
             ) : skills.length === 0 ? (
-              <EmptyState message="No leaderboard data yet — check back after the next sync." />
+              <EmptyState message="No leaderboard data yet. Check back after the next sync." />
             ) : (
               <SkillRowGrid skills={skills} metric={active} ground="raised" />
             )}

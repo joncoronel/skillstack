@@ -19,14 +19,9 @@ import { join } from "node:path";
  * cannot find is substituted, not synthesised, so every weight a template
  * names has to be in this array.
  *
- * These render at the face's NATURAL size while the app serves it at
- * `size-adjust: 89.85%`. That is correct, not drift, and the two must not be
- * reconciled. Each canvas is calibrated against the face it replaced: the app's
- * ramp was tuned on SN Pro, whose lowercase fills 49% of the em against Open
- * Runde's 54.55%, so the browser face is scaled down to hit it. The card sizes
- * in `templates.tsx` were tuned on Geist, which fills 53% and sets at 100.0% of
- * Open Runde's advance width — near enough that the cards needed no correction
- * at all. Applying the app's 89.85% here would shrink every card by a tenth.
+ * The card sizes in `templates.tsx` carried over from Geist untouched, because
+ * Geist and Open Runde set at the same optical size: x-height 53% vs 54.55% of
+ * the em, and identical average advance width.
  *
  * The mono half stays on Geist Mono. `next/font/google` never writes a ttf to
  * disk, so matching the app's Google Sans Code here needs a source these files

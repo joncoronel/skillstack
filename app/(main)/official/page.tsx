@@ -15,7 +15,7 @@ import { rowPositionClassName } from "@/lib/listing-styles";
 export const metadata: Metadata = {
   title: "Official skills | SkillBundle",
   description:
-    "First-party skills curated by the makers — companies and orgs publishing skills for the technology they build.",
+    "First-party skills curated by the makers: companies and orgs publishing skills for the technology they build.",
 };
 
 // Tagged "skill-sync" so the curated list busts in lockstep with the catalog

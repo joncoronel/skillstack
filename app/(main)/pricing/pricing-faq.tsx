@@ -38,13 +38,13 @@ const FAQ = [
   },
   {
     q: "Can I cancel anytime?",
-    a: "Yes. Cancel in billing settings and Pro stays active until the end of the period you've paid for. Nothing is deleted when it ends — you go back to the free limit and choose what to keep watching.",
+    a: "Yes. Cancel in billing settings and Pro stays active until the end of the period you've paid for. Nothing is deleted when it ends. You go back to the free limit and choose what to keep watching.",
   },
   ...(savings
     ? [
         {
           q: "Is yearly worth it?",
-          a: `Yearly is $${PLANS.pro.priceYearly} instead of $${(PLANS.pro.priceMonthly ?? 0) * 12}, so ${savings}% off. Only worth it if you already know you'll keep it — the monthly price is low enough that guessing wrong costs more than waiting.`,
+          a: `Yearly is $${PLANS.pro.priceYearly} instead of $${(PLANS.pro.priceMonthly ?? 0) * 12}, so ${savings}% off. Only worth it if you already know you'll keep it. The monthly price is low enough that guessing wrong costs more than waiting.`,
         },
       ]
     : []),

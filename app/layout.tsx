@@ -42,44 +42,13 @@ const openRunde = localFont({
   ],
   variable: "--font-open-runde",
   display: "swap",
-  // SERVED AT ITS NATURAL SIZE, and there is no `size-adjust` here on purpose.
-  // `font-size` sizes the em box, not the letters, and each designer decides
-  // how much of that box to fill: SN Pro filled 49% with lowercase, Open Runde
-  // fills 54.55%. So the swap made every text call site render 11.3% larger and
-  // 11.3% wider at an unchanged `text-sm`, and the ramp in globals.css — tuned
-  // when 14px meant SN Pro's proportions — now lands about a tenth up from its
-  // nominal numbers.
-  //
-  // That was measured, briefly corrected with `size-adjust: 89.85%`, and then
-  // kept on purpose (Sep 2026): the larger face is the look we want, and it
-  // pushes the 11px micro floor from a 5.4px x-height to 6.0px, which is more
-  // legible rather than less. DESIGN.md §3 records it as the baseline.
-  //
-  // `scripts/build-open-runde.py --measure` prints the ratios if the family
-  // ever moves again. Do not add `size-adjust` back without re-reading §3.
-  //
-  // `adjustFontFallback` is deliberately NOT set: its default for local fonts
-  // is 'Arial', which makes Next measure these files and emit a metric-matched
-  // Arial face ahead of everything below. That is the anti-CLS mechanism and it
-  // stays in sync with the files automatically.
-  //
-  // Two attempts to beat that face have been made and both were removed. First
-  // `adjustFontFallback: false` plus a hand-written `local("Inter")` family
-  // ranked above it; then plain `"Open Runde", "Inter"` entries in the list
-  // below. The reasoning behind both: Open Runde IS Inter with rounded corners
-  // (upm 2816, x-height 1536, cap 2048, identical), so a reader's own Inter is
-  // a perfect metric match.
-  //
-  // It does not pay, and the reason generalises: A FALLBACK IS MATCHED WITH
-  // `local()`, so its only value is who already has it installed. Arial is on
-  // effectively every Windows and macOS machine, and Linux fontconfig usually
-  // aliases it to metric-compatible Liberation Sans. Inter is a webfont almost
-  // nobody installs as a system font. So entries behind the generated face are
-  // reached only when the woff2 has not loaded AND Arial resolves to nothing,
-  // which is close to no one. Next also always inserts its generated fallback
-  // directly after the real family, so ranking anything above it means turning
-  // it off and hand-maintaining four font metrics with nothing to catch them
-  // going stale. Don't.
+  // No `size-adjust` and no `adjustFontFallback`, both deliberately. The face
+  // runs at its natural size, so the ramp in globals.css renders about a tenth
+  // above its nominal rem values; leaving `adjustFontFallback` at its 'Arial'
+  // default is what keeps Next generating the metric-matched fallback that
+  // holds the layout still. DESIGN.md §3 has the measurements and rules out
+  // both a `size-adjust` and ranking a `local("Inter")` ahead of that fallback
+  // — read it before adding either back.
   fallback: [
     "system-ui",
     "-apple-system",
