@@ -21,13 +21,33 @@ export function Crossfade({
   const { outerRef, innerRef } = useAnimatedHeight();
   const [first, second] = children;
 
-  // Skip @starting-style on initial mount so skeletons render without
-  // a transform context that breaks bg-fixed animation sync.
-  const [mounted, setMounted] = React.useState(false);
-  React.useEffect(() => {
-    setMounted(true);
-    return () => setMounted(false);
-  }, []);
+  // Withhold @starting-style until `active` has actually flipped once.
+  //
+  // Both panels are in the DOM from the start and the inactive one is
+  // `display: none`, so the entering panel counts as newly rendered every time
+  // `active` changes — but also on first mount, where an entrance is wrong (and
+  // where `starting:translate-*` would put a transform context around a
+  // skeleton, desyncing `bg-fixed`). A toggle is the exact condition, so derive
+  // it from `active` rather than from a mount effect: the flag turns on in the
+  // same render that flips `display`, so the two land in one commit and one
+  // style resolution.
+  //
+  // A mount effect can't be trusted here even deferred through rAF. React
+  // flushes pending passive effects synchronously when another update arrives
+  // first, so a bare `useEffect` can add these classes before the browser has
+  // resolved style for the just-committed subtree — and @starting-style then
+  // still applies. That's the bug this replaced: every Crossfade that mounted
+  // mid-session played its entrance once. TransitionPanel schedules around it
+  // with a `requestAnimationFrame`; this has no timing to schedule around.
+  //
+  // Render-time setters, as in TransitionPanel's `previousKey`: React discards
+  // and retries the render, so the reads below reflect the committed values.
+  const [previousActive, setPreviousActive] = React.useState(active);
+  const [hasToggled, setHasToggled] = React.useState(false);
+  if (active !== previousActive) {
+    setPreviousActive(active);
+    setHasToggled(true);
+  }
 
   return (
     <div
@@ -39,8 +59,8 @@ export function Crossfade({
           className={cn(
             "[grid-area:1/1]",
             CROSSFADE_BASE,
-            mounted && CROSSFADE_STARTING,
-            mounted && "starting:translate-y-3",
+            hasToggled && CROSSFADE_STARTING,
+            hasToggled && "starting:translate-y-3",
             active
               ? "contain-[size] hidden opacity-0 blur-sm translate-y-3 pointer-events-none"
               : "opacity-100",
@@ -54,8 +74,8 @@ export function Crossfade({
           className={cn(
             "[grid-area:1/1]",
             CROSSFADE_BASE,
-            mounted && CROSSFADE_STARTING,
-            mounted && "starting:-translate-y-3",
+            hasToggled && CROSSFADE_STARTING,
+            hasToggled && "starting:-translate-y-3",
             active
               ? "opacity-100"
               : "contain-[size] hidden opacity-0 blur-sm -translate-y-3 pointer-events-none",
