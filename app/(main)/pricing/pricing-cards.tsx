@@ -67,13 +67,11 @@ type Cycle = "monthly" | "yearly";
 const SWAP = { type: "spring", duration: 0.2, bounce: 0 } as const;
 
 // `lib/plans.ts` holds whole dollars, but the yearly card shows the monthly
-// EQUIVALENT, which is a division — so the figure has to survive a yearly price
-// that isn't a multiple of twelve. Cents only when the division leaves them, so
-// $48/yr still reads "$4" and nothing about the page changes today.
-//
-// Two formatters rather than `trailingZeroDisplay: "stripIfInteger"`, which
-// would express this in one: where that option isn't understood it is ignored
-// rather than approximated, and a whole price would render as "$4.00".
+// EQUIVALENT — a division, so the figure has to survive a yearly price that
+// isn't a multiple of twelve. Two formatters rather than
+// `trailingZeroDisplay: "stripIfInteger"`, which says it in one: where that
+// option isn't understood it is ignored rather than approximated, and every
+// whole price renders as "$4.00".
 const WHOLE_PRICE = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 0,
 });
@@ -201,12 +199,10 @@ function ProCard({ cycle }: { cycle: Cycle }) {
   const plan = PLANS.pro;
   const monthly = plan.priceMonthly ?? 0;
   const yearly = plan.priceYearly ?? 0;
-  // Not `Math.round`. That agreed with the caption only while the yearly price
-  // was a multiple of twelve: at $50/yr it showed $4, whose twelve payments are
-  // $48, and at $54/yr it showed $5 — the monthly price exactly, so the toggle
-  // would have animated a figure that never moved while still claiming a
-  // saving. A pricing page is the one surface where that is a lie rather than a
-  // rounding choice, so the figure now carries the cents when there are any.
+  // Not `Math.round`: it agreed with the caption only while the yearly price
+  // was a multiple of twelve. At $54/yr it showed $5 — the monthly price
+  // exactly — so the toggle would have animated a figure that never moved while
+  // still claiming a saving.
   const amount = cycle === "monthly" ? monthly : yearly / 12;
   const caption =
     cycle === "monthly" ? "per month" : `per month, $${yearly} billed yearly`;
@@ -302,9 +298,7 @@ const FIGURE = "text-3xl font-semibold tracking-tight tabular-nums";
  *
  * `h-[1em]` rather than `leading-none` alone: `text-3xl` carries its own
  * line-height and wins the cascade, so the box was 36px against the cycling
- * price's pinned 30px and this card's caption sat 6px lower than Pro's. The two
- * figures always rendered on the same line — only the captions under them
- * disagreed, which is why it read as a nudge rather than a break.
+ * price's pinned 30px and this card's caption sat 6px lower than Pro's.
  */
 function Price({ amount, caption }: { amount: number; caption: string }) {
   return (
@@ -348,12 +342,9 @@ function CyclingPrice({
       <span className="sr-only" aria-live="polite" aria-atomic>
         ${formatPrice(amount)} {caption}
       </span>
-      {/* The `$` stays outside AnimatePresence. It is the same symbol in both
-          cycles, so swapping it spends motion on something that isn't
-          changing — and the eye tracks the digits, which is where the meaning
-          is. The digits animate in a zero-width slot anchored to the symbol's
-          right edge, so they grow rightward: `$5` to `$4` today, and a wider
-          figure later, without nudging the `$`. */}
+      {/* The `$` stays outside AnimatePresence: it is the same symbol in both
+          cycles. The digits animate in a zero-width slot anchored to its right
+          edge, so they grow rightward without nudging it. */}
       <span aria-hidden className={cn("flex h-[1em] leading-none", FIGURE)}>
         <span>$</span>
         <span className="relative block w-0">

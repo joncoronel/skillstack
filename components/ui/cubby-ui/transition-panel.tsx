@@ -289,18 +289,11 @@ function TransitionPanel({
   // False only on initial render (both keys start equal); the first swap flips
   // it permanently. Gates `data-activation-direction` so consumers can tell
   // "first paint" from a real swap, and the views' `@starting-style` so the
-  // initial view doesn't animate in on mount.
-  //
-  // A swap is the exact condition those starting styles exist for — a view only
-  // goes `display: none` to displayed when `activeKey` moves — and deriving it
-  // here means the flag turns on in the same render that flips `display`, so
-  // both land in one commit and one style resolution. A mount effect can't
-  // match that even deferred through `requestAnimationFrame`: React flushes
-  // pending passive effects synchronously when another update arrives first, so
-  // the classes can be added before the browser has resolved style for the
-  // just-committed subtree, and `@starting-style` then still applies. That is
-  // what made a panel mounting mid-session (behind Suspense, or gated on data)
-  // play its entrance once.
+  // initial view doesn't animate in on mount. A swap is exactly when a view
+  // goes `display: none` to displayed, so deriving the flag here turns it on in
+  // the same commit as that change — which a mount effect cannot do reliably,
+  // even deferred through `requestAnimationFrame`. See `crossfade.tsx`, which
+  // carries the same guard and the reason in full.
   const hasActivated = activeKey !== previousKey;
 
   // Dev warning, gated on a populated registry (view layout effects run after

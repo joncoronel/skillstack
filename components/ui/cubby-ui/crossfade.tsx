@@ -23,25 +23,15 @@ export function Crossfade({
 
   // Withhold @starting-style until `active` has actually flipped once.
   //
-  // Both panels are in the DOM from the start and the inactive one is
-  // `display: none`, so the entering panel counts as newly rendered every time
-  // `active` changes — but also on first mount, where an entrance is wrong (and
-  // where `starting:translate-*` would put a transform context around a
-  // skeleton, desyncing `bg-fixed`). A toggle is the exact condition, so derive
-  // it from `active` rather than from a mount effect: the flag turns on in the
-  // same render that flips `display`, so the two land in one commit and one
-  // style resolution.
-  //
-  // A mount effect can't be trusted here even deferred through rAF. React
-  // flushes pending passive effects synchronously when another update arrives
-  // first, so a bare `useEffect` can add these classes before the browser has
-  // resolved style for the just-committed subtree — and @starting-style then
-  // still applies. That's the bug this replaced: every Crossfade that mounted
-  // mid-session played its entrance once. TransitionPanel schedules around it
-  // with a `requestAnimationFrame`; this has no timing to schedule around.
-  //
-  // Render-time setters, as in TransitionPanel's `previousKey`: React discards
-  // and retries the render, so the reads below reflect the committed values.
+  // Both panels are always in the DOM and the inactive one is `display: none`,
+  // so the entering panel is newly rendered on every flip — and on first mount,
+  // where an entrance is wrong and `starting:translate-*` would wrap a skeleton
+  // in a transform context that desyncs `bg-fixed`. Deriving the flag during
+  // render turns it on in the same commit as the `display` change. A mount
+  // effect cannot match that even deferred through rAF: React flushes passive
+  // effects synchronously when another update arrives first, so the classes
+  // could land before the browser had resolved style for the new subtree, and
+  // @starting-style would still apply.
   const [previousActive, setPreviousActive] = React.useState(active);
   const [hasToggled, setHasToggled] = React.useState(false);
   if (active !== previousActive) {
