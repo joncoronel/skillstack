@@ -2,16 +2,22 @@ Provenance for the vendored Open Runde binaries.
 Written by scripts/build-open-runde.py. Do not edit by hand.
 
 built:      2026-09-07
-source:     open-runde-main  (https://github.com/lauridskern/open-runde)
+upstream:   https://github.com/lauridskern/open-runde
 fonttools:  4.63.0
 brotli:     1.2.0
 
-sha256 of each output:
-  9e398bae9da43e10333f8fe3b16a480bf350dc2ee373b4a703a4c06f21133b02  app/fonts/open-runde-400-latin.woff2
-  cd5699bebf95700de21e8161b7f650a061266d43e188cafcbbf1a8e640171fb3  app/fonts/open-runde-500-latin.woff2
-  bb1a8e2d0b332e3068ce96f1f04b96357fe0653585e8422a035f8b19ec2bd803  app/fonts/open-runde-600-latin.woff2
-  4487780c71faebce083dbb0b4cac6907ba7fa8371a77cd3e18851778f2f3e77d  app/fonts/open-runde-700-latin.woff2
-  d56755b5d84749e8df3bf613fc7d6376fc5a12da937ab3a8d8320e074230d07c  assets/og/OpenRunde-Regular.otf
-  e3be75e26d5320489f0527c60a766581056c7d8882c5f81af135fa660f88e3e4  assets/og/OpenRunde-Medium.otf
-  6b538f9e09fb5c0c9949b70bb6335415e6f4dd98710a81bbebedee5df14e3ba3  assets/og/OpenRunde-Semibold.otf
-  558a42d9a527a98687f9126c084bb40f46a1e3a6499084ff40180afbc6af26c7  assets/og/OpenRunde-Bold.otf
+sha256 of each upstream source read:
+  8398c8adfc2b41a21cd1c0e00dbbd81c2ce3877cc5c9843bebd3e0b7b43cfbcc  OpenRunde-Regular.otf
+  163b5e80e397da746081f94ee0a2314d17d256f2ee4a06998f48ce372b56f056  OpenRunde-Medium.otf
+  39d6c706cfbb9cad2a7ea2bfdbe12c4384185d8625a21208a39cbdfe1ea1790c  OpenRunde-Semibold.otf
+  995f115d11590c73ed95cd58bf12db0417f8757986d95c9be773faf1583310fd  OpenRunde-Bold.otf
+
+sha256 of each output written:
+  40bc503a5ab3b52b95972dbae0499b93a2adf433bfcc84f50b581c9bc28570a0  app/fonts/open-runde-400-latin.woff2
+  3beda9aa6f8eda1dc0d9c834b1a1271afacd4e9ffd873c0b367b36d2d555339c  app/fonts/open-runde-500-latin.woff2
+  07a0739f4b474108700dce77fecf5b316d945e98ff38f713dde4bb0bfa4767a7  app/fonts/open-runde-600-latin.woff2
+  c20226d5cc943285811616272235309f3d6c6bd3775bfb884219929814505c6a  app/fonts/open-runde-700-latin.woff2
+  30008391b26dd9ca2ed65245d836890a661b52baa2696d54d0a48f9689f715c3  assets/og/OpenRunde-Regular.otf
+  bb3d41ff23136e55916a204c3462bcbb9d7e34526f14c8996443d32d9bf0e3ff  assets/og/OpenRunde-Medium.otf
+  60af092870a7fae6cbcd763fe2975024c66676263c15aa91d46cfc3e4bc80bd5  assets/og/OpenRunde-Semibold.otf
+  f653ba0b74f73f39c8fa582256988523040b5c8edcd97fa60829bdd685e16035  assets/og/OpenRunde-Bold.otf

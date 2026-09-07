@@ -43,8 +43,10 @@ https://github.com/lauridskern/open-runde/releases/latest (the directory holding
 `pip install -r scripts/requirements.txt`. Those versions change the output
 bytes, which is why they are pinned and recorded.
 
-Every run writes `app/fonts/SOURCES.txt`: the release it read, the two library
-versions, and a sha256 per output. Commit it with the binaries.
+Every run writes `app/fonts/SOURCES.txt`: the two library versions, a sha256
+per upstream file read, and a sha256 per output written. Upstream ships no
+version string, so the input hashes are what identify the release. Commit it
+with the binaries.
 """
 
 import hashlib
@@ -160,7 +162,12 @@ def add_tabular_figures(font: TTFont) -> None:
 
 
 def build(source: Path, unicodes: str, flavor, out: Path, tabular: bool) -> None:
-    font = TTFont(source)
+    # `recalcTimestamp=False` keeps the upstream file's `head.modified` instead
+    # of stamping wall-clock time on save. Without it every rebuild writes
+    # different bytes from identical input, which churns four committed
+    # binaries on each run and makes the output hashes in SOURCES.txt
+    # unverifiable. Now the same release rebuilds to the same bytes.
+    font = TTFont(source, recalcTimestamp=False)
     if tabular:
         add_tabular_figures(font)
 
@@ -251,12 +258,20 @@ def write_sources(source: Path, outputs: list[Path]) -> None:
         "Written by scripts/build-open-runde.py. Do not edit by hand.",
         "",
         f"built:      {date.today().isoformat()}",
-        f"source:     {source.name}  (https://github.com/lauridskern/open-runde)",
+        f"upstream:   https://github.com/lauridskern/open-runde",
         f"fonttools:  {fontTools.version}",
         f"brotli:     {getattr(brotli, '__version__', 'unknown')}",
         "",
-        "sha256 of each output:",
+        # The INPUTS, not just the outputs. Upstream ships no version in the
+        # files and the local directory name says nothing, so these hashes are
+        # the only thing that identifies which release was read. Compare them
+        # before deciding a rebuild changed anything.
+        "sha256 of each upstream source read:",
     ]
+    for face in FACES:
+        src = source / "src" / "desktop" / f"OpenRunde-{face}.otf"
+        lines.append(f"  {hashlib.sha256(src.read_bytes()).hexdigest()}  OpenRunde-{face}.otf")
+    lines += ["", "sha256 of each output written:"]
     for out in outputs:
         digest = hashlib.sha256(out.read_bytes()).hexdigest()
         lines.append(f"  {digest}  {out.relative_to(ROOT).as_posix()}")
