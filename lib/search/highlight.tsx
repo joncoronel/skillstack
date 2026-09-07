@@ -52,12 +52,17 @@ export function renderHighlight(value: string): React.ReactNode {
     const text = decodeEntities(segment);
     if (!text) return null;
     return i % 2 === 1 ? (
-      // A tint, not a recolour. Both call sites already sit at 600, so a weight
-      // step is a no-op and the family ships no 700 to reach for, which left
-      // `text-primary` marking the match on its own: colour alone, and it
-      // measures 2.15:1 on the dark card against the 4.5:1 floor for 14px.
-      // `text-inherit` keeps the match at whatever contrast the text around it
-      // already passes, and the tinted box carries the signal.
+      // A tint, not a recolour. This was `font-bold text-primary`, which read as
+      // two cues but is one: both call sites already wrap it in `font-semibold`,
+      // so the weight step only ever came from the 700 face, and for a while
+      // this branch did not ship one. That left `text-primary` alone, and colour
+      // alone is not a cue. It also measured 3.95:1 on the row surface in both
+      // themes, under the 4.5:1 floor for 14px, so the match was harder to read
+      // than the text around it.
+      //
+      // The box is the cue now, and `text-inherit` keeps the match at whatever
+      // contrast its neighbours already pass. Weight is deliberately not used:
+      // it depends on the parent never being 700 itself, which is what broke.
       <mark key={i} className="rounded-[3px] bg-primary/20 px-0.5 text-inherit">
         {text}
       </mark>
