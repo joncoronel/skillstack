@@ -6,6 +6,37 @@ delete them when shipped. Newest thinking near the top.
 
 ## Under consideration
 
+### Google Sans Code is preloaded on every route, used on few — Sep 2026
+
+Measured during the Open Runde swap, not caused by it. `next/font` emits a
+`<link rel="preload" as="font">` for every declared face, so the mono woff2
+downloads on every route regardless of use. On `/official`: **34 KB fetched, 0
+mono text nodes, 0 mono pseudo-elements, and `document.fonts` never activates
+the face.** Reproduce with `performance.getEntriesByType("resource")` filtered
+to woff2 against a production build.
+
+For scale, the four sans faces are 106 KB, so the unused mono is a further 32%
+on top of that for the catalog and list routes.
+
+Not obviously fixable, which is why this is a note rather than a task. The mono
+is genuinely load-bearing where it appears — install commands, code blocks, the
+shiki diff, `owner/repo` strings — and those are spread widely enough that
+moving `Google_Sans_Code` out of the root layout would mean re-declaring it per
+route and fragmenting one font instance into several (the docs' "font
+definitions file" pattern helps with sharing, not with preload scope). Worth
+weighing:
+
+- `preload: false` on the mono loader alone. It stops the eager fetch on every
+  route; the cost is that pages which DO use mono fall back until the CSS
+  triggers the download, so install commands would reflow. `fallback` already
+  carries a monospace stack (see the note in `app/layout.tsx` about `iiiii` vs
+  `MMMMM` measuring 55.0px either way), so the reflow would be modest.
+- Leave it. 34 KB on a warm cache is one request that 304s.
+
+Do not "fix" this by dropping the mono `fallback` array or `adjustFontFallback:
+false` — both are load-bearing for different reasons documented in
+`app/layout.tsx`.
+
 ### Public bundle pages in the sitemap — Aug 2026
 
 Parked while shipping `app/sitemap.ts` (PR #68), which covers the catalog
@@ -1376,25 +1407,24 @@ true` — that half had already been repaired by the earlier one-shot, so
   The compare chart is lines only and needs neither change. The range control already
   makes a longer window cheap to look at, which is most of what raising it would buy.
 
-- **OG cards stay on Geist Sans. Considered and declined, Aug 2026.** `lib/og/fonts.ts`
-  ships Geist Sans and Geist Mono, so the cards are the one surface not set in the app's
-  own SN Pro and Google Sans Code. The pixel face is fully gone from them; this is only
-  about the remaining sans and mono.
+- **OG cards moved to Open Runde. Reversed and done, Sep 2026.** This entry used to
+  record the opposite: the cards stayed on Geist Sans, declined on value. Two of the
+  three reasons were about SN Pro specifically and expired when the app changed face.
 
-  Not blocked. An earlier version of this entry said the work needed `fonttools`, which
-  the machine did not have. It installs fine. Declined on value instead:
+  - "Geist Sans and SN Pro are both geometric sans faces, so the difference at card
+    scale is slight" — Open Runde is a rounded face, and the difference is not slight.
+  - "Satori wants static ttf/otf/woff, SN Pro is a variable woff2, so this needs
+    hand-cut instances somebody has to redo whenever the font moves" — Open Runde ships
+    static instances, and `scripts/build-open-runde.py` cuts both the browser and the
+    `ImageResponse` sets in one run, so nothing is hand-cut.
 
-  - Geist Sans and SN Pro are both geometric sans faces, and the difference at card
-    scale in a chat unfurl is slight.
-  - Satori wants static ttf/otf/woff and SN Pro is vendored as a VARIABLE woff2
-    (`app/fonts/sn-pro-latin.woff2`), so it needs instances cut at 400/500/600/700 and
-    committed. That is a hand-run binary step with no script, which somebody has to
-    repeat whenever SN Pro moves.
-  - It would not even reach one typeface: the cards set code in Geist Mono, and fixing
-    that half needs a TTF `next/font/google` never writes to disk.
+  The third reason still stands and the cards still set code in Geist Mono: matching the
+  app's Google Sans Code needs a TTF that `next/font/google` never writes to disk. That
+  is now the only face the cards do not share with the app, and it is the half nobody
+  reads as brand.
 
-  Checked for side effects and there are none: `lib/og/*` is `server-only` and used just
-  by the `opengraph-image` routes, the cards are CDN-cached, and `next.config.ts` traces
-  `assets/og/**` as a glob. Revisit only if the brand-consistency case gets stronger. If
-  it does, keep the reads at module scope in `lib/og/fonts.ts` — that is what keeps
-  those routes prerendering static.
+  The side-effect check from the original entry held: `lib/og/*` is `server-only` and
+  used only by the `opengraph-image` routes, the cards are CDN-cached, and
+  `next.config.ts` traces `assets/og/**` as a glob, so the renamed files travel without
+  a config change. The reads stay at module scope in `lib/og/fonts.ts` — that is what
+  keeps those routes prerendering static.

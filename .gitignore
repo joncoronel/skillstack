@@ -64,3 +64,6 @@ reviews/
 # Scratch copies of third-party docs pulled in while working. Local only:
 # whatever they informed is cited in docs/charts.md.
 docs/temp/
+
+# Python bytecode from scripts/
+__pycache__/

@@ -224,6 +224,11 @@ function SelectableWrapper({
       htmlFor={checkboxId}
       data-variant="default"
       className={cn(
+        // `Label` is borrowed for its click behaviour and ships a form-label
+        // `font-medium` with it, which unreset becomes the inherited weight of
+        // every row and card. See DESIGN.md §3, "500 is a role, never a
+        // default".
+        "font-normal",
         "flex flex-col rounded-2xl border bg-card text-card-foreground dark:border-border/50",
         // 100ms is the system's fast tier (§7), not Tailwind's 150ms default.
         "cursor-pointer transition-colors duration-100 ease-out motion-reduce:transition-none",

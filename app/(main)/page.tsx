@@ -28,7 +28,7 @@ import { HOME_POPULAR_TAG } from "@/lib/cache-tags";
 // fetches the tab it is showing; see `useLeaderboard` in
 // components/leaderboard-sheet.tsx.
 
-const HOME_TITLE = "SkillBundle — Build your AI skill bundle";
+const HOME_TITLE = "SkillBundle: Build your AI skill bundle";
 const HOME_DESCRIPTION =
   "Discover, compare, and bundle AI coding assistant skills for Cursor, Claude, and other agents. Pick your stack, share with a link.";
 
@@ -47,7 +47,7 @@ export const metadata: Metadata = {
         url: "/opengraph-image",
         width: 1200,
         height: 630,
-        alt: "SkillBundle — discover, compare, and bundle AI coding skills",
+        alt: "SkillBundle: discover, compare, and bundle AI coding skills",
       },
     ],
   },

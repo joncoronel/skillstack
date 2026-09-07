@@ -18,21 +18,39 @@ import "./globals.css";
 // robots and sitemap routes — those emit text and XML, so nothing resolves
 // relative URLs for them and they need the same value spelled out.
 
-// Vendored, not fetched: SN Pro has no entry in Next's metrics table, so
-// `next/font/google` couldn't build a size-adjusted fallback and every route
-// reflowed when the woff2 landed. `next/font/local` measures the file instead.
+// Vendored, not fetched: Open Runde isn't on Google Fonts at all, and even if
+// it were it has no entry in Next's metrics table, so `next/font/google`
+// couldn't build a size-adjusted fallback. `next/font/local` measures the file.
 //
-// The file is the upright variable font subsetted to `latin` (47.9 KB). Don't
-// swap in the raw TTF from the Google Fonts zip: 335 KB. No italic, so emphasis
-// is synthesised — as it always was. OFL 1.1 requires the licence to travel
-// with it: `app/fonts/OFL-sn-pro.txt`.
-const snPro = localFont({
-  src: "./fonts/sn-pro-latin.woff2",
-  variable: "--font-sn-pro",
-  // The file's own axis is 200-900. Declaring the range keeps this one variable
-  // face instead of letting the browser synthesise the weights in between.
-  weight: "200 900",
+// FOUR FILES, NOT ONE. Open Runde ships static instances and no variable font,
+// which is the whole shape of this config: each weight is a separate ~26 KB
+// download and `next/font` preloads every one of them on every route, used or
+// not. So adding a fifth is a real cost, and any weight NOT listed here fails
+// quietly rather than loudly: CSS matches the nearest available face instead of
+// synthesising, so it renders at a neighbouring weight and looks almost right.
+// 700 is carried for exactly that reason. It briefly was not, on a 43 KB
+// per-face measurement that turned out to be uncompressed output.
+//
+// The files are cut from the upstream release by `scripts/build-open-runde.py`,
+// which also synthesises the `tnum` the family lacks — read its header before
+// regenerating them. No italic, so emphasis is synthesised, as it always was.
+// OFL 1.1 requires the licence to travel with them: `app/fonts/OFL-open-runde.txt`.
+const openRunde = localFont({
+  src: [
+    { path: "./fonts/open-runde-400-latin.woff2", weight: "400" },
+    { path: "./fonts/open-runde-500-latin.woff2", weight: "500" },
+    { path: "./fonts/open-runde-600-latin.woff2", weight: "600" },
+    { path: "./fonts/open-runde-700-latin.woff2", weight: "700" },
+  ],
+  variable: "--font-open-runde",
   display: "swap",
+  // No `size-adjust` and no `adjustFontFallback`, both deliberately. The face
+  // runs at its natural size, so the ramp in globals.css renders about a tenth
+  // above its nominal rem values; leaving `adjustFontFallback` at its 'Arial'
+  // default is what keeps Next generating the metric-matched fallback that
+  // holds the layout still. DESIGN.md §3 has the measurements and rules out
+  // both a `size-adjust` and ranking a `local("Inter")` ahead of that fallback
+  // — read it before adding either back.
   fallback: [
     "system-ui",
     "-apple-system",
@@ -93,7 +111,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${snPro.variable} ${googleSansCode.variable} font-sans antialiased`}
+        className={`${openRunde.variable} ${googleSansCode.variable} font-sans antialiased`}
       >
         <div className="root">
           <Providers>{children}</Providers>
