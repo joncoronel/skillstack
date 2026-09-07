@@ -66,6 +66,29 @@ type Cycle = "monthly" | "yearly";
 // serious number.
 const SWAP = { type: "spring", duration: 0.2, bounce: 0 } as const;
 
+// `lib/plans.ts` holds whole dollars, but the yearly card shows the monthly
+// EQUIVALENT, which is a division — so the figure has to survive a yearly price
+// that isn't a multiple of twelve. Cents only when the division leaves them, so
+// $48/yr still reads "$4" and nothing about the page changes today.
+//
+// Two formatters rather than `trailingZeroDisplay: "stripIfInteger"`, which
+// would express this in one: where that option isn't understood it is ignored
+// rather than approximated, and a whole price would render as "$4.00".
+const WHOLE_PRICE = new Intl.NumberFormat("en-US", {
+  maximumFractionDigits: 0,
+});
+const CENTS_PRICE = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+/** `4` → "4", `4.5` → "4.50", `4.1666…` → "4.17". */
+function formatPrice(value: number): string {
+  return Number.isInteger(value)
+    ? WHOLE_PRICE.format(value)
+    : CENTS_PRICE.format(value);
+}
+
 export function PricingCards() {
   const [cycle, setCycle] = useState<Cycle>("monthly");
 
@@ -178,7 +201,13 @@ function ProCard({ cycle }: { cycle: Cycle }) {
   const plan = PLANS.pro;
   const monthly = plan.priceMonthly ?? 0;
   const yearly = plan.priceYearly ?? 0;
-  const amount = cycle === "monthly" ? monthly : Math.round(yearly / 12);
+  // Not `Math.round`. That agreed with the caption only while the yearly price
+  // was a multiple of twelve: at $50/yr it showed $4, whose twelve payments are
+  // $48, and at $54/yr it showed $5 — the monthly price exactly, so the toggle
+  // would have animated a figure that never moved while still claiming a
+  // saving. A pricing page is the one surface where that is a lie rather than a
+  // rounding choice, so the figure now carries the cents when there are any.
+  const amount = cycle === "monthly" ? monthly : yearly / 12;
   const caption =
     cycle === "monthly" ? "per month" : `per month, $${yearly} billed yearly`;
 
@@ -268,11 +297,21 @@ function PlanCard({
 
 const FIGURE = "text-3xl font-semibold tracking-tight tabular-nums";
 
-/** A price that never changes. The free card. */
+/**
+ * A price that never changes. The free card.
+ *
+ * `h-[1em]` rather than `leading-none` alone: `text-3xl` carries its own
+ * line-height and wins the cascade, so the box was 36px against the cycling
+ * price's pinned 30px and this card's caption sat 6px lower than Pro's. The two
+ * figures always rendered on the same line — only the captions under them
+ * disagreed, which is why it read as a nudge rather than a break.
+ */
 function Price({ amount, caption }: { amount: number; caption: string }) {
   return (
     <p className="flex flex-col gap-1">
-      <span className={cn("leading-none", FIGURE)}>${amount}</span>
+      <span className={cn("block h-[1em] leading-none", FIGURE)}>
+        ${formatPrice(amount)}
+      </span>
       <span className="text-xs text-muted-foreground">{caption}</span>
     </p>
   );
@@ -307,24 +346,30 @@ function CyclingPrice({
   return (
     <p className="flex flex-col gap-1">
       <span className="sr-only" aria-live="polite" aria-atomic>
-        ${amount} {caption}
+        ${formatPrice(amount)} {caption}
       </span>
-      <span
-        aria-hidden
-        className="relative block h-[1em] text-3xl leading-none"
-      >
-        <AnimatePresence mode="popLayout" initial={false}>
-          <motion.span
-            key={amount}
-            initial={hidden}
-            animate={shown}
-            exit={hiddenUp}
-            transition={SWAP}
-            className={cn("absolute inset-x-0 top-0 block", FIGURE)}
-          >
-            ${amount}
-          </motion.span>
-        </AnimatePresence>
+      {/* The `$` stays outside AnimatePresence. It is the same symbol in both
+          cycles, so swapping it spends motion on something that isn't
+          changing — and the eye tracks the digits, which is where the meaning
+          is. The digits animate in a zero-width slot anchored to the symbol's
+          right edge, so they grow rightward: `$5` to `$4` today, and a wider
+          figure later, without nudging the `$`. */}
+      <span aria-hidden className={cn("flex h-[1em] leading-none", FIGURE)}>
+        <span>$</span>
+        <span className="relative block w-0">
+          <AnimatePresence mode="popLayout" initial={false}>
+            <motion.span
+              key={amount}
+              initial={hidden}
+              animate={shown}
+              exit={hiddenUp}
+              transition={SWAP}
+              className="absolute top-0 left-0 block"
+            >
+              {formatPrice(amount)}
+            </motion.span>
+          </AnimatePresence>
+        </span>
       </span>
       <span
         aria-hidden
