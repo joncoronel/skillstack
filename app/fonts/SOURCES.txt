@@ -1,0 +1,17 @@
+Provenance for the vendored Open Runde binaries.
+Written by scripts/build-open-runde.py. Do not edit by hand.
+
+built:      2026-09-07
+source:     open-runde-main  (https://github.com/lauridskern/open-runde)
+fonttools:  4.63.0
+brotli:     1.2.0
+
+sha256 of each output:
+  9e398bae9da43e10333f8fe3b16a480bf350dc2ee373b4a703a4c06f21133b02  app/fonts/open-runde-400-latin.woff2
+  cd5699bebf95700de21e8161b7f650a061266d43e188cafcbbf1a8e640171fb3  app/fonts/open-runde-500-latin.woff2
+  bb1a8e2d0b332e3068ce96f1f04b96357fe0653585e8422a035f8b19ec2bd803  app/fonts/open-runde-600-latin.woff2
+  4487780c71faebce083dbb0b4cac6907ba7fa8371a77cd3e18851778f2f3e77d  app/fonts/open-runde-700-latin.woff2
+  d56755b5d84749e8df3bf613fc7d6376fc5a12da937ab3a8d8320e074230d07c  assets/og/OpenRunde-Regular.otf
+  e3be75e26d5320489f0527c60a766581056c7d8882c5f81af135fa660f88e3e4  assets/og/OpenRunde-Medium.otf
+  6b538f9e09fb5c0c9949b70bb6335415e6f4dd98710a81bbebedee5df14e3ba3  assets/og/OpenRunde-Semibold.otf
+  558a42d9a527a98687f9126c084bb40f46a1e3a6499084ff40180afbc6af26c7  assets/og/OpenRunde-Bold.otf

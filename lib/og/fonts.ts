@@ -19,9 +19,13 @@ import { join } from "node:path";
  * cannot find is substituted, not synthesised, so every weight a template
  * names has to be in this array.
  *
- * The card sizes in `templates.tsx` carried over from Geist untouched, because
- * Geist and Open Runde set at the same optical size: x-height 53% vs 54.55% of
- * the em, and identical average advance width.
+ * The card sizes in `templates.tsx` carried over from Geist untouched. Geist
+ * and Open Runde measured within 2% on x-height and equal on average advance
+ * at the swap, but Geist is deleted, so that is history rather than something
+ * you can re-derive here. What holds the cards now is `Title`: it is
+ * `nowrap` + `overflow: hidden` + `textOverflow: ellipsis`, so a name too wide
+ * for the 1056px content box ellipsizes instead of clipping. Re-check by
+ * rendering a long id, not by trusting the numbers above.
  *
  * The mono half stays on Geist Mono. `next/font/google` never writes a ttf to
  * disk, so matching the app's Google Sans Code here needs a source these files

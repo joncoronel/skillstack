@@ -67,7 +67,7 @@ export function SourceSkillList({ skills }: { skills: SkillData[] }) {
     if (added === 0) {
       if (skippedForCap > 0) {
         toast({
-          title: `Bundle is full, couldn't add ${skippedForCap} skill${plural(skippedForCap)}`,
+          title: `Bundle is full: couldn't add ${skippedForCap} skill${plural(skippedForCap)}`,
         });
       }
       return;

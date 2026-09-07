@@ -61,7 +61,7 @@ const nextConfig: NextConfig = {
       "@shikijs/themes/horizon-bright": "@shikijs/themes/horizon",
     },
   },
-  // The OG image routes read brand .ttf fonts from assets/og via fs.readFile.
+  // The OG image routes read brand .ttf/.otf fonts from assets/og via fs.readFile.
   // Next's static analysis can't always trace a runtime-built path, so list the
   // files explicitly to guarantee they ship with the serverless functions.
   // Covers the root (/opengraph-image) and nested (/**/opengraph-image) image

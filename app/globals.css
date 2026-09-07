@@ -28,10 +28,9 @@ html {
      is 600 throughout and tracking tightens as size grows, because optical
      tracking runs opposite to size. Re-measure whenever the family moves.
 
-     600 is a ceiling here, not a preference. It was 640 against SN Pro's
-     variable axis; Open Runde is static instances, so anything above 600
-     matches the 700 face, which this app deliberately does not ship. See the
-     note in app/layout.tsx before raising it. */
+     600 is a choice, not a ceiling. The app does ship a 700 face, so raising
+     these is possible; it was tried and read heavier than these surfaces want.
+     See DESIGN.md §3's Weight Ladder Rule before changing it. */
 
   /* Hero — moment pages, where the heading IS the content and there is no
      dense material under it: pricing, 404, the route error. */
@@ -43,7 +42,12 @@ html {
   /* Display — an app page's title, above dense material. Lands about 3x the
      body. Its floor is the headline size: on a phone the two converge. */
   --text-display: clamp(1.875rem, 2.8vw, 2.5rem);
-  --text-display--line-height: 1;
+  /* 1.1, not 1. Every call site here is one or two words and sets on a single
+     line, where the two are visually identical, so 1 read as safe. The home
+     hero is a sentence and wraps to two lines at phone widths, where 1 puts
+     the descenders of line one into the ascenders of line two. Matches
+     display-sm, which already carries 1.1 for the same reason. */
+  --text-display--line-height: 1.1;
   --text-display--font-weight: 600;
   --text-display--letter-spacing: -0.025em;
 

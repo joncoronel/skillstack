@@ -22,13 +22,14 @@ import "./globals.css";
 // it were it has no entry in Next's metrics table, so `next/font/google`
 // couldn't build a size-adjusted fallback. `next/font/local` measures the file.
 //
-// THREE FILES, NOT ONE. Open Runde ships static instances and no variable font,
-// which is the whole shape of this config: each weight is a separate ~43 KB
-// download and `next/font` preloads every one of them on every route. That is
-// why 700 is absent — it had two call sites, both moved to `font-semibold`.
-// Adding a weight here is a real cost, and using one that isn't here fails
-// quietly: CSS matches the nearest available face rather than synthesising, so
-// a `font-bold` would render at 600 and look almost right.
+// FOUR FILES, NOT ONE. Open Runde ships static instances and no variable font,
+// which is the whole shape of this config: each weight is a separate ~26 KB
+// download and `next/font` preloads every one of them on every route, used or
+// not. So adding a fifth is a real cost, and any weight NOT listed here fails
+// quietly rather than loudly: CSS matches the nearest available face instead of
+// synthesising, so it renders at a neighbouring weight and looks almost right.
+// 700 is carried for exactly that reason. It briefly was not, on a 43 KB
+// per-face measurement that turned out to be uncompressed output.
 //
 // The files are cut from the upstream release by `scripts/build-open-runde.py`,
 // which also synthesises the `tnum` the family lacks — read its header before
@@ -39,6 +40,7 @@ const openRunde = localFont({
     { path: "./fonts/open-runde-400-latin.woff2", weight: "400" },
     { path: "./fonts/open-runde-500-latin.woff2", weight: "500" },
     { path: "./fonts/open-runde-600-latin.woff2", weight: "600" },
+    { path: "./fonts/open-runde-700-latin.woff2", weight: "700" },
   ],
   variable: "--font-open-runde",
   display: "swap",

@@ -7,11 +7,11 @@ file the way SN Pro did. This script cuts the two sets of instances the app
 needs, and is the reason those binaries are reproducible rather than a hand-run
 step nobody can repeat:
 
-  app/fonts/open-runde-{400,500,600}-latin.woff2
+  app/fonts/open-runde-{400,500,600,700}-latin.woff2
       The browser faces, loaded by `app/layout.tsx`. Subsetted to the Google
-      `latin` range, the same range SN Pro shipped: 151 KB -> 42 KB per face,
-      so 455 KB -> 129 KB across the three, and `next/font` preloads every one
-      of them on every route. Deliberately three of the four - see WEB_FACES.
+      `latin` range, the same range SN Pro shipped: 151 KB -> 26 KB per face,
+      so 606 KB -> 106 KB across the four, and `next/font` preloads every one
+      of them on every route.
 
       This step has no equivalent in the Next.js docs because it is not a
       Next.js concern: Next serves whatever woff2 it is pointed at and never
@@ -26,7 +26,9 @@ step nobody can repeat:
       wider range than the browser faces because OG cards render names we do
       not control.
 
-Both sets get a synthesized `tnum` feature - see `add_tabular_figures` below.
+The browser faces get a synthesized `tnum` feature - see `add_tabular_figures`
+below. The OG faces do not: Satori applies no OpenType feature settings, so a
+`tnum` there would be a feature with no way to turn it on.
 
 `--measure` writes no files. It prints how this family sets against the ramp's
 original calibration - see `measure` and CALIBRATION_X_HEIGHT below.
@@ -37,14 +39,22 @@ Run with:
 
 where the argument is an extracted copy of
 https://github.com/lauridskern/open-runde/releases/latest (the directory holding
-`src/desktop/*.otf` and `LICENSE.txt`). Requires `fonttools` and `brotli`:
-`pip install fonttools brotli`.
+`src/desktop/*.otf` and `LICENSE.txt`). Install the pinned build deps first:
+`pip install -r scripts/requirements.txt`. Those versions change the output
+bytes, which is why they are pinned and recorded.
+
+Every run writes `app/fonts/SOURCES.txt`: the release it read, the two library
+versions, and a sha256 per output. Commit it with the binaries.
 """
 
+import hashlib
 import shutil
 import sys
+from datetime import date
 from pathlib import Path
 
+import brotli
+import fontTools
 from fontTools import subset
 from fontTools.otlLib.builder import buildSinglePos, buildValue
 from fontTools.ttLib import TTFont
@@ -74,16 +84,17 @@ OG_UNICODES = (
 
 FACES = ["Regular", "Medium", "Semibold", "Bold"]
 
-# The browser gets three of the four. `next/font` preloads every file in a
-# loader's `src`, so a face costs its ~43 KB on the first paint of every route
-# whether or not that route sets it, which is the same reason `app/layout.tsx`
-# already carries a warning about unused imports. Bold is the one that does not
-# earn it: 400 is body, 500 has 175 call sites, and 600 carries every heading
-# and display token, while 700 had two - both moved to `font-semibold` in this
-# change. Adding Bold back means adding this line AND the file: a `font-bold`
-# written against a three-face stack matches 600 rather than synthesizing, so
-# it goes wrong quietly.
-WEB_FACES = {"Regular": 400, "Medium": 500, "Semibold": 600}
+# All four. `next/font` preloads every file in a loader's `src`, so a face costs
+# its ~26 KB on the first paint of every route whether or not that route sets
+# it, which is why this list is worth thinking about before adding to.
+#
+# Bold was cut at first and then put back. The cut was made on a measured 43 KB
+# per face, but that number came from output this script was writing as
+# uncompressed OpenType under a `.woff2` name (see `build`). At the real 26 KB
+# the trade changed: the reason to carry 700 is that without it `font-bold` is
+# a normal Tailwind utility that matches 600 and looks almost right, and a
+# stack where that fails silently costs more than the download.
+WEB_FACES = {"Regular": 400, "Medium": 500, "Semibold": 600, "Bold": 700}
 
 
 def add_tabular_figures(font: TTFont) -> None:
@@ -148,20 +159,29 @@ def add_tabular_figures(font: TTFont) -> None:
             system.FeatureCount = len(system.FeatureIndex)
 
 
-def build(source: Path, unicodes: str, flavor, out: Path) -> None:
+def build(source: Path, unicodes: str, flavor, out: Path, tabular: bool) -> None:
     font = TTFont(source)
-    add_tabular_figures(font)
+    if tabular:
+        add_tabular_figures(font)
 
     options = subset.Options()
-    # `tnum` is not in fontTools' default keep-list, so the feature this script
-    # just added would be pruned straight back out.
-    options.layout_features += ["tnum"]
-    options.flavor = flavor
+    # `tnum` is not in fontTools' default keep-list, so the feature added above
+    # would be pruned straight back out.
+    if tabular:
+        options.layout_features += ["tnum"]
     subsetter = subset.Subsetter(options=options)
     subsetter.populate(unicodes=subset.parse_unicodes(unicodes))
     subsetter.subset(font)
 
     out.parent.mkdir(parents=True, exist_ok=True)
+    # On the FONT, not on `subset.Options`. Options.flavor is only read by
+    # fontTools' own CLI wrapper, so setting it there and calling `font.save()`
+    # writes the source flavor and silently ships uncompressed OpenType under a
+    # `.woff2` name. That shipped once: the first three faces went out as
+    # `OTTO`, about 2x their compressed size, and browsers sniffed the bytes and
+    # rendered them, so nothing failed. Check the magic is `wOF2`, not the
+    # extension.
+    font.flavor = flavor
     font.save(out)
     size = out.stat().st_size / 1024
     print(f"  {out.relative_to(ROOT).as_posix():<48} {size:6.1f} KB")
@@ -218,6 +238,35 @@ def measure(source: Path) -> None:
     print("chosen (DESIGN.md 3). Read them as the size of that gap.")
 
 
+def write_sources(source: Path, outputs: list[Path]) -> None:
+    """Record what produced the committed binaries.
+
+    The header calls these reproducible, which is only true if the inputs are
+    written down. The upstream release, fontTools and brotli all change the
+    output bytes, so a rerun against a different one reshapes the app's type
+    with no signal beyond a changed binary. This is the signal.
+    """
+    lines = [
+        "Provenance for the vendored Open Runde binaries.",
+        "Written by scripts/build-open-runde.py. Do not edit by hand.",
+        "",
+        f"built:      {date.today().isoformat()}",
+        f"source:     {source.name}  (https://github.com/lauridskern/open-runde)",
+        f"fonttools:  {fontTools.version}",
+        f"brotli:     {getattr(brotli, '__version__', 'unknown')}",
+        "",
+        "sha256 of each output:",
+    ]
+    for out in outputs:
+        digest = hashlib.sha256(out.read_bytes()).hexdigest()
+        lines.append(f"  {digest}  {out.relative_to(ROOT).as_posix()}")
+
+    target = ROOT / "app" / "fonts" / "SOURCES.txt"
+    body = "\n".join(lines) + "\n"
+    target.write_text(body, encoding="utf-8", newline="\n")
+    print(f"  {target.relative_to(ROOT).as_posix()}")
+
+
 def main() -> None:
     args = sys.argv[1:]
     measure_only = "--measure" in args
@@ -233,22 +282,30 @@ def main() -> None:
         measure(source)
         return
 
+    outputs: list[Path] = []
+
     print("Browser faces (latin subset, woff2):")
     for face, weight in WEB_FACES.items():
+        outputs.append(
+            ROOT / "app" / "fonts" / f"open-runde-{weight}-latin.woff2"
+        )
         build(
             desktop / f"OpenRunde-{face}.otf",
             WEB_UNICODES,
             "woff2",
             ROOT / "app" / "fonts" / f"open-runde-{weight}-latin.woff2",
+            tabular=True,
         )
 
     print("\nImageResponse faces (wide subset, otf):")
     for face in FACES:
+        outputs.append(ROOT / "assets" / "og" / f"OpenRunde-{face}.otf")
         build(
             desktop / f"OpenRunde-{face}.otf",
             OG_UNICODES,
             None,
             ROOT / "assets" / "og" / f"OpenRunde-{face}.otf",
+            tabular=False,
         )
 
     # OFL 1.1 requires the licence to travel with the fonts.
@@ -256,6 +313,8 @@ def main() -> None:
         source / "LICENSE.txt", ROOT / "app" / "fonts" / "OFL-open-runde.txt"
     )
     print("\n  app/fonts/OFL-open-runde.txt")
+
+    write_sources(source, outputs)
 
 
 

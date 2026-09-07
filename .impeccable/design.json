@@ -202,35 +202,35 @@
     },
     "typographyMeta": {
       "hero": {
-        "purpose": "SN Pro at weight 640; moment pages only, 40 to 56px, where the heading IS the content and nothing dense sits under it."
+        "purpose": "Open Runde at weight 600; moment pages only, 40 to 56px, where the heading IS the content and nothing dense sits under it."
       },
       "display": {
         "displayName": "Display",
-        "purpose": "SN Pro at weight 640; an app page's title, 30 to 40px. Sized against the page under it, not on its own."
+        "purpose": "Open Runde at weight 600; an app page's title, 30 to 40px. Sized against the page under it, not on its own."
       },
       "headline": {
         "displayName": "Headline",
-        "purpose": "Geist Sans 600 at 1.875rem; page titles and the largest section headings."
+        "purpose": "Open Runde 600 at 1.875rem; page titles and the largest section headings."
       },
       "title": {
         "displayName": "Title",
-        "purpose": "Geist Sans 600 at 1.125rem; card titles and panel headers."
+        "purpose": "Open Runde 600 at 1.125rem; card titles and panel headers."
       },
       "section": {
         "displayName": "Section",
-        "purpose": "Geist Sans 600 at 0.875rem, full-strength foreground, sentence case. Names a block inside a page — the LabeledSection heading, sidebar sections, pricing comparison groups. Always a real heading element."
+        "purpose": "Open Runde 600 at 0.875rem, full-strength foreground, sentence case. Names a block inside a page — the LabeledSection heading, sidebar sections, pricing comparison groups. Always a real heading element."
       },
       "body": {
         "displayName": "Body",
-        "purpose": "Geist Sans 400 at 0.875rem, line-height 1.6; default UI and prose, capped at 65-75ch."
+        "purpose": "Open Runde 400 at 0.875rem, line-height 1.6; default UI and prose, capped at 65-75ch."
       },
       "label": {
         "displayName": "Field label",
-        "purpose": "Geist Sans 500 at 0.75rem, muted, sentence case, normal tracking. Names a column, a dt, or a value: table headers, stat cells, metadata. Replaced the former mono-uppercase eyebrow role; it is not mono and it is never uppercased."
+        "purpose": "Open Runde 500 at 0.75rem, muted, sentence case, normal tracking. Names a column, a dt, or a value: table headers, stat cells, metadata. Replaced the former mono-uppercase eyebrow role; it is not mono and it is never uppercased."
       },
       "micro": {
         "displayName": "Micro",
-        "purpose": "Geist Sans 500 at 0.6875rem (text-micro). Pills and dense chips only. The floor; nothing renders smaller except glyphs fitted inside a fixed circle."
+        "purpose": "Open Runde 500 at 0.6875rem (text-micro). Pills and dense chips only. The floor; nothing renders smaller except glyphs fitted inside a fixed circle."
       }
     },
     "shadows": [
@@ -430,7 +430,7 @@
       "Near-monochrome neutral field, one blue accent used as a rare signal.",
       "Violet-tinted neutrals (hue 270, chroma 0.004), never pure gray.",
       "Eight-step tonal + shadow elevation system, equal light/dark themes.",
-      "One family, SN Pro, across every text role; the display end is built from weight and tracking, not from a second face.",
+      "One family, Open Runde, across every text role; the display end is built from size and tracking, not from a second face.",
       "Fast, tactile interactions: 100ms transitions, a 0.98 active-press scale.",
       "Sentence case everywhere; mono means machine string, never decoration."
     ],

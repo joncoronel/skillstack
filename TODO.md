@@ -15,7 +15,7 @@ mono text nodes, 0 mono pseudo-elements, and `document.fonts` never activates
 the face.** Reproduce with `performance.getEntriesByType("resource")` filtered
 to woff2 against a production build.
 
-For scale, the three sans faces are 129 KB, so the unused mono is a further 26%
+For scale, the four sans faces are 106 KB, so the unused mono is a further 32%
 on top of that for the catalog and list routes.
 
 Not obviously fixable, which is why this is a note rather than a task. The mono

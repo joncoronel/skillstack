@@ -52,7 +52,13 @@ export function renderHighlight(value: string): React.ReactNode {
     const text = decodeEntities(segment);
     if (!text) return null;
     return i % 2 === 1 ? (
-      <mark key={i} className="bg-transparent font-semibold text-primary">
+      // A tint, not a recolour. Both call sites already sit at 600, so a weight
+      // step is a no-op and the family ships no 700 to reach for, which left
+      // `text-primary` marking the match on its own: colour alone, and it
+      // measures 2.15:1 on the dark card against the 4.5:1 floor for 14px.
+      // `text-inherit` keeps the match at whatever contrast the text around it
+      // already passes, and the tinted box carries the signal.
+      <mark key={i} className="rounded-[3px] bg-primary/20 px-0.5 text-inherit">
         {text}
       </mark>
     ) : (
